@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * Transforms IIDM-oriented DTOs into CGMES explorer DTOs.
  */
-public class IIDM2CGMESTransformer {
+public class IIDM2CGMESTransformer implements Transformer<EquipmentView> {
     private final MappingService mappingService;
 
     public IIDM2CGMESTransformer(MappingService mappingService) {

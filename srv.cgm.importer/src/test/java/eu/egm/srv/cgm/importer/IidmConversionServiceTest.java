@@ -6,6 +6,7 @@ import eu.egm.com.data.cgmes.EquipmentType;
 import eu.egm.com.data.cgmes.EquipmentView;
 import eu.egm.com.data.cgmes.ImportMetadata;
 import eu.egm.com.data.iidm.IidmEquipmentType;
+import eu.egm.map.cgmes.iidm.DefaultCgmesIidmTransformerFactory;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;
 import eu.egm.srv.cgm.importer.service.IidmConversionService;
@@ -28,7 +29,7 @@ class IidmConversionServiceTest {
                 EquipmentDocument.fromView(new EquipmentView("tr-1", "network-a", metadata, "Transformer", EquipmentType.TRANSFORMER, "vl-1", 400.0, Map.of()))
         ));
 
-        var network = new IidmConversionService(repository).convert("network-a");
+        var network = new IidmConversionService(repository, new DefaultCgmesIidmTransformerFactory()).convert("network-a");
 
         assertThat(network.id()).isEqualTo("network-a");
         assertThat(network.equipment()).singleElement()

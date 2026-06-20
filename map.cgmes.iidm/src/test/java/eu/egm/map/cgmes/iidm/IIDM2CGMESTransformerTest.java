@@ -7,7 +7,6 @@ import eu.egm.com.data.cgmes.EquipmentView;
 import eu.egm.com.data.cgmes.ImportMetadata;
 import eu.egm.com.data.iidm.IidmEquipment;
 import eu.egm.com.data.iidm.IidmEquipmentType;
-import eu.egm.com.mapping.ReflectionMappingService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -16,7 +15,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class IIDM2CGMESTransformerTest {
-    private final IIDM2CGMESTransformer transformer = new IIDM2CGMESTransformer(new ReflectionMappingService());
+    private final IIDM2CGMESTransformer transformer =
+            new DefaultCgmesIidmTransformerFactory().createTransformer(IIDM2CGMESTransformer.class);
 
     @Test
     void mapsIidmEquipmentToCgmesEquipmentWithStudyContext() {
