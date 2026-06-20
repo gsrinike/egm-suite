@@ -1,6 +1,5 @@
 package eu.egm.srv.cgm.importer.domain;
 
-import eu.egm.com.data.cgmes.CgmesConstants;
 import eu.egm.com.data.cgmes.CgmesProcess;
 import eu.egm.com.data.cgmes.CgmesRegion;
 import eu.egm.com.data.cgmes.ImportMetadata;

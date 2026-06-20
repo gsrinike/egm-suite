@@ -1,6 +1,5 @@
 package eu.egm.srv.cgm.importer.domain;
 
-import eu.egm.com.data.cgmes.CgmesConstants;
 import eu.egm.com.data.cgmes.EquipmentType;
 import eu.egm.com.data.cgmes.EquipmentView;
 import eu.egm.com.data.cgmes.CgmesProcess;
