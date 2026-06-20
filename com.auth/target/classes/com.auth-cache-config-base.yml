@@ -1,6 +1,0 @@
-egm:
-  config:
-    cache:
-      enabled: true
-      maximum-size: 256
-      ttl: PT15M

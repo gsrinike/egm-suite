@@ -1,6 +1,0 @@
-egm:
-  config:
-    cache:
-      enabled: true
-      maximum-size: 8
-      ttl: PT10S

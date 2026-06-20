@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
-<properties>
-    <comment>Local application overrides for com.auth.</comment>
-    <entry key="server.port">${AUTH_SERVER_PORT:8082}</entry>
-</properties>

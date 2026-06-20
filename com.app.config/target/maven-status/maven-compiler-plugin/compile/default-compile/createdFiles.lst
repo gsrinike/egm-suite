@@ -1,6 +1,0 @@
-com/app/config/CacheConfigLoader.class
-com/app/config/ConfigEnvironmentPostProcessor.class
-com/app/config/ConfigLoader.class
-com/app/config/LoadedConfiguration.class
-com/app/config/ModuleName.class
-com/app/config/ConfigResourceName.class

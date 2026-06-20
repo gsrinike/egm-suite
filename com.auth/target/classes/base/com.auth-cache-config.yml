@@ -1,6 +1,0 @@
-config:
-  cache:
-    provider: java
-    enabled: true
-    maximum-size: 256
-    ttl: PT15M

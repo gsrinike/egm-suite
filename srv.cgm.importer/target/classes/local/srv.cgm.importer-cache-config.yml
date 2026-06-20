@@ -1,4 +1,0 @@
-config:
-  cache:
-    provider: java
-    enabled: true
