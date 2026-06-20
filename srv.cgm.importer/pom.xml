@@ -12,7 +12,7 @@
     <name>srv.cgm.importer</name>
 
     <properties>
-        <docker.image.name>cgm-srv-cgm-importer</docker.image.name>
+        <docker.image.name>egm-srv-cgm-importer</docker.image.name>
     </properties>
 
     <dependencies>

@@ -13,7 +13,7 @@
     <packaging>pom</packaging>
 
     <properties>
-        <docker.image.name>cgm-gui-cgm-explorer</docker.image.name>
+        <docker.image.name>egm-gui-cgm-explorer</docker.image.name>
         <npm.executable>npm</npm.executable>
     </properties>
 
