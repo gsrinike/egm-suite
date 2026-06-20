@@ -1,0 +1,14 @@
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/CgmImporterApplication.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/api/CgmImportController.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/api/EquipmentController.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/api/IidmConversionController.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/domain/EquipmentDocument.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/domain/ImportStatusDocument.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/repository/EquipmentSearchRepository.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/repository/ImportStatusRepository.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/CgmImportService.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/CgmesNetworkReader.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/EquipmentQueryService.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/IidmConversionService.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/PowsyblCgmesNetworkReader.java
+/Users/e1043/Documents/Codex/2026-06-17/you-are-a-senior-software-engineer-2/srv.cgm.importer/src/main/java/eu/egm/srv/cgm/importer/service/RawCgmesStorage.java

@@ -1,0 +1,43 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>eu.egm</groupId>
+        <artifactId>egm-dependencies</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>dependencies.xml</relativePath>
+    </parent>
+
+    <artifactId>egm-suite</artifactId>
+    <packaging>pom</packaging>
+
+    <!--
+      Maven requires aggregator modules to be declared in the POM being built.
+      Keep this list synchronized with modules.xml, which is the standalone
+      module inventory used for developer review and automation.
+    -->
+    <modules>
+        <module>com.env</module>
+        <module>com.utils</module>
+        <module>com.app.config</module>
+        <module>data.cgmes</module>
+        <module>data.iidm</module>
+        <module>com.mapping</module>
+        <module>map.cgmes.iidm</module>
+        <module>com.infra</module>
+        <module>com.auth</module>
+        <module>srv.cgm.importer</module>
+        <module>gui.cgm.explorer</module>
+    </modules>
+
+    <properties>
+        <docker.registry>docker.io</docker.registry>
+        <docker.namespace>gsrinike</docker.namespace>
+        <docker.image.tag>${project.version}</docker.image.tag>
+        <docker.image.latest-tag>latest</docker.image.latest-tag>
+        <docker.skip.build>false</docker.skip.build>
+        <docker.skip.push>false</docker.skip.push>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+</project>

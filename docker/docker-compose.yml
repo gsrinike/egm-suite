@@ -1,0 +1,97 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    command: ["--config=/etc/otel-collector.yml"]
+    volumes:
+      - ./otel-collector.yml:/etc/otel-collector.yml:ro
+    ports:
+      - "4318:4318"
+
+  srv-cgm-importer:
+    build:
+      context: ..
+      dockerfile: srv.cgm.importer/Dockerfile
+      args:
+        JAR_FILE: srv.cgm.importer/target/srv.cgm.importer-0.1.0-SNAPSHOT.jar
+    environment:
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      MINIO_ENDPOINT: http://minio:9000
+      RABBITMQ_HOST: rabbitmq
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8080:8080"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+  com-auth:
+    build:
+      context: ..
+      dockerfile: com.auth/Dockerfile
+      args:
+        JAR_FILE: com.auth/target/com.auth-0.1.0-SNAPSHOT.jar
+    environment:
+      OIDC_ISSUER_URI: http://keycloak:8080/realms/egm
+      OIDC_JWK_SET_URI: http://keycloak:8080/realms/egm/protocol/openid-connect/certs
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: egm
+      KEYCLOAK_ADMIN_CLIENT_ID: egm-auth-admin
+      KEYCLOAK_ADMIN_CLIENT_SECRET: change-me
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8082:8082"
+    depends_on:
+      keycloak:
+        condition: service_started
+
+  gui-cgm-explorer:
+    build:
+      context: ../gui.cgm.explorer
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - srv-cgm-importer

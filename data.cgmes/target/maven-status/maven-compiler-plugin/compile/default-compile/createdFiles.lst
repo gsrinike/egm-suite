@@ -1,0 +1,15 @@
+eu/egm/com/data/cgmes/EquipmentClassifier.class
+eu/egm/com/data/cgmes/ImportMetadata.class
+eu/egm/com/data/cgmes/NetworkDiff.class
+eu/egm/com/data/cgmes/SearchRequest.class
+eu/egm/com/data/cgmes/PageResponse.class
+eu/egm/com/data/cgmes/EquipmentView.class
+eu/egm/com/data/cgmes/NetworkDiff$ChangedEquipment.class
+eu/egm/com/data/cgmes/CgmesProfileType.class
+eu/egm/com/data/cgmes/CgmesRegion.class
+eu/egm/com/data/cgmes/CgmesFileNameParser.class
+eu/egm/com/data/cgmes/CgmesConstants.class
+eu/egm/com/data/cgmes/EquipmentType.class
+eu/egm/com/data/cgmes/PowsyblCgmesModelDefinition.class
+eu/egm/com/data/cgmes/ImportStatus.class
+eu/egm/com/data/cgmes/CgmesProcess.class

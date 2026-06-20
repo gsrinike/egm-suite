@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <comment>Base infrastructure configuration for com.auth.</comment>
+    <entry key="spring.security.oauth2.resourceserver.jwt.issuer-uri">http://localhost:8081/realms/egm</entry>
+    <entry key="spring.security.oauth2.resourceserver.jwt.jwk-set-uri">http://localhost:8081/realms/egm/protocol/openid-connect/certs</entry>
+    <entry key="spring.security.oauth2.client.provider.keycloak.issuer-uri">http://localhost:8081/realms/egm</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.provider">keycloak</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.client-id">egm-auth-admin</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.client-secret">change-me</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.authorization-grant-type">client_credentials</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.scope">openid</entry>
+    <entry key="auth.keycloak.base-url">http://localhost:8081</entry>
+    <entry key="auth.keycloak.realm">egm</entry>
+    <entry key="auth.keycloak.admin-client-id">egm-auth-admin</entry>
+    <entry key="auth.keycloak.admin-client-secret">change-me</entry>
+    <entry key="management.otlp.tracing.endpoint">http://localhost:4318/v1/traces</entry>
+</properties>

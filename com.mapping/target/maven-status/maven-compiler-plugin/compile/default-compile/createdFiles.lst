@@ -1,0 +1,5 @@
+eu/egm/com/mapping/FieldMapping.class
+eu/egm/com/mapping/MappingService.class
+eu/egm/com/mapping/ReflectionMappingService.class
+eu/egm/com/mapping/MappingException.class
+eu/egm/com/mapping/MappingDefinition.class

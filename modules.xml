@@ -1,0 +1,17 @@
+<modules>
+    <!--
+      Standalone module inventory for developer review and automation.
+      Maven aggregators still require the active module list inline in pom.xml.
+    -->
+    <module>com.env</module>
+    <module>com.utils</module>
+    <module>com.app.config</module>
+    <module>data.cgmes</module>
+    <module>data.iidm</module>
+    <module>com.mapping</module>
+    <module>map.cgmes.iidm</module>
+    <module>com.infra</module>
+    <module>com.auth</module>
+    <module>srv.cgm.importer</module>
+    <module>gui.cgm.explorer</module>
+</modules>

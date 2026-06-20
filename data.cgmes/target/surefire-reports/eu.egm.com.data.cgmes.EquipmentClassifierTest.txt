@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: eu.egm.com.data.cgmes.EquipmentClassifierTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.300 s -- in eu.egm.com.data.cgmes.EquipmentClassifierTest

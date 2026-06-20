@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <comment>Base infrastructure configuration for srv.cgm.importer.</comment>
+    <entry key="spring.elasticsearch.uris">http://localhost:9200</entry>
+    <entry key="spring.rabbitmq.host">localhost</entry>
+    <entry key="spring.rabbitmq.port">5672</entry>
+    <entry key="spring.rabbitmq.username">guest</entry>
+    <entry key="spring.rabbitmq.password">guest</entry>
+    <entry key="utility.messaging.topic-exchange.name">cgm.import.exchange</entry>
+    <entry key="utility.object-storage.endpoint">http://localhost:9000</entry>
+    <entry key="utility.object-storage.access-key">minioadmin</entry>
+    <entry key="utility.object-storage.secret-key">minioadmin</entry>
+    <entry key="management.otlp.tracing.endpoint">http://localhost:4318/v1/traces</entry>
+</properties>

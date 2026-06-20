@@ -1,0 +1,4 @@
+egm:
+  config:
+    cache:
+      enabled: true

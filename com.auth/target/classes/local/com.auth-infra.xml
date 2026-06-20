@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <comment>Local infrastructure overrides for com.auth.</comment>
+    <entry key="spring.security.oauth2.resourceserver.jwt.issuer-uri">${OIDC_ISSUER_URI:http://localhost:8081/realms/egm}</entry>
+    <entry key="spring.security.oauth2.resourceserver.jwt.jwk-set-uri">${OIDC_JWK_SET_URI:http://localhost:8081/realms/egm/protocol/openid-connect/certs}</entry>
+    <entry key="spring.security.oauth2.client.provider.keycloak.issuer-uri">${OIDC_ISSUER_URI:http://localhost:8081/realms/egm}</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.client-id">${KEYCLOAK_ADMIN_CLIENT_ID:egm-auth-admin}</entry>
+    <entry key="spring.security.oauth2.client.registration.keycloak-admin.client-secret">${KEYCLOAK_ADMIN_CLIENT_SECRET:change-me}</entry>
+    <entry key="auth.keycloak.base-url">${KEYCLOAK_BASE_URL:http://localhost:8081}</entry>
+    <entry key="auth.keycloak.realm">${KEYCLOAK_REALM:egm}</entry>
+    <entry key="auth.keycloak.admin-client-id">${KEYCLOAK_ADMIN_CLIENT_ID:egm-auth-admin}</entry>
+    <entry key="auth.keycloak.admin-client-secret">${KEYCLOAK_ADMIN_CLIENT_SECRET:change-me}</entry>
+    <entry key="management.otlp.tracing.endpoint">${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}</entry>
+</properties>

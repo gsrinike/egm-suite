@@ -1,0 +1,6 @@
+config:
+  cache:
+    provider: java
+    enabled: true
+    maximum-size: 8
+    ttl: PT10S

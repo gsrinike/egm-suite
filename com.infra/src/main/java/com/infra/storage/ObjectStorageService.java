@@ -1,0 +1,9 @@
+package com.infra.storage;
+
+/**
+ * Generic object-storage boundary for storing binary payloads such as uploads,
+ * reports, or generated artifacts.
+ */
+public interface ObjectStorageService {
+    void store(String bucketName, String objectName, byte[] bytes, String contentType);
+}
