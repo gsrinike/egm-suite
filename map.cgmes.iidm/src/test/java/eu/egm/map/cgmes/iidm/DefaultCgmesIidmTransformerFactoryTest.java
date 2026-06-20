@@ -1,7 +1,9 @@
 package eu.egm.map.cgmes.iidm;
 
+import eu.egm.com.mapping.MappingConfiguration;
 import eu.egm.com.mapping.MappingService;
 import eu.egm.com.mapping.ReflectionMappingService;
+import eu.egm.com.mapping.transformer.Transformer;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,9 +20,21 @@ class DefaultCgmesIidmTransformerFactoryTest {
     }
 
     @Test
+    void createsCgmesIidmMappingConfiguration() {
+        assertThat(factory.createMappingConfiguration()).isInstanceOf(CgmesIidmMappingConfiguration.class);
+    }
+
+    @Test
     void createsTransformerFamily() {
-        assertThat(factory.createTransformer(CGMES2IIDMTransformer.class)).isInstanceOf(CGMES2IIDMTransformer.class);
-        assertThat(factory.createTransformer(IIDM2CGMESTransformer.class)).isInstanceOf(IIDM2CGMESTransformer.class);
+        CGMES2IIDMTransformer cgmesToIidmTransformer = factory.createTransformer(CGMES2IIDMTransformer.class);
+        IIDM2CGMESTransformer iidmToCgmesTransformer = factory.createTransformer(IIDM2CGMESTransformer.class);
+
+        assertThat(cgmesToIidmTransformer).isInstanceOf(CGMES2IIDMTransformer.class);
+        assertThat(cgmesToIidmTransformer.mappingService()).isInstanceOf(ReflectionMappingService.class);
+        assertThat(cgmesToIidmTransformer.mappingConfiguration()).isInstanceOf(CgmesIidmMappingConfiguration.class);
+        assertThat(iidmToCgmesTransformer).isInstanceOf(IIDM2CGMESTransformer.class);
+        assertThat(iidmToCgmesTransformer.mappingService()).isInstanceOf(ReflectionMappingService.class);
+        assertThat(iidmToCgmesTransformer.mappingConfiguration()).isInstanceOf(CgmesIidmMappingConfiguration.class);
     }
 
     @Test
@@ -31,5 +45,14 @@ class DefaultCgmesIidmTransformerFactoryTest {
     }
 
     private static class UnsupportedTransformer implements Transformer<Object> {
+        @Override
+        public MappingService mappingService() {
+            return null;
+        }
+
+        @Override
+        public MappingConfiguration mappingConfiguration() {
+            return null;
+        }
     }
 }

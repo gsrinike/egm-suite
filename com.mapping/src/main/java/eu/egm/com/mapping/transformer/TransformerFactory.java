@@ -1,4 +1,4 @@
-package eu.egm.map.cgmes.iidm;
+package eu.egm.com.mapping.transformer;
 
 /**
  * Generic factory for creating transformer implementations.

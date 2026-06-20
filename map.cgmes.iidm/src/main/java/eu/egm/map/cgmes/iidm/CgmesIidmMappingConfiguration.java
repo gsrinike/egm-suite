@@ -3,6 +3,7 @@ package eu.egm.map.cgmes.iidm;
 import eu.egm.com.data.cgmes.EquipmentView;
 import eu.egm.com.data.iidm.IidmEquipment;
 import eu.egm.com.mapping.FieldMapping;
+import eu.egm.com.mapping.MappingConfiguration;
 import eu.egm.com.mapping.MappingDefinition;
 
 import java.util.List;
@@ -14,7 +15,10 @@ import java.util.Map;
  * Keeping these definitions together makes the transformer behavior explicit
  * and ready for externalization to XML/YAML configuration later.
  */
-public final class CgmesIidmMappingConfiguration {
+public class CgmesIidmMappingConfiguration extends MappingConfiguration {
+    public static final String CGMES_EQUIPMENT_TO_IIDM_EQUIPMENT = "cgmes-equipment-to-iidm-equipment";
+    public static final String IIDM_EQUIPMENT_TO_CGMES_EQUIPMENT = "iidm-equipment-to-cgmes-equipment";
+
     private static final Map<String, String> CGMES_TO_IIDM_TYPES = Map.ofEntries(
             Map.entry("SUBSTATION", "SUBSTATION"),
             Map.entry("VOLTAGE_LEVEL", "VOLTAGE_LEVEL"),
@@ -42,12 +46,22 @@ public final class CgmesIidmMappingConfiguration {
             Map.entry("UNKNOWN", "UNKNOWN")
     );
 
-    private CgmesIidmMappingConfiguration() {
+    public CgmesIidmMappingConfiguration() {
+        register(cgmesEquipmentToIidmEquipmentDefinition());
+        register(iidmEquipmentToCgmesEquipmentDefinition());
     }
 
-    public static MappingDefinition cgmesEquipmentToIidmEquipment() {
+    public MappingDefinition cgmesEquipmentToIidmEquipment() {
+        return definition(CGMES_EQUIPMENT_TO_IIDM_EQUIPMENT);
+    }
+
+    public MappingDefinition iidmEquipmentToCgmesEquipment() {
+        return definition(IIDM_EQUIPMENT_TO_CGMES_EQUIPMENT);
+    }
+
+    private static MappingDefinition cgmesEquipmentToIidmEquipmentDefinition() {
         return new MappingDefinition(
-                "cgmes-equipment-to-iidm-equipment",
+                CGMES_EQUIPMENT_TO_IIDM_EQUIPMENT,
                 EquipmentView.class,
                 IidmEquipment.class,
                 List.of(
@@ -61,9 +75,9 @@ public final class CgmesIidmMappingConfiguration {
         );
     }
 
-    public static MappingDefinition iidmEquipmentToCgmesEquipment() {
+    private static MappingDefinition iidmEquipmentToCgmesEquipmentDefinition() {
         return new MappingDefinition(
-                "iidm-equipment-to-cgmes-equipment",
+                IIDM_EQUIPMENT_TO_CGMES_EQUIPMENT,
                 IidmEquipment.class,
                 EquipmentView.class,
                 List.of(
