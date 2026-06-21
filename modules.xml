@@ -3,9 +3,7 @@
       Standalone module inventory for developer review and automation.
       Maven aggregators still require the active module list inline in pom.xml.
     -->
-    <module>com.env</module>
     <module>com.utils</module>
-    <module>com.app.config</module>
     <module>data.cgm</module>
     <module>com.mapping</module>
     <module>map.cgm</module>

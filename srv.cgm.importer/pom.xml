@@ -28,7 +28,7 @@
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
-            <artifactId>com.app.config</artifactId>
+            <artifactId>com.utils</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

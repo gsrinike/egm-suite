@@ -18,9 +18,7 @@
       module inventory used for developer review and automation.
     -->
     <modules>
-        <module>com.env</module>
         <module>com.utils</module>
-        <module>com.app.config</module>
         <module>data.cgm</module>
         <module>com.mapping</module>
         <module>map.cgm</module>

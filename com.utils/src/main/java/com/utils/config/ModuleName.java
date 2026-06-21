@@ -1,4 +1,4 @@
-package com.app.config;
+package com.utils.config;
 
 public final class ModuleName {
 

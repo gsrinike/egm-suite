@@ -1,6 +1,6 @@
-package com.app.config;
+package com.utils.config;
 
-import com.env.EnvironmentResolverService;
+import com.utils.env.EnvironmentResolverService;
 import com.utils.cache.CacheConfigurationService;
 import java.util.LinkedHashMap;
 import java.util.List;

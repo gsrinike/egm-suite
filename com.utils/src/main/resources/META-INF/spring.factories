@@ -1,2 +1,2 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.app.config.ConfigEnvironmentPostProcessor
+com.utils.config.ConfigEnvironmentPostProcessor

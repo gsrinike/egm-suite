@@ -59,17 +59,17 @@ Docker-enabled modules configure only their module-specific image name. The full
 
 ## Environment Resolution Principle
 
-Environment selection is centralized in `com.env`:
+Environment selection is centralized in `com.utils.env`:
 
 1. JVM system property `env`
 2. Operating system environment variable `ENV`
 3. Default value `local`
 
-The resolved value is normalized and used by `com.app.config`.
+The resolved value is normalized and used by `com.utils.config`.
 
 ## Configuration Loading Order
 
-`com.app.config` loads module configuration in this order:
+`com.utils.config` loads module configuration in this order:
 
 1. `base/<module>-application.xml`
 2. `base/<module>-infra.xml`
@@ -89,7 +89,7 @@ Current cache providers:
 - `java`: in-memory Java cache implementation.
 - `none`: disables cache behavior.
 
-Cache implementation details are owned by `com.utils`; application configuration loading is owned by `com.app.config`.
+Cache, environment, and application configuration loading details are owned by `com.utils`.
 
 ## Module Requirements
 
@@ -101,6 +101,5 @@ Spring Boot applications should:
 
 See:
 
-- [com.env README](../com.env/README.md)
-- [com.app.config README](../com.app.config/README.md)
+- [com.utils README](../com.utils/README.md)
 - [root README](../README.md)

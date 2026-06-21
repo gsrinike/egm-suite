@@ -1,4 +1,4 @@
-package com.app.config;
+package com.utils.config;
 
 import com.utils.cache.CacheConfigurationService;
 import java.time.Duration;

@@ -22,7 +22,7 @@
 
 ## Configuration
 
-The service sets `module=com.auth` at startup and uses `com.app.config` to load:
+The service sets `module=com.auth` at startup and uses `com.utils.config` to load:
 
 - `base/com.auth-application.xml`
 - `base/com.auth-infra.xml`

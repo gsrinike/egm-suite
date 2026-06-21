@@ -1,4 +1,4 @@
-package com.app.config;
+package com.utils.config;
 
 import java.util.Map;
 

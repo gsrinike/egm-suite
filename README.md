@@ -8,9 +8,7 @@ GridSuite references used for alignment: import/explore, interactive study, and 
 
 This README is the suite entry point. Detailed behavior belongs in each module README.
 
-- `com.env`: runtime environment resolution.
-- `com.utils`: shared utility code and cache abstractions.
-- `com.app.config`: module-scoped configuration loading.
+- `com.utils`: shared utility code, cache abstractions, environment resolution, and module-scoped configuration loading.
 - `data.cgm`: shared CGM DTOs, CGMES/IIDM domain packages, PowSyBl-backed reading, fallback graph projection, classification, and filename parsing.
 - `com.mapping`: generic configuration-driven object mapping.
 - `map.cgm`: CGMES-to-IIDM and IIDM-to-CGMES transformers.
@@ -82,7 +80,7 @@ docker compose -f docker/docker-compose.yml up
 - Backend APIs, import behavior, filename rules, runtime dependencies, and backend Docker build commands: `srv.cgm.importer/README.md`.
 - Frontend structure, Vite/npm commands, API client usage, and GUI Docker image details: `gui.cgm.explorer/README.md`.
 - Authentication endpoints, Keycloak configuration, and gateway authorization flow: `com.auth/README.md`.
-- Configuration loading order and cache-provider resolution: `com.app.config/README.md`.
+- Configuration loading order, environment resolution, and cache-provider resolution: `com.utils/README.md`.
 - Infrastructure adapter contracts and technology ownership rules: `com.infra/README.md`.
 - CGM data contracts and reading/projection rules: `data.cgm/README.md`.
 - Mapping implementation details: `com.mapping/README.md` and `map.cgm/README.md`.

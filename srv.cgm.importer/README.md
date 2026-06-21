@@ -77,7 +77,7 @@ Comparison still uses a network-wide read path capped for now. A production-scal
 
 ## Configuration
 
-The service sets `module=srv.cgm.importer` at startup and uses `com.app.config` to load:
+The service sets `module=srv.cgm.importer` at startup and uses `com.utils.config` to load:
 
 - `base/srv.cgm.importer-application.xml`
 - `base/srv.cgm.importer-infra.xml`

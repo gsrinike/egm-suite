@@ -8,9 +8,7 @@ This document classifies project modules and links to module READMEs for details
 
 Current modules:
 
-- `com.env`: environment resolution. See [README](../com.env/README.md).
-- `com.utils`: shared utilities and cache abstractions. See [README](../com.utils/README.md).
-- `com.app.config`: module configuration loading. See [README](../com.app.config/README.md).
+- `com.utils`: shared utilities, cache abstractions, environment resolution, and module configuration loading. See [README](../com.utils/README.md).
 - `com.infra`: infrastructure adapters for document storage, object storage, and messaging. See [README](../com.infra/README.md).
 - `com.auth`: authentication and authorization services. See [README](../com.auth/README.md).
 - `com.mapping`: generic object mapping service. See [README](../com.mapping/README.md).
@@ -60,7 +58,7 @@ Current modules:
 Rules:
 
 - Use Java package `eu.egm.srv.<domain>.<capability>`.
-- Depend only on required `data`, `map`, `com.app.config`, and `com.infra` modules. `srv.cgm.importer` depends on `data.cgm` for CGM data behavior and does not import PowSyBl directly.
+- Depend only on required `data`, `map`, `com.utils`, and `com.infra` modules. `srv.cgm.importer` depends on `data.cgm` for CGM data behavior and does not import PowSyBl directly.
 - Use Spring Boot only in runnable service modules.
 - Use standard logging and OpenTelemetry where runtime telemetry is emitted.
 

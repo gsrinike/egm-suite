@@ -1,4 +1,4 @@
-package com.app.config;
+package com.utils.config;
 
 public record ConfigResourceName(String moduleName, String group, String qualifier, String extension) {
 

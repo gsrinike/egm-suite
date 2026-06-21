@@ -1,4 +1,4 @@
-package com.app.config;
+package com.utils.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

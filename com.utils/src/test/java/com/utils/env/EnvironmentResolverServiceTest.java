@@ -1,4 +1,4 @@
-package com.env;
+package com.utils.env;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

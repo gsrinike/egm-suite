@@ -6,7 +6,7 @@ This document records the principles adopted in the Energy Grid Management Suite
 
 Each module has a narrow purpose and a clear owner boundary:
 
-- `com.*` modules provide cross-cutting capabilities such as environment resolution, cache utilities, configuration loading, infrastructure adapters, and authentication.
+- `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, infrastructure adapters, and authentication.
 - `data.*` modules define shared data contracts and PowSyBl-aligned domain vocabulary.
 - `map.*` modules transform between data models.
 - `srv.*` modules expose backend APIs and orchestrate use cases.
@@ -18,7 +18,7 @@ This keeps services focused on workflow orchestration instead of owning all tech
 
 Dependencies flow from use-case modules toward stable contracts and utilities:
 
-- Services may depend on required `data`, `com.app.config`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
+- Services may depend on required `data`, `com.utils`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
 - Mapping modules may depend on source/target data modules and `com.mapping`.
 - Data modules must not depend on infrastructure, Spring MVC, RabbitMQ, MinIO, or Elasticsearch.
 - GUI modules communicate through HTTP contracts instead of importing backend Java code.
@@ -38,7 +38,7 @@ Runtime configuration is externalized into module-specific files:
 
 Base configuration defines defaults. Environment folders override only what changes.
 
-See [com.app.config README](../com.app.config/README.md) and [com.env README](../com.env/README.md).
+See [com.utils README](../com.utils/README.md).
 
 ## 4. Adapter and Factory Boundaries
 

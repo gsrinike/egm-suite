@@ -1,4 +1,4 @@
-package com.env;
+package com.utils.env;
 
 import java.util.Locale;
 import java.util.Map;
