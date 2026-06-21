@@ -1,7 +1,7 @@
 package eu.egm.srv.cgm.importer.service;
 
 import com.infra.storage.ObjectStorageService;
-import eu.egm.com.data.cgmes.CgmesConstants;
+import eu.egm.com.data.cgm.CgmesConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

@@ -11,7 +11,7 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
 - Accept multipart CGMES uploads.
 - Parse filename metadata from the CGMES naming convention.
 - Store raw uploaded files through the utility object-storage abstraction.
-- Parse RDF/XML and ZIP CGMES payloads into normalized equipment rows.
+- Import CGMES payloads through the shared `data.cgm` reader and index normalized equipment rows.
 - Persist searchable equipment and import-status documents through utility document repositories.
 - Publish import status events through the utility event publisher.
 - Expose REST APIs for import, search, import history, and comparison.
@@ -29,7 +29,7 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - `ImportStatusRepository`: application adapter around utility document listing.
 - `service`
   - `CgmImportService`: orchestrates import, raw storage, indexing, status persistence, and event publishing.
-  - `PowsyblCgmesNetworkReader`: reads XML/ZIP CGMES input into `EquipmentView` records.
+  - `PowsyblCgmesNetworkReader`: service adapter that delegates CGMES XML/ZIP reading to `data.cgm`.
   - `EquipmentQueryService`: search and comparison use cases.
   - `RawCgmesStorage`: application wrapper around utility object storage.
   - `CgmesNetworkReader`: reader interface for CGMES parsing.
@@ -65,6 +65,8 @@ The parser also accepts a `T` separator before the timestamp, for example:
 ## Implementation Notes
 
 Search uses a dedicated Elasticsearch query path. The backend no longer fetches the first 10,000 rows and filters in memory, because that could hide valid matches outside the initial batch.
+
+CGMES parsing is intentionally decoupled from service orchestration. Complete CGMES uploads are delegated to the shared data reader in `data.cgm`, which owns the PowSyBl conversion path and IIDM projection through `data.cgm`. This service module does not depend on PowSyBl directly.
 
 Comparison still uses a network-wide read path capped for now. A production-scale comparison should become asynchronous or paged for very large networks.
 

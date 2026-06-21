@@ -1,6 +1,6 @@
 package eu.egm.srv.cgm.importer.api;
 
-import eu.egm.com.data.iidm.IidmNetwork;
+import eu.egm.com.data.cgm.IidmNetwork;
 import eu.egm.srv.cgm.importer.service.IidmConversionService;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.web.bind.annotation.GetMapping;

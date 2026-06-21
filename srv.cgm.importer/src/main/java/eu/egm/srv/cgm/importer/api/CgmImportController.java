@@ -1,8 +1,8 @@
 package eu.egm.srv.cgm.importer.api;
 
-import eu.egm.com.data.cgmes.ImportStatus;
-import eu.egm.com.data.cgmes.CgmesProcess;
-import eu.egm.com.data.cgmes.CgmesRegion;
+import eu.egm.com.data.cgm.ImportStatus;
+import eu.egm.com.data.cgm.CgmesProcess;
+import eu.egm.com.data.cgm.CgmesRegion;
 import eu.egm.srv.cgm.importer.service.CgmImportService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.constraints.NotNull;

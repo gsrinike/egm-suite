@@ -1,9 +1,9 @@
 package eu.egm.srv.cgm.importer.service;
 
-import eu.egm.com.data.cgmes.EquipmentView;
-import eu.egm.com.data.cgmes.NetworkDiff;
-import eu.egm.com.data.cgmes.PageResponse;
-import eu.egm.com.data.cgmes.SearchRequest;
+import eu.egm.com.data.cgm.EquipmentView;
+import eu.egm.com.data.cgm.NetworkDiff;
+import eu.egm.com.data.cgm.PageResponse;
+import eu.egm.com.data.cgm.SearchRequest;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;
 import org.springframework.stereotype.Service;

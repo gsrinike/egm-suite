@@ -1,9 +1,9 @@
 package eu.egm.srv.cgm.importer.domain;
 
-import eu.egm.com.data.cgmes.CgmesProcess;
-import eu.egm.com.data.cgmes.CgmesRegion;
-import eu.egm.com.data.cgmes.ImportMetadata;
-import eu.egm.com.data.cgmes.ImportStatus;
+import eu.egm.com.data.cgm.CgmesProcess;
+import eu.egm.com.data.cgm.CgmesRegion;
+import eu.egm.com.data.cgm.ImportMetadata;
+import eu.egm.com.data.cgm.ImportStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;

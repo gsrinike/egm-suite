@@ -1,8 +1,7 @@
 package eu.egm.srv.cgm.importer.service;
 
-import eu.egm.com.data.iidm.IidmNetwork;
-import eu.egm.map.cgmes.iidm.CGMES2IIDMTransformer;
-import eu.egm.map.cgmes.iidm.DefaultCgmesIidmTransformerFactory;
+import eu.egm.com.data.cgm.CgmIidmNetworkMapper;
+import eu.egm.com.data.cgm.IidmNetwork;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;
 import org.springframework.stereotype.Service;
@@ -16,17 +15,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class IidmConversionService {
     private final EquipmentSearchRepository repository;
-    private final CGMES2IIDMTransformer transformer;
+    private final CgmIidmNetworkMapper mapper;
 
-    public IidmConversionService(EquipmentSearchRepository repository, DefaultCgmesIidmTransformerFactory transformerFactory) {
+    public IidmConversionService(EquipmentSearchRepository repository) {
         this.repository = repository;
-        this.transformer = transformerFactory.createTransformer(CGMES2IIDMTransformer.class);
+        this.mapper = new CgmIidmNetworkMapper();
     }
 
     public IidmNetwork convert(String networkId) {
         var equipment = repository.findByNetworkId(networkId).stream()
                 .map(EquipmentDocument::toView)
                 .toList();
-        return transformer.transformNetwork(networkId, equipment);
+        return mapper.mapNetwork(networkId, equipment);
     }
 }

@@ -1,7 +1,7 @@
 package eu.egm.srv.cgm.importer.service;
 
-import eu.egm.com.data.cgmes.EquipmentView;
-import eu.egm.com.data.cgmes.ImportMetadata;
+import eu.egm.com.data.cgm.EquipmentView;
+import eu.egm.com.data.cgm.ImportMetadata;
 
 import java.io.InputStream;
 import java.util.List;

@@ -4,7 +4,7 @@ import com.infra.document.DocumentAdapter;
 import com.infra.document.DocumentRepositoryService;
 import com.infra.document.DocumentSort;
 import com.infra.InfrastructureAdapterFactory;
-import eu.egm.com.data.cgmes.CgmesConstants;
+import eu.egm.com.data.cgm.CgmesConstants;
 import eu.egm.srv.cgm.importer.domain.ImportStatusDocument;
 import org.springframework.stereotype.Repository;
 

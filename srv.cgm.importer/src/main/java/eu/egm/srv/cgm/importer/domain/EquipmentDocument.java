@@ -1,10 +1,10 @@
 package eu.egm.srv.cgm.importer.domain;
 
-import eu.egm.com.data.cgmes.EquipmentType;
-import eu.egm.com.data.cgmes.EquipmentView;
-import eu.egm.com.data.cgmes.CgmesProcess;
-import eu.egm.com.data.cgmes.CgmesRegion;
-import eu.egm.com.data.cgmes.ImportMetadata;
+import eu.egm.com.data.cgm.EquipmentType;
+import eu.egm.com.data.cgm.EquipmentView;
+import eu.egm.com.data.cgm.CgmesProcess;
+import eu.egm.com.data.cgm.CgmesRegion;
+import eu.egm.com.data.cgm.ImportMetadata;
 
 import java.util.Map;
 

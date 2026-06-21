@@ -1,7 +1,7 @@
 package eu.egm.srv.cgm.importer;
 
-import eu.egm.com.data.cgmes.PageResponse;
-import eu.egm.com.data.cgmes.SearchRequest;
+import eu.egm.com.data.cgm.PageResponse;
+import eu.egm.com.data.cgm.SearchRequest;
 import eu.egm.srv.cgm.importer.api.EquipmentController;
 import eu.egm.srv.cgm.importer.service.EquipmentQueryService;
 import org.junit.jupiter.api.Test;

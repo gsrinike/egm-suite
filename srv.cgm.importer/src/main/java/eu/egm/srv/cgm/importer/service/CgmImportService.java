@@ -1,13 +1,13 @@
 package eu.egm.srv.cgm.importer.service;
 
 import com.infra.event.EventPublisherService;
-import eu.egm.com.data.cgmes.CgmesConstants;
-import eu.egm.com.data.cgmes.CgmesProcess;
-import eu.egm.com.data.cgmes.CgmesRegion;
-import eu.egm.com.data.cgmes.CgmesFileNameParser;
-import eu.egm.com.data.cgmes.EquipmentView;
-import eu.egm.com.data.cgmes.ImportMetadata;
-import eu.egm.com.data.cgmes.ImportStatus;
+import eu.egm.com.data.cgm.CgmesConstants;
+import eu.egm.com.data.cgm.CgmesProcess;
+import eu.egm.com.data.cgm.CgmesRegion;
+import eu.egm.com.data.cgm.CgmesFileNameParser;
+import eu.egm.com.data.cgm.EquipmentView;
+import eu.egm.com.data.cgm.ImportMetadata;
+import eu.egm.com.data.cgm.ImportStatus;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.domain.ImportStatusDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;

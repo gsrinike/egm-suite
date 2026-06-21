@@ -18,12 +18,7 @@
     <dependencies>
         <dependency>
             <groupId>eu.egm</groupId>
-            <artifactId>data.cgmes</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>eu.egm</groupId>
-            <artifactId>map.cgmes.iidm</artifactId>
+            <artifactId>data.cgm</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

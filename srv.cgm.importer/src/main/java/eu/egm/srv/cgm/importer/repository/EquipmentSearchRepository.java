@@ -6,9 +6,9 @@ import com.infra.document.DocumentPage;
 import com.infra.document.DocumentRepositoryService;
 import com.infra.document.DocumentSearchRequest;
 import com.infra.InfrastructureAdapterFactory;
-import eu.egm.com.data.cgmes.CgmesConstants;
-import eu.egm.com.data.cgmes.EquipmentType;
-import eu.egm.com.data.cgmes.SearchRequest;
+import eu.egm.com.data.cgm.CgmesConstants;
+import eu.egm.com.data.cgm.EquipmentType;
+import eu.egm.com.data.cgm.SearchRequest;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import org.springframework.stereotype.Repository;
 
