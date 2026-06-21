@@ -11,12 +11,16 @@
 - `FieldMapping`: one source path to one target path, with optional value mappings.
 - `ReflectionMappingService`: default adapter that maps records and simple mutable objects.
 - `MappingException`: runtime exception for invalid mapping definitions or unsupported conversions.
+- `eu.egm.mapping.transformer.Transformer`: generic transformer contract initialized with `MappingService` and `MappingConfiguration`.
+- `eu.egm.mapping.transformer.TransformerFactory`: generic factory contract for creating typed transformers.
 
 ## Implementation Notes
 
 The default implementation reads record accessors, JavaBean getters, or fields. Record targets are built through their canonical constructor. Simple mutable targets are created through a no-argument constructor and populated by fields.
 
 Enum vocabulary differences are handled through `FieldMapping.valueMappings`, which lets a domain module map values such as `TRANSFORMER` to `TWO_WINDINGS_TRANSFORMER` without hardcoding that rule in the generic mapper.
+
+All public Java packages use `eu.egm.mapping` or `eu.egm.mapping.transformer`; the Maven artifact remains `com.mapping`.
 
 ## Developer Commands
 

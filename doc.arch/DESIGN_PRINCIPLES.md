@@ -18,7 +18,7 @@ This keeps services focused on workflow orchestration instead of owning all tech
 
 Dependencies flow from use-case modules toward stable contracts and utilities:
 
-- Services may depend on `data`, `map`, `com.app.config`, and `com.infra`.
+- Services may depend on required `data`, `com.app.config`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
 - Mapping modules may depend on source/target data modules and `com.mapping`.
 - Data modules must not depend on infrastructure, Spring MVC, RabbitMQ, MinIO, or Elasticsearch.
 - GUI modules communicate through HTTP contracts instead of importing backend Java code.
@@ -54,11 +54,12 @@ This makes backend services easier to test and keeps infrastructure replacement 
 
 ## 5. PowSyBl Alignment Without Runtime Lock-In
 
-The data modules align vocabulary with PowSyBl:
+The CGM data module aligns vocabulary with PowSyBl while keeping services free of PowSyBl dependencies:
 
-- `data.cgmes` depends on `com.powsybl:powsybl-cgmes-model`.
-- `data.iidm` depends on `com.powsybl:powsybl-iidm-extensions`.
-- `map.cgmes.iidm` performs CGMES/IIDM transformations through `MappingService`.
+- `data.cgm` owns CGMES DTOs in `eu.egm.data.cgm.dto.cgmes`.
+- `data.cgm` owns IIDM DTOs in `eu.egm.data.cgm.dto.iidm`.
+- `data.cgm` owns CGMES reading, PowSyBl conversion, fallback graph loading, topology strategies, and IIDM DTO projection under `eu.egm.data.cgm.mapping`.
+- `map.cgm` performs reusable CGMES/IIDM transformations through `eu.egm.mapping.MappingService`.
 
 Service modules consume DTO projections. Full PowSyBl runtime model creation remains isolated behind adapters so APIs and GUI contracts remain stable.
 

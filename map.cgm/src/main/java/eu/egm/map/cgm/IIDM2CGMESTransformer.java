@@ -1,11 +1,11 @@
 package eu.egm.map.cgm;
 
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.ImportMetadata;
-import eu.egm.com.data.cgm.IidmEquipment;
-import eu.egm.com.mapping.MappingConfiguration;
-import eu.egm.com.mapping.MappingService;
-import eu.egm.com.mapping.transformer.Transformer;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
+import eu.egm.data.cgm.dto.iidm.IidmEquipment;
+import eu.egm.mapping.MappingConfiguration;
+import eu.egm.mapping.MappingService;
+import eu.egm.mapping.transformer.Transformer;
 
 import java.util.Map;
 import java.util.Objects;

@@ -1,8 +1,8 @@
 package eu.egm.srv.cgm.importer.service;
 
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.ImportMetadata;
-import eu.egm.com.data.cgm.PowsyblCgmesEquipmentReader;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
+import eu.egm.data.cgm.mapping.PowsyblCgmesEquipmentReader;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;

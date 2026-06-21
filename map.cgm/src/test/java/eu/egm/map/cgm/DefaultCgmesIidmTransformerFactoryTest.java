@@ -1,9 +1,9 @@
 package eu.egm.map.cgm;
 
-import eu.egm.com.mapping.MappingConfiguration;
-import eu.egm.com.mapping.MappingService;
-import eu.egm.com.mapping.ReflectionMappingService;
-import eu.egm.com.mapping.transformer.Transformer;
+import eu.egm.mapping.MappingConfiguration;
+import eu.egm.mapping.MappingService;
+import eu.egm.mapping.ReflectionMappingService;
+import eu.egm.mapping.transformer.Transformer;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

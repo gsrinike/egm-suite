@@ -1,12 +1,12 @@
 package eu.egm.srv.cgm.importer;
 
 import com.infra.document.DocumentPage;
-import eu.egm.com.data.cgm.CgmesProcess;
-import eu.egm.com.data.cgm.CgmesRegion;
-import eu.egm.com.data.cgm.EquipmentType;
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.ImportMetadata;
-import eu.egm.com.data.cgm.SearchRequest;
+import eu.egm.data.cgm.dto.cgmes.CgmesProcess;
+import eu.egm.data.cgm.dto.cgmes.CgmesRegion;
+import eu.egm.data.cgm.dto.cgmes.EquipmentType;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
+import eu.egm.data.cgm.dto.cgmes.SearchRequest;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;
 import eu.egm.srv.cgm.importer.service.EquipmentQueryService;

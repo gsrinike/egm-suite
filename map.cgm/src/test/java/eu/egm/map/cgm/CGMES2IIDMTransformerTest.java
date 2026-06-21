@@ -1,13 +1,13 @@
 package eu.egm.map.cgm;
 
-import eu.egm.com.data.cgm.EquipmentType;
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.ImportMetadata;
-import eu.egm.com.data.cgm.CgmesProcess;
-import eu.egm.com.data.cgm.CgmesRegion;
-import eu.egm.com.data.cgm.IidmEquipment;
-import eu.egm.com.data.cgm.IidmEquipmentType;
-import eu.egm.com.data.cgm.IidmNetwork;
+import eu.egm.data.cgm.dto.cgmes.EquipmentType;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
+import eu.egm.data.cgm.dto.cgmes.CgmesProcess;
+import eu.egm.data.cgm.dto.cgmes.CgmesRegion;
+import eu.egm.data.cgm.dto.iidm.IidmEquipment;
+import eu.egm.data.cgm.dto.iidm.IidmEquipmentType;
+import eu.egm.data.cgm.dto.iidm.IidmNetwork;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;

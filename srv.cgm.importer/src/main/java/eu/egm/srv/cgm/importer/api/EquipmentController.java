@@ -1,9 +1,9 @@
 package eu.egm.srv.cgm.importer.api;
 
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.NetworkDiff;
-import eu.egm.com.data.cgm.PageResponse;
-import eu.egm.com.data.cgm.SearchRequest;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.cgmes.NetworkDiff;
+import eu.egm.data.cgm.dto.cgmes.PageResponse;
+import eu.egm.data.cgm.dto.cgmes.SearchRequest;
 import eu.egm.srv.cgm.importer.service.EquipmentQueryService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;

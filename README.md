@@ -11,10 +11,9 @@ This README is the suite entry point. Detailed behavior belongs in each module R
 - `com.env`: runtime environment resolution.
 - `com.utils`: shared utility code and cache abstractions.
 - `com.app.config`: module-scoped configuration loading.
-- `data.cgmes`: shared CGMES DTOs, constants, classification, and filename parsing.
-- `data.iidm`: shared IIDM-facing network and equipment DTOs.
+- `data.cgm`: shared CGM DTOs, CGMES/IIDM domain packages, PowSyBl-backed reading, fallback graph projection, classification, and filename parsing.
 - `com.mapping`: generic configuration-driven object mapping.
-- `map.cgmes.iidm`: CGMES-to-IIDM and IIDM-to-CGMES transformers.
+- `map.cgm`: CGMES-to-IIDM and IIDM-to-CGMES transformers.
 - `com.infra`: reusable backend infrastructure adapters for document storage, object storage, and event publishing.
 - `com.auth`: OIDC/OAuth 2.0 authorization service backed by Keycloak.
 - `srv.cgm.importer`: Spring Boot REST service for CGMES upload, indexing, import history, and comparison.
@@ -85,8 +84,8 @@ docker compose -f docker/docker-compose.yml up
 - Authentication endpoints, Keycloak configuration, and gateway authorization flow: `com.auth/README.md`.
 - Configuration loading order and cache-provider resolution: `com.app.config/README.md`.
 - Infrastructure adapter contracts and technology ownership rules: `com.infra/README.md`.
-- CGMES and IIDM data contracts: `data.cgmes/README.md` and `data.iidm/README.md`.
-- Mapping implementation details: `com.mapping/README.md` and `map.cgmes.iidm/README.md`.
+- CGM data contracts and reading/projection rules: `data.cgm/README.md`.
+- Mapping implementation details: `com.mapping/README.md` and `map.cgm/README.md`.
 - Local deployment, environment rules, and architecture guidance: `doc.arch/README.md` and the documents under `doc.arch`.
 
 ## Tests

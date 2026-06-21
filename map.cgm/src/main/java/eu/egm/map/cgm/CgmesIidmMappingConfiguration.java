@@ -1,10 +1,10 @@
 package eu.egm.map.cgm;
 
-import eu.egm.com.data.cgm.EquipmentView;
-import eu.egm.com.data.cgm.IidmEquipment;
-import eu.egm.com.mapping.FieldMapping;
-import eu.egm.com.mapping.MappingConfiguration;
-import eu.egm.com.mapping.MappingDefinition;
+import eu.egm.data.cgm.dto.cgmes.EquipmentView;
+import eu.egm.data.cgm.dto.iidm.IidmEquipment;
+import eu.egm.mapping.FieldMapping;
+import eu.egm.mapping.MappingConfiguration;
+import eu.egm.mapping.MappingDefinition;
 
 import java.util.List;
 import java.util.Map;

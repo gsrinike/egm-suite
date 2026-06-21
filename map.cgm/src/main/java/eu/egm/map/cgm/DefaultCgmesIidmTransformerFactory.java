@@ -1,8 +1,8 @@
 package eu.egm.map.cgm;
 
-import eu.egm.com.mapping.MappingService;
-import eu.egm.com.mapping.ReflectionMappingService;
-import eu.egm.com.mapping.transformer.Transformer;
+import eu.egm.mapping.MappingService;
+import eu.egm.mapping.ReflectionMappingService;
+import eu.egm.mapping.transformer.Transformer;
 
 /**
  * Default CGMES/IIDM transformer factory backed by reflection-based mapping.

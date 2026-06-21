@@ -6,10 +6,9 @@
     <module>com.env</module>
     <module>com.utils</module>
     <module>com.app.config</module>
-    <module>data.cgmes</module>
-    <module>data.iidm</module>
+    <module>data.cgm</module>
     <module>com.mapping</module>
-    <module>map.cgmes.iidm</module>
+    <module>map.cgm</module>
     <module>com.infra</module>
     <module>com.auth</module>
     <module>srv.cgm.importer</module>

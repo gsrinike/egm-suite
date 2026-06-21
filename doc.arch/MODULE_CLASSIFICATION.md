@@ -27,14 +27,13 @@ Rules:
 
 Current modules:
 
-- `data.cgmes`: CGMES DTOs and PowSyBl CGMES model alignment. See [README](../data.cgmes/README.md).
-- `data.iidm`: IIDM DTOs and PowSyBl IIDM extension alignment. See [README](../data.iidm/README.md).
+- `data.cgm`: CGMES and IIDM DTOs, CGMES profile loading, PowSyBl-backed reading, fallback graph projection, and topology strategies. See [README](../data.cgm/README.md).
 
 Rules:
 
 - No Spring MVC, persistence, RabbitMQ, MinIO, or Elasticsearch dependencies.
-- PowSyBl contract dependencies are allowed when they define the data vocabulary.
-- Keep runtime behavior out of data modules.
+- PowSyBl dependencies are isolated in `data.cgm` for CGM import/projection behavior.
+- Keep storage, messaging, web, and UI behavior out of data modules.
 
 ## `map.*` Modules
 
@@ -42,12 +41,12 @@ Rules:
 
 Current modules:
 
-- `map.cgmes.iidm`: CGMES-to-IIDM and IIDM-to-CGMES transformations. See [README](../map.cgmes.iidm/README.md).
+- `map.cgm`: CGMES-to-IIDM and IIDM-to-CGMES transformations. See [README](../map.cgm/README.md).
 
 Rules:
 
 - Depend on source and target `data.*` modules.
-- Use `com.mapping.MappingService` for generic field transfer.
+- Use `eu.egm.mapping.MappingService` for generic field transfer.
 - Keep technology adapters and API orchestration outside mapping modules.
 
 ## `srv.*` Modules
@@ -61,7 +60,7 @@ Current modules:
 Rules:
 
 - Use Java package `eu.egm.srv.<domain>.<capability>`.
-- Depend only on required `data`, `map`, `com.app.config`, and `com.infra` modules.
+- Depend only on required `data`, `map`, `com.app.config`, and `com.infra` modules. `srv.cgm.importer` depends on `data.cgm` for CGM data behavior and does not import PowSyBl directly.
 - Use Spring Boot only in runnable service modules.
 - Use standard logging and OpenTelemetry where runtime telemetry is emitted.
 

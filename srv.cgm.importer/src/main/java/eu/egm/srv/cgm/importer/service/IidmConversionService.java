@@ -1,7 +1,7 @@
 package eu.egm.srv.cgm.importer.service;
 
-import eu.egm.com.data.cgm.CgmIidmNetworkMapper;
-import eu.egm.com.data.cgm.IidmNetwork;
+import eu.egm.data.cgm.mapping.CgmIidmNetworkMapper;
+import eu.egm.data.cgm.dto.iidm.IidmNetwork;
 import eu.egm.srv.cgm.importer.domain.EquipmentDocument;
 import eu.egm.srv.cgm.importer.repository.EquipmentSearchRepository;
 import org.springframework.stereotype.Service;

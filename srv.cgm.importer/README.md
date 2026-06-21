@@ -31,6 +31,7 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - `CgmImportService`: orchestrates import, raw storage, indexing, status persistence, and event publishing.
   - `PowsyblCgmesNetworkReader`: service adapter that delegates CGMES XML/ZIP reading to `data.cgm`.
   - `EquipmentQueryService`: search and comparison use cases.
+  - `IidmConversionService`: reads indexed equipment and delegates IIDM DTO projection to `data.cgm`.
   - `RawCgmesStorage`: application wrapper around utility object storage.
   - `CgmesNetworkReader`: reader interface for CGMES parsing.
 
@@ -47,6 +48,8 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - Filters are executed in Elasticsearch through `com.infra`, not in memory.
 - `GET /api/cgm/networks/{leftNetworkId}/compare/{rightNetworkId}`
   - Compares indexed equipment metadata between two imports.
+- `GET /api/cgm/networks/{networkId}/iidm`
+  - Converts indexed equipment rows into an IIDM-oriented DTO projection.
 
 ## Filename Convention
 
@@ -66,7 +69,9 @@ The parser also accepts a `T` separator before the timestamp, for example:
 
 Search uses a dedicated Elasticsearch query path. The backend no longer fetches the first 10,000 rows and filters in memory, because that could hide valid matches outside the initial batch.
 
-CGMES parsing is intentionally decoupled from service orchestration. Complete CGMES uploads are delegated to the shared data reader in `data.cgm`, which owns the PowSyBl conversion path and IIDM projection through `data.cgm`. This service module does not depend on PowSyBl directly.
+CGMES parsing is intentionally decoupled from service orchestration. Complete CGMES uploads are delegated to the shared data reader in `data.cgm`, which owns the PowSyBl conversion path, graph fallback, and IIDM DTO projection. This service module depends on `data.cgm` for CGM data behavior and does not depend on PowSyBl directly.
+
+Detailed import, explore, and IIDM invocation sequences are documented in [CGM Import Detail Design](../doc.arch/CGM_IMPORT_DETAIL_DESIGN.md).
 
 Comparison still uses a network-wide read path capped for now. A production-scale comparison should become asynchronous or paged for very large networks.
 

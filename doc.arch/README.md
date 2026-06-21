@@ -5,6 +5,7 @@
 ## Contents
 
 - `DESIGN_PRINCIPLES.md`: design principles adopted by the project and how they are applied in the current modules.
+- `CGM_IMPORT_DETAIL_DESIGN.md`: detailed CGM import, explore, and IIDM conversion sequences.
 - `LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`: local deployment workflow, Docker/Maven behavior, and environment resolution rules.
 - `MODULE_CLASSIFICATION.md`: classification rules for `com`, `data`, `map`, `srv`, and `gui` modules with links to module README files.
 - `egm-module-archetype`: standalone Maven archetype for generating a new EGM Java module skeleton.
@@ -26,7 +27,7 @@ mvn archetype:generate \
   -DarchetypeVersion=0.1.0-SNAPSHOT \
   -DgroupId=eu.egm \
   -DartifactId=com.example.capability \
-  -Dpackage=eu.egm.com.example.capability \
+  -Dpackage=eu.egm.example.capability \
   -DclassName=ExampleCapability \
   -DmoduleCategory=com \
   -DinteractiveMode=false

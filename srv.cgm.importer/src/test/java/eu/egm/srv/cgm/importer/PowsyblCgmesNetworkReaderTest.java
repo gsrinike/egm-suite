@@ -1,9 +1,9 @@
 package eu.egm.srv.cgm.importer;
 
-import eu.egm.com.data.cgm.EquipmentType;
-import eu.egm.com.data.cgm.CgmesProcess;
-import eu.egm.com.data.cgm.CgmesRegion;
-import eu.egm.com.data.cgm.ImportMetadata;
+import eu.egm.data.cgm.dto.cgmes.EquipmentType;
+import eu.egm.data.cgm.dto.cgmes.CgmesProcess;
+import eu.egm.data.cgm.dto.cgmes.CgmesRegion;
+import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
 import eu.egm.srv.cgm.importer.service.PowsyblCgmesNetworkReader;
 import org.junit.jupiter.api.Test;
 
