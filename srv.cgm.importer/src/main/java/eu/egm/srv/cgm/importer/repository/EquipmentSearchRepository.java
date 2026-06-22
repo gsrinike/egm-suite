@@ -1,11 +1,11 @@
 package eu.egm.srv.cgm.importer.repository;
 
-import com.infra.document.DocumentAdapter;
-import com.infra.document.DocumentFilter;
-import com.infra.document.DocumentPage;
-import com.infra.document.DocumentRepositoryService;
-import com.infra.document.DocumentSearchRequest;
-import com.infra.InfrastructureAdapterFactory;
+import com.infra.storage.document.DocumentAdapter;
+import com.infra.storage.document.DocumentFilter;
+import com.infra.storage.document.DocumentPage;
+import com.infra.storage.document.DocumentRepositoryService;
+import com.infra.storage.document.DocumentSearchRequest;
+import com.infra.InfrastructureUtils;
 import eu.egm.data.cgm.dto.cgmes.CgmesConstants;
 import eu.egm.data.cgm.dto.cgmes.EquipmentType;
 import eu.egm.data.cgm.dto.cgmes.SearchRequest;
@@ -22,7 +22,7 @@ public class EquipmentSearchRepository {
 
     private final DocumentRepositoryService<EquipmentDocument> documentRepository;
 
-    public EquipmentSearchRepository(InfrastructureAdapterFactory adapterFactory) {
+    public EquipmentSearchRepository(InfrastructureUtils adapterFactory) {
         this.documentRepository = adapterFactory.documentRepository(new EquipmentDocumentAdapter());
     }
 

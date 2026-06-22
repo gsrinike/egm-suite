@@ -9,6 +9,9 @@ This document describes the runtime invocation paths for CGM import, explore, an
 - `data.cgm.dto.iidm`: IIDM-facing DTOs.
 - `data.cgm.mapping`: CGMES filename parsing, PowSyBl-backed reading, fallback graph loading, topology strategies, and IIDM DTO projection.
 - `com.mapping`: generic mapping and transformer contracts.
+- `com.infra.storage.document`: generic document repository contracts consumed by import-status and equipment repositories.
+- `com.infra.storage.object`: generic object-storage contract used by raw CGMES upload storage.
+- `com.infra.event`: generic event-publishing contract used for import lifecycle messages.
 - `map.cgm`: reusable CGMES/IIDM transformer implementation using `com.mapping`.
 
 ## 1. Import Flow
@@ -21,6 +24,8 @@ sequenceDiagram
     participant Service as CgmImportService
     participant Parser as CgmesFileNameParser
     participant Storage as RawCgmesStorage
+    participant Minio as MinIO Object Store
+    participant Worker as Per-file Import Workers
     participant Reader as PowsyblCgmesNetworkReader
     participant DataReader as data.cgm.mapping.PowsyblCgmesEquipmentReader
     participant IidmReader as PowsyblIidmEquipmentReader
@@ -30,38 +35,52 @@ sequenceDiagram
     participant EquipmentRepo as EquipmentSearchRepository
     participant StatusRepo as ImportStatusRepository
     participant Events as EventPublisherService
+    participant Rabbit as RabbitMQ
 
     Client->>Controller: POST /api/cgm/imports (multipart files, region, process)
     Controller->>Service: importCgmes(files, region, process)
-    Service->>Parser: parse(originalFilename, region, process)
-    Parser-->>Service: ImportMetadata
-    Service->>Storage: store(networkId/fileName, bytes, contentType)
-    Service->>Reader: read(networkId, metadata, InputStream)
-    Reader->>DataReader: read(networkId, metadata, InputStream)
-    DataReader->>DataReader: copy payload bytes
-    DataReader->>IidmReader: read(PowSyBl imported Network)
-    alt PowSyBl conversion succeeds
-        IidmReader-->>DataReader: List<IidmEquipment>
-        DataReader-->>Reader: List<EquipmentView>
-    else Conversion fails or yields no equipment
-        DataReader->>Fallback: read(networkId, metadata, payload)
-        Fallback->>Graph: load(payload)
-        Graph-->>Fallback: CgmProfileGraph
-        Fallback->>Strategy: supports(graph, metadata)
-        Strategy-->>Fallback: selected topology strategy
-        Fallback->>Strategy: project(networkId, metadata, graph)
-        Strategy->>Strategy: pass 1 instantiate equipment/state by mRID
-        Strategy->>Strategy: pass 2 resolve containers/topology associations
-        Strategy-->>Fallback: List<EquipmentView>
-        Fallback-->>DataReader: List<EquipmentView>
-        DataReader-->>Reader: List<EquipmentView>
+    loop Each uploaded file
+        Service->>Parser: parse(originalFilename, region, process)
+        Parser-->>Service: ImportMetadata
+        Service->>Storage: store(networkId/sequence-fileName, bytes, contentType)
+        Storage->>Minio: putObject(raw CGMES bytes)
+        Minio-->>Storage: object id stored
     end
-    Reader-->>Service: indexed equipment projections
-    Service->>EquipmentRepo: saveAll(EquipmentDocument.fromView)
-    Service->>StatusRepo: save(ImportStatusDocument.fromStatus)
-    Service->>Events: publish(imported status)
-    Service-->>Controller: ImportStatus
-    Controller-->>Client: ImportStatus
+    Service->>StatusRepo: save(ImportStatus state=In Progress)
+    Service->>Events: publish(cgm.import.stored, networkId, objectIds)
+    Events->>Rabbit: stored-object event
+    Service-->>Controller: ImportStatus state=In Progress
+    Controller-->>Client: ImportStatus state=In Progress
+
+    Service->>Worker: spawn one worker per stored file
+    par Worker per uploaded file
+        Worker->>Reader: read(networkId, metadata, InputStream)
+        Reader->>DataReader: read(networkId, metadata, InputStream)
+        DataReader->>DataReader: copy payload bytes
+        DataReader->>IidmReader: read(PowSyBl imported Network)
+        alt PowSyBl conversion succeeds
+            IidmReader-->>DataReader: List<IidmEquipment>
+            DataReader-->>Reader: List<EquipmentView>
+        else Conversion fails or yields no equipment
+            DataReader->>Fallback: read(networkId, metadata, payload)
+            Fallback->>Graph: load(payload)
+            Graph-->>Fallback: CgmProfileGraph
+            Fallback->>Strategy: supports(graph, metadata)
+            Strategy-->>Fallback: selected topology strategy
+            Fallback->>Strategy: project(networkId, metadata, graph)
+            Strategy->>Strategy: pass 1 instantiate equipment/state by mRID
+            Strategy->>Strategy: pass 2 resolve containers/topology associations
+            Strategy-->>Fallback: List<EquipmentView>
+            Fallback-->>DataReader: List<EquipmentView>
+            DataReader-->>Reader: List<EquipmentView>
+        end
+        Reader-->>Worker: indexed equipment projections
+        Worker->>EquipmentRepo: saveAll(EquipmentDocument.fromView)
+    end
+    Worker-->>Service: all workers completed
+    Service->>StatusRepo: save(ImportStatus state=Complete or Failed)
+    Service->>Events: publish(cgm.import.completed, final status)
+    Events->>Rabbit: completion event
 ```
 
 ## 2. Explore Flow
@@ -70,30 +89,40 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Client
-    participant Controller as EquipmentController
-    participant Service as EquipmentQueryService
-    participant Repo as EquipmentSearchRepository
-    participant Infra as com.infra DocumentRepositoryService
+    participant ImportController as CgmImportController
+    participant ImportService as CgmImportService
+    participant StatusRepo as ImportStatusRepository
+    participant EquipmentController as EquipmentController
+    participant QueryService as EquipmentQueryService
+    participant EquipmentRepo as EquipmentSearchRepository
+    participant Infra as com.infra.storage.document.DocumentRepositoryService
 
-    Client->>Controller: GET /api/cgm/networks/{networkId}/equipment
-    Controller->>Service: search(networkId, SearchRequest)
-    Service->>Repo: search(networkId, SearchRequest)
-    Repo->>Infra: search(index, filters, page, sort)
-    Infra-->>Repo: DocumentPage<EquipmentDocument>
-    Repo-->>Service: DocumentPage<EquipmentDocument>
-    Service->>Service: map EquipmentDocument to EquipmentView
-    Service-->>Controller: PageResponse<EquipmentView>
-    Controller-->>Client: PageResponse<EquipmentView>
+    Client->>ImportController: GET /api/cgm/imports
+    ImportController->>ImportService: listImports()
+    ImportService->>StatusRepo: findAll()
+    StatusRepo-->>ImportService: upload dates, file context, state
+    ImportService-->>ImportController: List<ImportStatus>
+    ImportController-->>Client: Initial import status screen
 
-    Client->>Controller: GET /api/cgm/networks/{left}/compare/{right}
-    Controller->>Service: compare(leftNetworkId, rightNetworkId)
-    Service->>Repo: findByNetworkId(leftNetworkId)
-    Repo-->>Service: left equipment documents
-    Service->>Repo: findByNetworkId(rightNetworkId)
-    Repo-->>Service: right equipment documents
-    Service->>Service: calculate added, removed, changed equipment
-    Service-->>Controller: NetworkDiff
-    Controller-->>Client: NetworkDiff
+    Client->>EquipmentController: GET /api/cgm/networks/{networkId}/equipment
+    EquipmentController->>QueryService: search(networkId, SearchRequest)
+    QueryService->>EquipmentRepo: search(networkId, SearchRequest)
+    EquipmentRepo->>Infra: search(index, filters, page, sort)
+    Infra-->>EquipmentRepo: DocumentPage<EquipmentDocument>
+    EquipmentRepo-->>QueryService: DocumentPage<EquipmentDocument>
+    QueryService->>QueryService: map EquipmentDocument to EquipmentView
+    QueryService-->>EquipmentController: PageResponse<EquipmentView>
+    EquipmentController-->>Client: PageResponse<EquipmentView>
+
+    Client->>EquipmentController: GET /api/cgm/networks/{left}/compare/{right}
+    EquipmentController->>QueryService: compare(leftNetworkId, rightNetworkId)
+    QueryService->>EquipmentRepo: findByNetworkId(leftNetworkId)
+    EquipmentRepo-->>QueryService: left equipment documents
+    QueryService->>EquipmentRepo: findByNetworkId(rightNetworkId)
+    EquipmentRepo-->>QueryService: right equipment documents
+    QueryService->>QueryService: calculate added, removed, changed equipment
+    QueryService-->>EquipmentController: NetworkDiff
+    EquipmentController-->>Client: NetworkDiff
 ```
 
 ## 3. IIDM Flow

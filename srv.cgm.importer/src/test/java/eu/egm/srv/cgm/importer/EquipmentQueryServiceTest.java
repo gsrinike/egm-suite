@@ -1,6 +1,6 @@
 package eu.egm.srv.cgm.importer;
 
-import com.infra.document.DocumentPage;
+import com.infra.storage.document.DocumentPage;
 import eu.egm.data.cgm.dto.cgmes.CgmesProcess;
 import eu.egm.data.cgm.dto.cgmes.CgmesRegion;
 import eu.egm.data.cgm.dto.cgmes.EquipmentType;

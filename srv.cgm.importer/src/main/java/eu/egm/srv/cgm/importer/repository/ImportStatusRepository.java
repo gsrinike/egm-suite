@@ -1,9 +1,9 @@
 package eu.egm.srv.cgm.importer.repository;
 
-import com.infra.document.DocumentAdapter;
-import com.infra.document.DocumentRepositoryService;
-import com.infra.document.DocumentSort;
-import com.infra.InfrastructureAdapterFactory;
+import com.infra.storage.document.DocumentAdapter;
+import com.infra.storage.document.DocumentRepositoryService;
+import com.infra.storage.document.DocumentSort;
+import com.infra.InfrastructureUtils;
 import eu.egm.data.cgm.dto.cgmes.CgmesConstants;
 import eu.egm.srv.cgm.importer.domain.ImportStatusDocument;
 import org.springframework.stereotype.Repository;
@@ -16,7 +16,7 @@ public class ImportStatusRepository {
 
     private final DocumentRepositoryService<ImportStatusDocument> documentRepository;
 
-    public ImportStatusRepository(InfrastructureAdapterFactory adapterFactory) {
+    public ImportStatusRepository(InfrastructureUtils adapterFactory) {
         this.documentRepository = adapterFactory.documentRepository(new ImportStatusDocumentAdapter());
     }
 

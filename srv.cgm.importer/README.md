@@ -11,9 +11,9 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
 - Accept multipart CGMES uploads.
 - Parse filename metadata from the CGMES naming convention.
 - Store raw uploaded files through the utility object-storage abstraction.
-- Import CGMES payloads through the shared `data.cgm` reader and index normalized equipment rows.
+- Return after raw files are stored, then process CGMES payloads through the shared `data.cgm` reader on background workers.
 - Persist searchable equipment and import-status documents through utility document repositories.
-- Publish import status events through the utility event publisher.
+- Publish stored-object and import-completion events through the utility event publisher.
 - Expose REST APIs for import, search, import history, and comparison.
 
 ## Package Layout
@@ -43,6 +43,7 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - Multipart import.
   - Required fields: `file`, `region`, `process`.
   - Business day, timestamp, time frame, TSO name, profile type, version, and extension are parsed from filenames.
+  - Stores every uploaded file in object storage, saves an `In Progress` import status, publishes `cgm.import.stored`, and returns immediately with the new network id.
 - `GET /api/cgm/networks/{networkId}/equipment`
   - Searches indexed equipment.
   - Filters are executed in Elasticsearch through `com.infra`, not in memory.
@@ -70,6 +71,8 @@ The parser also accepts a `T` separator before the timestamp, for example:
 Search uses a dedicated Elasticsearch query path. The backend no longer fetches the first 10,000 rows and filters in memory, because that could hide valid matches outside the initial batch.
 
 CGMES parsing is intentionally decoupled from service orchestration. Complete CGMES uploads are delegated to the shared data reader in `data.cgm`, which owns the PowSyBl conversion path, graph fallback, and IIDM DTO projection. This service module depends on `data.cgm` for CGM data behavior and does not depend on PowSyBl directly.
+
+Import processing is asynchronous after raw storage. A batch with `n` uploaded files creates `n` internal parsing workers, indexes each file's CGMES equipment projection independently, then updates the import status to `Complete` or `Failed`. The initial screen reads `ImportStatus` documents so users can see upload date, filename context, selected region/process, and current state while background processing continues.
 
 Detailed import, explore, and IIDM invocation sequences are documented in [CGM Import Detail Design](../doc.arch/CGM_IMPORT_DETAIL_DESIGN.md).
 

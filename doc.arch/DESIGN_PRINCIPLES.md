@@ -44,10 +44,10 @@ See [com.utils README](../com.utils/README.md).
 
 Technology-specific behavior is hidden behind service interfaces and adapters:
 
-- `DocumentRepositoryService` hides Elasticsearch access.
-- `ObjectStorageService` hides MinIO access.
-- `EventPublisherService` hides RabbitMQ access.
-- `InfrastructureAdapterFactory` resolves concrete adapters.
+- `com.infra.storage.document.DocumentRepositoryService` hides Elasticsearch access.
+- `com.infra.storage.object.ObjectStorageService` hides MinIO access.
+- `com.infra.event.EventPublisherService` hides RabbitMQ access.
+- `InfrastructureUtils` resolves concrete adapters.
 - `MappingService` hides the mapping implementation used by domain transformers.
 
 This makes backend services easier to test and keeps infrastructure replacement possible.

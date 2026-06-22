@@ -1,6 +1,6 @@
-package com.infra.minio;
+package com.infra.storage.object.minio;
 
-import com.infra.storage.ObjectStorageService;
+import com.infra.storage.object.ObjectStorageService;
 import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;

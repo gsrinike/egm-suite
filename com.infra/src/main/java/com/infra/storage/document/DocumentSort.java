@@ -1,4 +1,4 @@
-package com.infra.document;
+package com.infra.storage.document;
 
 /**
  * Storage-neutral sort descriptor. Keeping this out of Spring Data types avoids

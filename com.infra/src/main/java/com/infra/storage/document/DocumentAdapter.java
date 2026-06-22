@@ -1,4 +1,4 @@
-package com.infra.document;
+package com.infra.storage.document;
 
 /**
  * Describes how an application-owned document type maps to an infrastructure

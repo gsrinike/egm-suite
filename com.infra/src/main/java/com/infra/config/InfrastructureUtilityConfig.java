@@ -1,14 +1,14 @@
 package com.infra.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.infra.document.DocumentAdapter;
-import com.infra.document.DocumentRepositoryService;
-import com.infra.InfrastructureAdapterFactory;
-import com.infra.elasticsearch.ElasticsearchDocumentRepository;
+import com.infra.storage.document.DocumentAdapter;
+import com.infra.storage.document.DocumentRepositoryService;
+import com.infra.InfrastructureUtils;
+import com.infra.storage.document.elasticsearch.ElasticsearchDocumentRepository;
 import com.infra.event.EventPublisherService;
-import com.infra.minio.MinioObjectStorageService;
-import com.infra.rabbitmq.RabbitMqEventPublisher;
-import com.infra.storage.ObjectStorageService;
+import com.infra.storage.object.minio.MinioObjectStorageService;
+import com.infra.event.rabbitmq.RabbitMqEventPublisher;
+import com.infra.storage.object.ObjectStorageService;
 import io.minio.MinioClient;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -67,11 +67,11 @@ public class InfrastructureUtilityConfig {
     }
 
     @Bean
-    InfrastructureAdapterFactory infrastructureAdapterFactory(ElasticsearchOperations elasticsearchOperations,
-                                                              ObjectStorageService objectStorageService,
-                                                              EventPublisherService eventPublisher) {
+    InfrastructureUtils infrastructureUtils(ElasticsearchOperations elasticsearchOperations,
+                                            ObjectStorageService objectStorageService,
+                                            EventPublisherService eventPublisher) {
         // Anonymous factory keeps the public extension point small while centralizing adapter construction.
-        return new InfrastructureAdapterFactory() {
+        return new InfrastructureUtils() {
             @Override
             public <T> DocumentRepositoryService<T> documentRepository(DocumentAdapter<T> adapter) {
                 return new ElasticsearchDocumentRepository<>(elasticsearchOperations, adapter);

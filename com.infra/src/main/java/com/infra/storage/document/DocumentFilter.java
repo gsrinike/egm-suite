@@ -1,4 +1,4 @@
-package com.infra.document;
+package com.infra.storage.document;
 
 /**
  * A single storage-neutral search condition.

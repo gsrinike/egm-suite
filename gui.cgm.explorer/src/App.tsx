@@ -18,9 +18,19 @@ export default function App() {
     refreshImports();
   }, []);
 
+  useEffect(() => {
+    if (!imports.some((item) => item.state === 'In Progress')) {
+      return;
+    }
+    const timer = window.setInterval(refreshImports, 5000);
+    return () => window.clearInterval(timer);
+  }, [imports]);
+
   async function refreshImports() {
     try {
-      setImports(await listImports());
+      const loaded = sortImports(await listImports());
+      setImports(loaded);
+      setLatestImport((current) => current ? loaded.find((item) => item.networkId === current.networkId) ?? current : loaded[0] ?? null);
     } catch {
       setImports([]);
     }
@@ -58,6 +68,34 @@ export default function App() {
           <span>{latestImport.metadata.timeFrame} {latestImport.metadata.tsoName} {latestImport.metadata.cgmesProfileType} {latestImport.metadata.versionNumber}</span>
           <code>{latestImport.networkId}</code>
         </div>
+      )}
+
+      {imports.length > 0 && (
+        <section className="import-history">
+          <div className="pane-header">
+            <div>
+              <h2>Import status</h2>
+              <p>{imports.length} uploaded network batch{imports.length === 1 ? '' : 'es'}</p>
+            </div>
+          </div>
+          <div className="import-list">
+            {imports.map((item) => (
+              <button
+                type="button"
+                key={item.networkId}
+                className={networkId === item.networkId ? 'import-row active' : 'import-row'}
+                onClick={() => setNetworkId(item.networkId)}
+              >
+                <span className={`import-state ${stateClass(item.state)}`}>{item.state}</span>
+                <span>{formatDate(item.createdAt)}</span>
+                <span>{item.metadata.businessDay} {item.metadata.timestamp}</span>
+                <span>{item.metadata.region} {item.metadata.process}</span>
+                <span>{fileContext(item) || item.fileName}</span>
+                <span>{item.indexedEquipmentCount} items</span>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="network-entry">
@@ -103,4 +141,16 @@ function fileContext(item: ImportStatus) {
   return [item.metadata.timeFrame, item.metadata.tsoName, item.metadata.cgmesProfileType]
     .filter(Boolean)
     .join(' ');
+}
+
+function sortImports(imports: ImportStatus[]) {
+  return [...imports].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleString();
+}
+
+function stateClass(state: string) {
+  return state.toLowerCase().replace(/\s+/g, '-');
 }

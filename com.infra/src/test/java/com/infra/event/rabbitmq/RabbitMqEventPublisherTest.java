@@ -1,4 +1,4 @@
-package com.infra.rabbitmq;
+package com.infra.event.rabbitmq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;

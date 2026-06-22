@@ -1,4 +1,4 @@
-package com.infra.storage;
+package com.infra.storage.object;
 
 /**
  * Generic object-storage boundary for storing binary payloads such as uploads,

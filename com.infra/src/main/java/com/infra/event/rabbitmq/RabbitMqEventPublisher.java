@@ -1,4 +1,4 @@
-package com.infra.rabbitmq;
+package com.infra.event.rabbitmq;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
