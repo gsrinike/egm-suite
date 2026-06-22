@@ -9,7 +9,6 @@
 - Provide a gateway-friendly authorization endpoint for route decisions.
 - Provide authenticated user profile information.
 - Provide admin APIs for Keycloak user and realm-role management.
-- Provide `SecretAuthorizationService` for modules such as `com.vault` to authorize secret key access.
 
 ## Runtime Endpoints
 
@@ -70,5 +69,3 @@ For multitenant deployments, pass `tenantId` from the gateway route or tenant re
 The service uses Spring Security's OAuth2 resource server support for local JWT validation. Keycloak-specific role extraction is implemented in `SecurityConfig` and `JwtClaimExtractor`, keeping the controller and gateway contract independent from Keycloak token structure.
 
 Admin operations use Keycloak's REST API through `KeycloakAdminClient`. The adapter obtains its own admin access token with client credentials for each operation; production hardening can add token caching once operational metrics show it is needed.
-
-`SecretAuthorizationService` is a lightweight policy boundary used by `com.vault`. It validates that an application id is allowed to load a requested secret key before the Vault module returns that secret from HashiCorp Vault, environment variables, or config fallback values.

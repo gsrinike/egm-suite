@@ -14,7 +14,7 @@
     <dependencies>
         <dependency>
             <groupId>eu.egm</groupId>
-            <artifactId>com.auth</artifactId>
+            <artifactId>com.utils</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

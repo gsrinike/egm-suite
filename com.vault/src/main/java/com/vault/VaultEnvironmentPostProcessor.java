@@ -23,7 +23,7 @@ public class VaultEnvironmentPostProcessor implements EnvironmentPostProcessor, 
                 properties,
                 System.getenv(),
                 properties,
-                applicationId(environment));
+                clientId(environment));
         Map<String, Object> resolved = new VaultPlaceholderResolver(vaultService).resolve(properties);
         if (!resolved.equals(properties)) {
             environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE_NAME, resolved));
@@ -47,7 +47,7 @@ public class VaultEnvironmentPostProcessor implements EnvironmentPostProcessor, 
         return properties;
     }
 
-    private String applicationId(ConfigurableEnvironment environment) {
+    private String clientId(ConfigurableEnvironment environment) {
         String property = environment.getProperty(MODULE_PROPERTY);
         if (property != null && !property.isBlank()) {
             return property.trim();

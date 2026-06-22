@@ -95,16 +95,85 @@ Cache, environment, and application configuration loading details are owned by `
 
 ## Vault Secret Resolution
 
-Configuration values can use `${vault:SECRET_KEY}` when the application includes `com.vault`. If a module has Vault enabled in `<module>-vault.xml`, `com.vault` reads the secret from HashiCorp Vault. If Vault is not configured, resolution falls back to the matching environment variable and then to matching loaded configuration.
+Configuration values can use `${vault:SECRET_KEY}` when the application includes `com.vault`. `com.utils` first resolves the runtime environment and loads module configuration for that environment. Then `com.vault` inspects the loaded application/vault properties. If Vault is enabled and fully configured there, it reads the secret from HashiCorp Vault. If Vault is not configured, resolution falls back to the matching environment variable and then to matching loaded configuration.
 
-Before any value is returned, `com.vault` calls `com.auth.secret.SecretAuthorizationService`. This prevents an application from loading arbitrary configuration secrets merely by naming a key.
+Before any value is returned, `com.vault` calls `com.utils.secret.SecretAuthorizationService`. This validates that the client whose configuration is being loaded is allowed to access the requested secret key, preventing an application from loading arbitrary configuration secrets merely by naming a key. This bootstrap policy avoids a dependency cycle: `com.vault` depends on `com.utils`, while `com.auth` remains independent of `com.vault`.
 
-Example:
+### Adding Vault Configuration
+
+Add Vault connection and authorization policy in either `base/<module>-vault.xml` or `<env>/<module>-vault.xml`. Environment-specific files override base values.
 
 ```xml
-<entry key="vault.authorization.application-id">srv.cgm.importer</entry>
-<entry key="vault.authorization.allowed-keys">MINIO_SECRET_KEY</entry>
-<entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <entry key="vault.enabled">true</entry>
+    <entry key="vault.address">http://localhost:8200</entry>
+    <entry key="vault.token">${VAULT_TOKEN}</entry>
+    <entry key="vault.kv.mount">secret</entry>
+    <entry key="vault.kv.path">srv-cgm-importer</entry>
+    <entry key="vault.kv.version">2</entry>
+
+    <entry key="vault.authorization.client-id">srv.cgm.importer</entry>
+    <entry key="vault.authorization.allowed-keys">MINIO_SECRET_KEY,ELASTIC_PASSWORD</entry>
+</properties>
+```
+
+The `vault.authorization.client-id` value must match the module/client being bootstrapped, usually the same value set through the `module` system property. The `vault.authorization.allowed-keys` list is the allowlist for `${vault:...}` references used by that client. A `*` value is supported for controlled local/test contexts, but explicit keys are preferred.
+
+### Referencing Secrets In App Config
+
+Reference secrets from application or infrastructure config with the `${vault:SECRET_KEY}` placeholder. For example, `base/srv.cgm.importer-infra.xml` can keep the object storage key as a reference rather than a committed value:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+    <entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
+</properties>
+```
+
+Do not place the secret value itself in the app config. Store it in HashiCorp Vault under the configured KV mount/path, or provide it through the environment as a local fallback only.
+
+### Resolution Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as "Spring Boot application"
+    participant Utils as "com.utils ConfigEnvironmentPostProcessor"
+    participant Env as "EnvironmentResolverService"
+    participant Config as "ConfigLoader"
+    participant VaultPP as "com.vault VaultEnvironmentPostProcessor"
+    participant Authz as "com.utils.secret SecretAuthorizationService"
+    participant Vault as "VaultService"
+    participant Hashi as "HashiCorp Vault"
+    participant Fallback as "Environment/config fallback"
+
+    App->>Utils: start environment post-processing
+    Utils->>Env: resolve env from JVM env, ENV, or local
+    Env-->>Utils: resolved environment
+    Utils->>Config: load env application, infra, cache, vault config
+    Config-->>Utils: environment property sources
+    Utils->>Config: load base application, infra, cache, vault config
+    Config-->>Utils: base property sources
+    Utils-->>App: raw config available, including ${vault:KEY}
+
+    App->>VaultPP: run Vault post-processor when com.vault is present
+    VaultPP->>VaultPP: inspect loaded config for vault.enabled and placeholders
+    VaultPP->>Authz: authorize client-id and secret key
+    Authz-->>VaultPP: allow or deny
+    alt Vault enabled and configured
+        VaultPP->>Vault: requireSecret(KEY)
+        Vault->>Hashi: read configured KV mount/path/key
+        Hashi-->>Vault: secret value
+    else Vault not configured
+        VaultPP->>Vault: requireSecret(KEY)
+        Vault->>Fallback: read environment variable or loaded config key
+        Fallback-->>Vault: fallback value
+    end
+    Vault-->>VaultPP: authorized secret value
+    VaultPP-->>App: add vault-resolved property source
 ```
 
 ## Module Requirements

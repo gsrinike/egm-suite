@@ -8,6 +8,7 @@
 - `com.utils.cache.jdk`: in-memory Java cache implementation.
 - `com.utils.env`: suite runtime environment resolution.
 - `com.utils.config`: Spring Boot environment post-processing and module-scoped configuration loading.
+- `com.utils.secret`: bootstrap-time secret access authorization contracts used during configuration resolution.
 
 ## Configuration Loading
 
@@ -42,4 +43,4 @@ Configuration values can reference secrets through `com.vault`:
 <entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
 ```
 
-If `<module>-vault.xml` enables and configures HashiCorp Vault, the value is read from Vault. If Vault is not configured, the resolver falls back to the environment variable named inside the placeholder, then to a value with the same key in the loaded configuration. `com.vault` requires the key to be authorized through `com.auth.secret.SecretAuthorizationService` before any value is returned.
+If the loaded application or vault configuration enables and configures HashiCorp Vault, the value is read from Vault. If Vault is not configured, the resolver falls back to the environment variable named inside the placeholder, then to a value with the same key in the loaded configuration. `com.vault` requires the client/key pair to be authorized through `com.utils.secret.SecretAuthorizationService` before any value is returned.

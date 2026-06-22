@@ -11,7 +11,7 @@ class VaultServiceFactoryTest {
     void usesFallbackWhenVaultIsNotConfigured() {
         VaultService service = VaultServiceFactory.create(
                 Map.of(
-                        "vault.authorization.application-id", "srv.cgm.importer",
+                        "vault.authorization.client-id", "srv.cgm.importer",
                         "vault.authorization.allowed-keys", "APP_SECRET"),
                 Map.of("APP_SECRET", "from-env"),
                 Map.of("APP_SECRET", "from-config"),
@@ -24,7 +24,7 @@ class VaultServiceFactoryTest {
     void deniesFallbackSecretWhenKeyIsNotAuthorized() {
         VaultService service = VaultServiceFactory.create(
                 Map.of(
-                        "vault.authorization.application-id", "srv.cgm.importer",
+                        "vault.authorization.client-id", "srv.cgm.importer",
                         "vault.authorization.allowed-keys", "APP_SECRET"),
                 Map.of("OTHER_SECRET", "from-env"),
                 Map.of(),

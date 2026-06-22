@@ -12,7 +12,7 @@ class VaultPlaceholderResolverTest {
         VaultPlaceholderResolver resolver = new VaultPlaceholderResolver(
                 VaultServiceFactory.create(
                         Map.of(
-                                "vault.authorization.application-id", "srv.cgm.importer",
+                                "vault.authorization.client-id", "srv.cgm.importer",
                                 "vault.authorization.allowed-keys", "MINIO_SECRET_KEY"),
                         Map.of("MINIO_SECRET_KEY", "secret-value"),
                         Map.of(),

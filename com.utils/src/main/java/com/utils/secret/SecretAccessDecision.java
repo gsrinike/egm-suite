@@ -1,4 +1,4 @@
-package eu.egm.auth.secret;
+package com.utils.secret;
 
 public record SecretAccessDecision(boolean allowed, String reason) {
     public static SecretAccessDecision grant() {

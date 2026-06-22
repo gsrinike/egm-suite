@@ -1,6 +1,6 @@
 package com.vault;
 
-import eu.egm.auth.secret.SecretAuthorizationService;
+import com.utils.secret.SecretAuthorizationService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,24 +19,24 @@ public final class VaultServiceFactory {
     public static VaultService create(Map<String, Object> vaultProperties,
                                       Map<String, String> environment,
                                       Map<String, Object> fallbackConfiguration,
-                                      String applicationId) {
-        SecretAuthorizationService authorizationService = new SecretAuthorizationService(vaultProperties, applicationId);
+                                      String clientId) {
+        SecretAuthorizationService authorizationService = new SecretAuthorizationService(vaultProperties, clientId);
         VaultService fallback = authorize(new EnvironmentVaultService(environment, fallbackConfiguration),
                 authorizationService,
-                applicationId);
+                clientId);
         VaultConfiguration configuration = VaultConfiguration.from(vaultProperties, environment);
         if (!configuration.canConnect()) {
             return fallback;
         }
         List<VaultService> services = new ArrayList<>();
-        services.add(authorize(new HashicorpVaultService(configuration), authorizationService, applicationId));
+        services.add(authorize(new HashicorpVaultService(configuration), authorizationService, clientId));
         services.add(fallback);
         return new CompositeVaultService(services);
     }
 
     private static VaultService authorize(VaultService service,
                                           SecretAuthorizationService authorizationService,
-                                          String applicationId) {
-        return new AuthorizedVaultService(service, authorizationService, applicationId);
+                                          String clientId) {
+        return new AuthorizedVaultService(service, authorizationService, clientId);
     }
 }
