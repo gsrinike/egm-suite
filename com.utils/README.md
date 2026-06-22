@@ -17,13 +17,29 @@
 2. Operating system environment variable `ENV`
 3. Default value `local`
 
-`com.utils.config.ConfigEnvironmentPostProcessor` uses that value to load module resources in this order:
+`com.utils.config.ConfigEnvironmentPostProcessor` uses that value to load module resources in this property-source order:
 
-1. `base/<module>-application.xml`
-2. `base/<module>-infra.xml`
-3. `base/<module>-cache-config.yml`
-4. `<env>/<module>-application.xml`
-5. `<env>/<module>-infra.xml`
-6. `<env>/<module>-cache-config.yml`
+1. `<env>/<module>-application.xml`
+2. `<env>/<module>-infra.xml`
+3. `<env>/<module>-cache-config.yml`
+4. `<env>/<module>-vault.xml`
+5. `base/<module>-application.xml`
+6. `base/<module>-infra.xml`
+7. `base/<module>-cache-config.yml`
+8. `base/<module>-vault.xml`
+
+Earlier property sources have higher precedence, so environment-specific files override base defaults.
 
 Configuration loading reads `CacheConfigurationService` from each module's cache configuration and creates the cache through `CacheServiceFactory`. The current provider values are `java` for the in-memory Java cache and `none` to disable caching without changing consuming code.
+
+## Vault Configuration Inputs
+
+`com.utils` loads optional `<module>-vault.xml` files but does not resolve secrets itself. When an application includes `com.vault`, the Vault post-processor resolves authorized placeholders after these raw property sources are available.
+
+Configuration values can reference secrets through `com.vault`:
+
+```xml
+<entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
+```
+
+If `<module>-vault.xml` enables and configures HashiCorp Vault, the value is read from Vault. If Vault is not configured, the resolver falls back to the environment variable named inside the placeholder, then to a value with the same key in the loaded configuration. `com.vault` requires the key to be authorized through `com.auth.secret.SecretAuthorizationService` before any value is returned.

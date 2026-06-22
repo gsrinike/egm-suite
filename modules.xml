@@ -9,6 +9,7 @@
     <module>map.cgm</module>
     <module>com.infra</module>
     <module>com.auth</module>
+    <module>com.vault</module>
     <module>srv.cgm.importer</module>
     <module>gui.cgm.explorer</module>
 </modules>

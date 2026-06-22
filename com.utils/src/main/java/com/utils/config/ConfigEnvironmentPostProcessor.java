@@ -28,9 +28,11 @@ public class ConfigEnvironmentPostProcessor implements EnvironmentPostProcessor,
         addPropertySource(environment, loader, moduleName, "application", runtimeEnv, "xml");
         addPropertySource(environment, loader, moduleName, "infra", runtimeEnv, "xml");
         addYamlPropertySource(environment, "cache-config-" + runtimeEnv, envCacheProperties);
+        addPropertySource(environment, loader, moduleName, "vault", runtimeEnv, "xml");
         addPropertySource(environment, loader, moduleName, "application", "base", "xml");
         addPropertySource(environment, loader, moduleName, "infra", "base", "xml");
         addYamlPropertySource(environment, "cache-config-base", baseCacheProperties);
+        addPropertySource(environment, loader, moduleName, "vault", "base", "xml");
     }
 
     @Override

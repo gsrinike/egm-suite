@@ -9,8 +9,9 @@ This document classifies project modules and links to module READMEs for details
 Current modules:
 
 - `com.utils`: shared utilities, cache abstractions, environment resolution, and module configuration loading. See [README](../com.utils/README.md).
+- `com.vault`: HashiCorp Vault and fallback secret lookup, including authorized `${vault:...}` configuration placeholders. Depends on `com.auth` for secret-key authorization. See [README](../com.vault/README.md).
 - `com.infra`: infrastructure adapters for document storage, object storage, and messaging. Document abstractions live under `com.infra.storage.document`, object storage under `com.infra.storage.object`, and message adapters under `com.infra.event`. See [README](../com.infra/README.md).
-- `com.auth`: authentication and authorization services. See [README](../com.auth/README.md).
+- `com.auth`: authentication, authorization, and secret-access authorization policies. It must not depend on `com.vault`. See [README](../com.auth/README.md).
 - `com.mapping`: generic object mapping service. See [README](../com.mapping/README.md).
 
 Rules:

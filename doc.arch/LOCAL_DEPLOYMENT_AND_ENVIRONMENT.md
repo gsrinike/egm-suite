@@ -69,16 +69,18 @@ The resolved value is normalized and used by `com.utils.config`.
 
 ## Configuration Loading Order
 
-`com.utils.config` loads module configuration in this order:
+`com.utils.config` loads module configuration in this property-source order:
 
-1. `base/<module>-application.xml`
-2. `base/<module>-infra.xml`
-3. `base/<module>-cache-config.yml`
-4. `<env>/<module>-application.xml`
-5. `<env>/<module>-infra.xml`
-6. `<env>/<module>-cache-config.yml`
+1. `<env>/<module>-application.xml`
+2. `<env>/<module>-infra.xml`
+3. `<env>/<module>-cache-config.yml`
+4. `<env>/<module>-vault.xml`
+5. `base/<module>-application.xml`
+6. `base/<module>-infra.xml`
+7. `base/<module>-cache-config.yml`
+8. `base/<module>-vault.xml`
 
-Later files override earlier files. This makes base configuration stable while allowing `local`, `prod`, `sate`, or other environments to override only changed values.
+Earlier property sources have higher precedence. This makes base configuration stable while allowing `local`, `prod`, `sate`, or other environments to override only changed values.
 
 ## Cache Configuration
 
@@ -90,6 +92,20 @@ Current cache providers:
 - `none`: disables cache behavior.
 
 Cache, environment, and application configuration loading details are owned by `com.utils`.
+
+## Vault Secret Resolution
+
+Configuration values can use `${vault:SECRET_KEY}` when the application includes `com.vault`. If a module has Vault enabled in `<module>-vault.xml`, `com.vault` reads the secret from HashiCorp Vault. If Vault is not configured, resolution falls back to the matching environment variable and then to matching loaded configuration.
+
+Before any value is returned, `com.vault` calls `com.auth.secret.SecretAuthorizationService`. This prevents an application from loading arbitrary configuration secrets merely by naming a key.
+
+Example:
+
+```xml
+<entry key="vault.authorization.application-id">srv.cgm.importer</entry>
+<entry key="vault.authorization.allowed-keys">MINIO_SECRET_KEY</entry>
+<entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
+```
 
 ## Module Requirements
 

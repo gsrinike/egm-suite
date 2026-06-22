@@ -7,6 +7,7 @@ This document records the principles adopted in the Energy Grid Management Suite
 Each module has a narrow purpose and a clear owner boundary:
 
 - `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, infrastructure adapters, and authentication.
+- `com.vault` centralizes authorized secret lookup so service modules can reference passwords without embedding secret-source logic.
 - `data.*` modules define shared data contracts and PowSyBl-aligned domain vocabulary.
 - `map.*` modules transform between data models.
 - `srv.*` modules expose backend APIs and orchestrate use cases.
@@ -19,6 +20,7 @@ This keeps services focused on workflow orchestration instead of owning all tech
 Dependencies flow from use-case modules toward stable contracts and utilities:
 
 - Services may depend on required `data`, `com.utils`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
+- `com.vault` depends on `com.auth` for secret authorization. `com.auth` must not depend on `com.vault`.
 - Mapping modules may depend on source/target data modules and `com.mapping`.
 - Data modules must not depend on infrastructure, Spring MVC, RabbitMQ, MinIO, or Elasticsearch.
 - GUI modules communicate through HTTP contracts instead of importing backend Java code.
@@ -31,9 +33,11 @@ Runtime configuration is externalized into module-specific files:
 
 - `base/<module>-application.xml`
 - `base/<module>-infra.xml`
+- `base/<module>-vault.xml`
 - `base/<module>-cache-config.yml`
 - `<env>/<module>-application.xml`
 - `<env>/<module>-infra.xml`
+- `<env>/<module>-vault.xml`
 - `<env>/<module>-cache-config.yml`
 
 Base configuration defines defaults. Environment folders override only what changes.
@@ -48,6 +52,7 @@ Technology-specific behavior is hidden behind service interfaces and adapters:
 - `com.infra.storage.object.ObjectStorageService` hides MinIO access.
 - `com.infra.event.EventPublisherService` hides RabbitMQ access.
 - `InfrastructureUtils` resolves concrete adapters.
+- `VaultService` hides HashiCorp Vault and environment/config fallback secret lookup, while `com.auth.secret.SecretAuthorizationService` authorizes each secret key before it is returned.
 - `MappingService` hides the mapping implementation used by domain transformers.
 
 This makes backend services easier to test and keeps infrastructure replacement possible.
