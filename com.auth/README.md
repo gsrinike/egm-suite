@@ -24,11 +24,11 @@
 
 The service sets `module=com.auth` at startup and uses `com.utils.config` to load:
 
-- `base/com.auth-application.xml`
-- `base/com.auth-infra.xml`
+- `base/com.auth-application.yml`
+- `base/com.auth-infra.yml`
 - `base/com.auth-cache-config.yml`
-- `${env}/com.auth-application.xml`
-- `${env}/com.auth-infra.xml`
+- `${env}/com.auth-application.yml`
+- `${env}/com.auth-infra.yml`
 - `${env}/com.auth-cache-config.yml`
 
 When `env` or `ENV` is not set, `local` is used. The local configuration can still resolve environment variables such as:

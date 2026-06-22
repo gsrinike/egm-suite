@@ -71,14 +71,14 @@ The resolved value is normalized and used by `com.utils.config`.
 
 `com.utils.config` loads module configuration in this property-source order:
 
-1. `<env>/<module>-application.xml`
-2. `<env>/<module>-infra.xml`
+1. `<env>/<module>-application.yml`
+2. `<env>/<module>-infra.yml`
 3. `<env>/<module>-cache-config.yml`
-4. `<env>/<module>-vault.xml`
-5. `base/<module>-application.xml`
-6. `base/<module>-infra.xml`
+4. `<env>/<module>-vault.yml`
+5. `base/<module>-application.yml`
+6. `base/<module>-infra.yml`
 7. `base/<module>-cache-config.yml`
-8. `base/<module>-vault.xml`
+8. `base/<module>-vault.yml`
 
 Earlier property sources have higher precedence. This makes base configuration stable while allowing `local`, `prod`, `sate`, or other environments to override only changed values.
 
@@ -101,36 +101,32 @@ Before any value is returned, `com.vault` calls `com.utils.secret.SecretAuthoriz
 
 ### Adding Vault Configuration
 
-Add Vault connection and authorization policy in either `base/<module>-vault.xml` or `<env>/<module>-vault.xml`. Environment-specific files override base values.
+Add Vault connection and authorization policy in either `base/<module>-vault.yml` or `<env>/<module>-vault.yml`. Environment-specific files override base values.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
-<properties>
-    <entry key="vault.enabled">true</entry>
-    <entry key="vault.address">http://localhost:8200</entry>
-    <entry key="vault.token">${VAULT_TOKEN}</entry>
-    <entry key="vault.kv.mount">secret</entry>
-    <entry key="vault.kv.path">srv-cgm-importer</entry>
-    <entry key="vault.kv.version">2</entry>
-
-    <entry key="vault.authorization.client-id">srv.cgm.importer</entry>
-    <entry key="vault.authorization.allowed-keys">MINIO_SECRET_KEY,ELASTIC_PASSWORD</entry>
-</properties>
+```yaml
+vault:
+  enabled: true
+  address: http://localhost:8200
+  token: "${VAULT_TOKEN}"
+  kv:
+    mount: secret
+    path: srv-cgm-importer
+    version: 2
+  authorization:
+    client-id: srv.cgm.importer
+    allowed-keys: MINIO_SECRET_KEY,ELASTIC_PASSWORD
 ```
 
 The `vault.authorization.client-id` value must match the module/client being bootstrapped, usually the same value set through the `module` system property. The `vault.authorization.allowed-keys` list is the allowlist for `${vault:...}` references used by that client. A `*` value is supported for controlled local/test contexts, but explicit keys are preferred.
 
 ### Referencing Secrets In App Config
 
-Reference secrets from application or infrastructure config with the `${vault:SECRET_KEY}` placeholder. For example, `base/srv.cgm.importer-infra.xml` can keep the object storage key as a reference rather than a committed value:
+Reference secrets from application or infrastructure config with the `${vault:SECRET_KEY}` placeholder. For example, `base/srv.cgm.importer-infra.yml` can keep the object storage key as a reference rather than a committed value:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
-<properties>
-    <entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
-</properties>
+```yaml
+utility:
+  object-storage:
+    access-key: "${vault:MINIO_SECRET_KEY}"
 ```
 
 Do not place the secret value itself in the app config. Store it in HashiCorp Vault under the configured KV mount/path, or provide it through the environment as a local fallback only.

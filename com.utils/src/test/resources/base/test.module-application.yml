@@ -1,0 +1,3 @@
+sample:
+  name: base
+  timeout: PT5S

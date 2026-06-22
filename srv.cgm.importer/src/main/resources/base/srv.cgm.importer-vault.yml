@@ -1,0 +1,11 @@
+vault:
+  enabled: false
+  address: "${VAULT_ADDR:http://localhost:8200}"
+  token: "${VAULT_TOKEN:}"
+  kv:
+    mount: secret
+    path: srv-cgm-importer
+    version: 2
+  authorization:
+    client-id: srv.cgm.importer
+    allowed-keys: MINIO_ACCESS_KEY,MINIO_SECRET_KEY,ELASTIC_PASSWORD

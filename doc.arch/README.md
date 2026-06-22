@@ -33,4 +33,4 @@ mvn archetype:generate \
   -DinteractiveMode=false
 ```
 
-After generation, add the new module to both root `pom.xml` and `modules.xml`, then add only the dependencies the module directly uses.
+After generation, add the new module to both root `pom.xml` and `modules.yml`, then add only the dependencies the module directly uses.

@@ -1,0 +1,22 @@
+spring:
+  elasticsearch:
+    uris: http://localhost:9200
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+utility:
+  messaging:
+    topic-exchange:
+      name: cgm.import.exchange
+  object-storage:
+    endpoint: http://localhost:9000
+    access-key: "${vault:MINIO_ACCESS_KEY}"
+    secret-key: "${vault:MINIO_SECRET_KEY}"
+
+management:
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces

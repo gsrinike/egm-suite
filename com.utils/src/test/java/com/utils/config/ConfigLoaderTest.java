@@ -9,14 +9,13 @@ import org.junit.jupiter.api.Test;
 class ConfigLoaderTest {
 
     @Test
-    void loadsXmlPropertiesFromClasspath() {
+    void loadsYamlApplicationPropertiesFromClasspath() {
         ConfigLoader loader = new ConfigLoader(new CacheConfigurationService("java", true, 16, Duration.ofMinutes(1)));
 
-        LoadedConfiguration configuration = loader.load(new ConfigResourceName("test.module", "application", "base", "xml"));
+        LoadedConfiguration configuration = loader.load(new ConfigResourceName("test.module", "application", "base", "yml"));
 
-        assertThat(configuration.properties())
-                .containsEntry("sample.name", "base")
-                .containsEntry("sample.timeout", "PT5S");
+        assertThat(configuration.properties().get("sample.name").toString()).isEqualTo("base");
+        assertThat(configuration.properties().get("sample.timeout").toString()).isEqualTo("PT5S");
     }
 
     @Test

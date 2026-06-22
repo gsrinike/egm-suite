@@ -30,13 +30,13 @@ The root Maven POM manages versions but does not force technology dependencies i
 
 Runtime configuration is externalized into module-specific files:
 
-- `base/<module>-application.xml`
-- `base/<module>-infra.xml`
-- `base/<module>-vault.xml`
+- `base/<module>-application.yml`
+- `base/<module>-infra.yml`
+- `base/<module>-vault.yml`
 - `base/<module>-cache-config.yml`
-- `<env>/<module>-application.xml`
-- `<env>/<module>-infra.xml`
-- `<env>/<module>-vault.xml`
+- `<env>/<module>-application.yml`
+- `<env>/<module>-infra.yml`
+- `<env>/<module>-vault.yml`
 - `<env>/<module>-cache-config.yml`
 
 Base configuration defines defaults. Environment folders override only what changes.

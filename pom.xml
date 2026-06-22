@@ -14,7 +14,7 @@
 
     <!--
       Maven requires aggregator modules to be declared in the POM being built.
-      Keep this list synchronized with modules.xml, which is the standalone
+      Keep this list synchronized with modules.yml, which is the standalone
       module inventory used for developer review and automation.
     -->
     <modules>

@@ -19,8 +19,8 @@
 
 Applications can add optional vault config files:
 
-- `base/<module>-vault.xml`
-- `<env>/<module>-vault.xml`
+- `base/<module>-vault.yml`
+- `<env>/<module>-vault.yml`
 
 Supported keys:
 
@@ -40,10 +40,15 @@ If Vault is not enabled or not fully configured, `${vault:KEY}` resolves from en
 
 Example:
 
-```xml
-<entry key="vault.authorization.client-id">srv.cgm.importer</entry>
-<entry key="vault.authorization.allowed-keys">MINIO_SECRET_KEY</entry>
-<entry key="utility.object-storage.access-key">${vault:MINIO_SECRET_KEY}</entry>
+```yaml
+vault:
+  authorization:
+    client-id: srv.cgm.importer
+    allowed-keys: MINIO_SECRET_KEY
+
+utility:
+  object-storage:
+    access-key: "${vault:MINIO_SECRET_KEY}"
 ```
 
 The module can also be used directly by creating a service through `VaultServiceFactory`.

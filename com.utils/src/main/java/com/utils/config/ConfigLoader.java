@@ -4,10 +4,8 @@ import com.utils.cache.CacheConfigurationService;
 import com.utils.cache.CacheService;
 import com.utils.cache.CacheServiceFactory;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Properties;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
@@ -33,7 +31,6 @@ public class ConfigLoader {
         }
         try {
             Map<String, Object> properties = switch (resourceName.extension()) {
-                case "xml" -> loadXml(resource);
                 case "yml", "yaml" -> loadYaml(location, resource);
                 default -> throw new IllegalArgumentException("Unsupported config extension: " + resourceName.extension());
             };
@@ -41,18 +38,6 @@ public class ConfigLoader {
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to load configuration resource " + location, ex);
         }
-    }
-
-    private Map<String, Object> loadXml(Resource resource) throws IOException {
-        Properties properties = new Properties();
-        try (InputStream input = resource.getInputStream()) {
-            properties.loadFromXML(input);
-        }
-        Map<String, Object> values = new LinkedHashMap<>();
-        for (String name : properties.stringPropertyNames()) {
-            values.put(name, properties.getProperty(name));
-        }
-        return values;
     }
 
     private Map<String, Object> loadYaml(String name, Resource resource) throws IOException {

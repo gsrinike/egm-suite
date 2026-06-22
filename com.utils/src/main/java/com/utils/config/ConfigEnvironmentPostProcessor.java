@@ -25,14 +25,14 @@ public class ConfigEnvironmentPostProcessor implements EnvironmentPostProcessor,
         Map<String, Object> cacheProperties = merge(baseCacheProperties, envCacheProperties);
 
         ConfigLoader loader = new ConfigLoader(CacheConfigLoader.from(cacheProperties));
-        addPropertySource(environment, loader, moduleName, "application", runtimeEnv, "xml");
-        addPropertySource(environment, loader, moduleName, "infra", runtimeEnv, "xml");
+        addPropertySource(environment, loader, moduleName, "application", runtimeEnv, "yml");
+        addPropertySource(environment, loader, moduleName, "infra", runtimeEnv, "yml");
         addYamlPropertySource(environment, "cache-config-" + runtimeEnv, envCacheProperties);
-        addPropertySource(environment, loader, moduleName, "vault", runtimeEnv, "xml");
-        addPropertySource(environment, loader, moduleName, "application", "base", "xml");
-        addPropertySource(environment, loader, moduleName, "infra", "base", "xml");
+        addPropertySource(environment, loader, moduleName, "vault", runtimeEnv, "yml");
+        addPropertySource(environment, loader, moduleName, "application", "base", "yml");
+        addPropertySource(environment, loader, moduleName, "infra", "base", "yml");
         addYamlPropertySource(environment, "cache-config-base", baseCacheProperties);
-        addPropertySource(environment, loader, moduleName, "vault", "base", "xml");
+        addPropertySource(environment, loader, moduleName, "vault", "base", "yml");
     }
 
     @Override

@@ -82,14 +82,18 @@ Comparison still uses a network-wide read path capped for now. A production-scal
 
 The service sets `module=srv.cgm.importer` at startup and uses `com.utils.config` to load:
 
-- `base/srv.cgm.importer-application.xml`
-- `base/srv.cgm.importer-infra.xml`
+- `base/srv.cgm.importer-application.yml`
+- `base/srv.cgm.importer-infra.yml`
+- `base/srv.cgm.importer-vault.yml`
 - `base/srv.cgm.importer-cache-config.yml`
-- `${env}/srv.cgm.importer-application.xml`
-- `${env}/srv.cgm.importer-infra.xml`
+- `${env}/srv.cgm.importer-application.yml`
+- `${env}/srv.cgm.importer-infra.yml`
+- `${env}/srv.cgm.importer-vault.yml`
 - `${env}/srv.cgm.importer-cache-config.yml`
 
 When `env` or `ENV` is not set, `local` is used.
+
+The base Vault configuration is a sample in `base/srv.cgm.importer-vault.yml`. It defines the client id and allowed secret keys for `${vault:...}` references while leaving `vault.enabled` disabled by default. Environment-specific deployments can add `<env>/srv.cgm.importer-vault.yml` with `vault.enabled: true`, Vault address, and token source.
 
 ## Developer Commands
 
