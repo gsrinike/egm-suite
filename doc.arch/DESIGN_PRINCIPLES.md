@@ -6,8 +6,7 @@ This document records the principles adopted in the Energy Grid Management Suite
 
 Each module has a narrow purpose and a clear owner boundary:
 
-- `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, infrastructure adapters, and authentication.
-- `com.vault` centralizes authorized secret lookup so service modules can reference passwords without embedding secret-source logic.
+- `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, authorized secret lookup, infrastructure adapters, and authentication.
 - `data.*` modules define shared data contracts and PowSyBl-aligned domain vocabulary.
 - `map.*` modules transform between data models.
 - `srv.*` modules expose backend APIs and orchestrate use cases.
