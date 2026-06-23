@@ -8,5 +8,6 @@ modules:
   - com.infra
   - com.auth
   - com.vault
+  - bpm.cgm.import
   - srv.cgm.importer
   - gui.cgm.explorer

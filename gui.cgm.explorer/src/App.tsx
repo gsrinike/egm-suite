@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Play, RefreshCw } from 'lucide-react';
 import { EquipmentExplorer } from './components/EquipmentExplorer';
 import { ImportPanel } from './components/ImportPanel';
 import { IidmVisualizer } from './components/IidmVisualizer';
 import { NetworkCompare } from './components/NetworkCompare';
-import { ImportStatus, listImports } from './services/cgmApi';
+import { ImportStatus, getProcessHistory, listImports, startCgmImport } from './services/cgmApi';
 import './styles.css';
 
 export default function App() {
@@ -12,6 +12,8 @@ export default function App() {
   const [imports, setImports] = useState<ImportStatus[]>([]);
   const [networkId, setNetworkId] = useState('');
   const [activeTab, setActiveTab] = useState<'explore' | 'iidm' | 'compare'>('explore');
+  const [processBusy, setProcessBusy] = useState(false);
+  const [processError, setProcessError] = useState('');
 
   useEffect(() => {
     // Import history drives the network-id selector after page reloads.
@@ -43,6 +45,34 @@ export default function App() {
     setNetworkId(status.networkId);
   }
 
+  async function startSelectedImport(status: ImportStatus) {
+    setProcessBusy(true);
+    setProcessError('');
+    try {
+      const updated = await startCgmImport(status);
+      handleImported(updated);
+    } catch (exception) {
+      setProcessError(exception instanceof Error ? exception.message : 'Starting BPM import failed');
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function refreshSelectedHistory() {
+    if (!networkId) {
+      return;
+    }
+    setProcessBusy(true);
+    setProcessError('');
+    try {
+      handleImported(await getProcessHistory(networkId));
+    } catch (exception) {
+      setProcessError(exception instanceof Error ? exception.message : 'Loading process history failed');
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
   const selectedImport = useMemo(
     () => latestImport?.networkId === networkId ? latestImport : imports.find((item) => item.networkId === networkId) ?? null,
     [imports, latestImport, networkId]
@@ -66,6 +96,7 @@ export default function App() {
           <span>{latestImport.indexedEquipmentCount} items indexed</span>
           <span>{latestImport.metadata.businessDay} {latestImport.metadata.timestamp} {latestImport.metadata.region} {latestImport.metadata.process}</span>
           <span>{latestImport.metadata.timeFrame} {latestImport.metadata.tsoName} {latestImport.metadata.cgmesProfileType} {latestImport.metadata.versionNumber}</span>
+          {latestImport.processInstanceId && <span>Process <code>{latestImport.processInstanceId}</code></span>}
           <code>{latestImport.networkId}</code>
         </div>
       )}
@@ -93,6 +124,39 @@ export default function App() {
                 <span>{fileContext(item) || item.fileName}</span>
                 <span>{item.indexedEquipmentCount} items</span>
               </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {selectedImport && (
+        <section className="process-history">
+          <div className="pane-header">
+            <div>
+              <h2>Process history</h2>
+              <p>{selectedImport.files?.length ?? 0} file status entr{selectedImport.files?.length === 1 ? 'y' : 'ies'}</p>
+            </div>
+            <div className="history-actions">
+              <button type="button" onClick={() => startSelectedImport(selectedImport)} disabled={selectedImport.state !== 'Init' || processBusy}>
+                <Play size={16} aria-hidden />
+                Start
+              </button>
+              <button type="button" onClick={refreshSelectedHistory} disabled={processBusy}>
+                <RefreshCw size={16} aria-hidden />
+                Refresh
+              </button>
+            </div>
+          </div>
+          {processError && <p className="error" role="alert">{processError}</p>}
+          <div className="file-status-list">
+            {(selectedImport.files ?? []).map((file) => (
+              <div className="file-status-row" key={file.objectId}>
+                <span className={`import-state ${stateClass(file.status)}`}>{file.status}</span>
+                <span>{file.fileName}</span>
+                <span>IIDM {file.iidmTransformStatus}</span>
+                <span>{file.documentIds.length} docs</span>
+                <span>{file.message}</span>
+              </div>
             ))}
           </div>
         </section>

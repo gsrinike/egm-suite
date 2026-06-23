@@ -1,0 +1,4 @@
+bpm:
+  cgm:
+    import:
+      service-base-url: "${CGM_IMPORT_SERVICE_URL:http://srv-cgm-importer:8080}"

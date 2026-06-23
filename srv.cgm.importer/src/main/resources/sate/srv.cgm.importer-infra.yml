@@ -1,1 +1,4 @@
-{}
+utility:
+  bpm:
+    remote:
+      base-url: "${CGM_IMPORT_BPM_URL:http://bpm-cgm-import:8083}"

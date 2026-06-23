@@ -1,0 +1,4 @@
+bpm:
+  cgm:
+    import:
+      service-base-url: "${CGM_IMPORT_SERVICE_URL:http://localhost:8080}"

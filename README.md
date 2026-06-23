@@ -12,8 +12,9 @@ This README is the suite entry point. Detailed behavior belongs in each module R
 - `data.cgm`: shared CGM DTOs, CGMES/IIDM domain packages, PowSyBl-backed reading, fallback graph projection, classification, and filename parsing.
 - `com.mapping`: generic configuration-driven object mapping.
 - `map.cgm`: CGMES-to-IIDM and IIDM-to-CGMES transformers.
-- `com.infra`: reusable backend infrastructure adapters for document storage, object storage, and event publishing.
+- `com.infra`: reusable backend infrastructure adapters for document storage, object storage, event publishing, and BPM process invocation.
 - `com.auth`: OIDC/OAuth 2.0 authorization service backed by Keycloak.
+- `bpm.cgm.import`: embedded Camunda BPM process module for CGM import orchestration.
 - `srv.cgm.importer`: Spring Boot REST service for CGMES upload, indexing, import history, and comparison.
 - `gui.cgm.explorer`: React application for import, search/filter/navigation, and state comparison.
 - `doc.arch`: architecture notes, local deployment details, module classification, and the module archetype.
@@ -36,6 +37,12 @@ Run the backend:
 
 ```bash
 mvn -pl srv.cgm.importer -am spring-boot:run
+```
+
+Run the BPM process module:
+
+```bash
+mvn -pl bpm.cgm.import -am spring-boot:run
 ```
 
 Run the frontend:
@@ -78,6 +85,7 @@ docker compose -f docker/docker-compose.yml up
 ## Where Details Live
 
 - Backend APIs, import behavior, filename rules, runtime dependencies, and backend Docker build commands: `srv.cgm.importer/README.md`.
+- BPM process definition, delegates, callback API, and BPM Docker build commands: `bpm.cgm.import/README.md`.
 - Frontend structure, Vite/npm commands, API client usage, and GUI Docker image details: `gui.cgm.explorer/README.md`.
 - Authentication endpoints, Keycloak configuration, and gateway authorization flow: `com.auth/README.md`.
 - Configuration loading order, environment resolution, and cache-provider resolution: `com.utils/README.md`.

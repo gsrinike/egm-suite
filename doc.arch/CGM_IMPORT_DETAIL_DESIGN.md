@@ -5,6 +5,7 @@ This document describes the runtime invocation paths for CGM import, explore, an
 ## Package Boundaries
 
 - `srv.cgm.importer`: REST controllers, service orchestration, storage/index/event adapters.
+- `bpm.cgm.import`: embedded Camunda BPMN process and delegates for process id `cgm-import`.
 - `data.cgm.dto.cgmes`: CGMES-facing API and search DTOs.
 - `data.cgm.dto.iidm`: IIDM-facing DTOs.
 - `data.cgm.mapping`: CGMES filename parsing, PowSyBl-backed reading, fallback graph loading, topology strategies, and IIDM DTO projection.
@@ -12,6 +13,7 @@ This document describes the runtime invocation paths for CGM import, explore, an
 - `com.infra.storage.document`: generic document repository contracts consumed by import-status and equipment repositories.
 - `com.infra.storage.object`: generic object-storage contract used by raw CGMES upload storage.
 - `com.infra.event`: generic event-publishing contract used for import lifecycle messages.
+- `com.infra.bpm`: generic BPM process contract used to start and monitor Camunda process instances.
 - `map.cgm`: reusable CGMES/IIDM transformer implementation using `com.mapping`.
 
 ## 1. Import Flow
@@ -19,68 +21,68 @@ This document describes the runtime invocation paths for CGM import, explore, an
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client
-    participant Controller as CgmImportController
-    participant Service as CgmImportService
-    participant Parser as CgmesFileNameParser
+    actor GUI
+    participant ImportController as srv.cgm.importer CgmImportController
+    participant ImportService as CgmImportService
     participant Storage as RawCgmesStorage
     participant Minio as MinIO Object Store
-    participant Worker as Per-file Import Workers
-    participant Reader as PowsyblCgmesNetworkReader
-    participant DataReader as data.cgm.mapping.PowsyblCgmesEquipmentReader
-    participant IidmReader as PowsyblIidmEquipmentReader
-    participant Fallback as EquipmentProjectionReader
-    participant Graph as CgmProfileGraphLoader
-    participant Strategy as CgmTopologyMappingStrategy
-    participant EquipmentRepo as EquipmentSearchRepository
     participant StatusRepo as ImportStatusRepository
+    participant InfraBpm as com.infra BusinessProcessService
+    participant Bpm as bpm.cgm.import cgm-import BPMN
+    participant Transform as CgmesTransform API
+    participant Reader as PowsyblCgmesNetworkReader
+    participant DataReader as data.cgm mapping readers
+    participant EquipmentRepo as EquipmentSearchRepository
     participant Events as EventPublisherService
     participant Rabbit as RabbitMQ
+    participant IidmListener as CgmesTransformedDocumentsListener
+    participant IidmService as IidmConversionService
 
-    Client->>Controller: POST /api/cgm/imports (multipart files, region, process)
-    Controller->>Service: importCgmes(files, region, process)
-    loop Each uploaded file
-        Service->>Parser: parse(originalFilename, region, process)
-        Parser-->>Service: ImportMetadata
-        Service->>Storage: store(networkId/sequence-fileName, bytes, contentType)
+    GUI->>ImportController: POST /api/cgm/imports (multipart files, region, process)
+    ImportController->>ImportService: importCgmes(files, region, process)
+    ImportService->>ImportService: create networkId
+    par One storage worker per uploaded file
+        ImportService->>Storage: store(objectId, bytes, contentType)
         Storage->>Minio: putObject(raw CGMES bytes)
-        Minio-->>Storage: object id stored
+        Minio-->>Storage: stored
     end
-    Service->>StatusRepo: save(ImportStatus state=In Progress)
-    Service->>Events: publish(cgm.import.stored, networkId, objectIds)
+    ImportService->>StatusRepo: save ImportStatus(state=Init, file statuses=Init)
+    ImportService->>Events: publish cgm.import.stored(networkId, objectIds)
     Events->>Rabbit: stored-object event
-    Service-->>Controller: ImportStatus state=In Progress
-    Controller-->>Client: ImportStatus state=In Progress
+    ImportService-->>ImportController: ImportStatus state=Init
+    ImportController-->>GUI: ImportStatus state=Init
 
-    Service->>Worker: spawn one worker per stored file
-    par Worker per uploaded file
-        Worker->>Reader: read(networkId, metadata, InputStream)
-        Reader->>DataReader: read(networkId, metadata, InputStream)
-        DataReader->>DataReader: copy payload bytes
-        DataReader->>IidmReader: read(PowSyBl imported Network)
-        alt PowSyBl conversion succeeds
-            IidmReader-->>DataReader: List<IidmEquipment>
-            DataReader-->>Reader: List<EquipmentView>
-        else Conversion fails or yields no equipment
-            DataReader->>Fallback: read(networkId, metadata, payload)
-            Fallback->>Graph: load(payload)
-            Graph-->>Fallback: CgmProfileGraph
-            Fallback->>Strategy: supports(graph, metadata)
-            Strategy-->>Fallback: selected topology strategy
-            Fallback->>Strategy: project(networkId, metadata, graph)
-            Strategy->>Strategy: pass 1 instantiate equipment/state by mRID
-            Strategy->>Strategy: pass 2 resolve containers/topology associations
-            Strategy-->>Fallback: List<EquipmentView>
-            Fallback-->>DataReader: List<EquipmentView>
-            DataReader-->>Reader: List<EquipmentView>
-        end
-        Reader-->>Worker: indexed equipment projections
-        Worker->>EquipmentRepo: saveAll(EquipmentDocument.fromView)
+    GUI->>ImportController: POST /api/cgm/imports/processes/start ImportStatus
+    ImportController->>ImportService: startCgmImport(status)
+    ImportService->>InfraBpm: start(processId=cgm-import, variables)
+    InfraBpm->>Bpm: start embedded Camunda process
+    Bpm->>Bpm: Init task extracts objectIds from ImportStatus
+    ImportService->>StatusRepo: save ImportStatus(state=In Progress, processInstanceId)
+    ImportController-->>GUI: ImportStatus with processInstanceId
+
+    par BPM multi-instance over objectIds
+        Bpm->>Transform: POST /api/cgm/imports/{networkId}/transforms/cgmes(objectId)
+        Transform->>ImportService: transformObject(networkId, objectId)
+        ImportService->>StatusRepo: update file status=Started, iidmTransformStatus=Started
+        ImportService->>Storage: read(objectId)
+        Storage->>Minio: getObject(raw CGMES bytes)
+        Minio-->>Storage: bytes
+        ImportService->>Reader: read(networkId, metadata, InputStream)
+        Reader->>DataReader: PowSyBl conversion or fallback graph projection
+        DataReader-->>Reader: List<EquipmentView>
+        Reader-->>ImportService: equipment projections
+        ImportService->>EquipmentRepo: saveAll(EquipmentDocument.fromView)
+        ImportService->>Events: publish cgm.cgmes.transformed(documentIds)
+        Events->>Rabbit: transformed-document event
+        ImportService->>StatusRepo: update file status=Complete or Failed
     end
-    Worker-->>Service: all workers completed
-    Service->>StatusRepo: save(ImportStatus state=Complete or Failed)
-    Service->>Events: publish(cgm.import.completed, final status)
-    Events->>Rabbit: completion event
+
+    Rabbit->>IidmListener: cgm.cgmes.transformed
+    IidmListener->>IidmService: convert(networkId)
+    IidmService-->>IidmListener: IidmNetwork projection
+    IidmListener->>StatusRepo: update iidmTransformStatus=Done or Failed
+    GUI->>ImportController: GET /api/cgm/imports/{networkId}/process-history
+    ImportController-->>GUI: process instance id and per-file statuses
 ```
 
 ## 2. Explore Flow

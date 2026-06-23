@@ -6,4 +6,6 @@ package com.infra.storage.object;
  */
 public interface ObjectStorageService {
     void store(String bucketName, String objectName, byte[] bytes, String contentType);
+
+    byte[] read(String bucketName, String objectName);
 }

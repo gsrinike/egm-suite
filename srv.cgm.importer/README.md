@@ -11,15 +11,18 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
 - Accept multipart CGMES uploads.
 - Parse filename metadata from the CGMES naming convention.
 - Store raw uploaded files through the utility object-storage abstraction.
-- Return after raw files are stored, then process CGMES payloads through the shared `data.cgm` reader on background workers.
+- Return after raw files are stored with import state `Init`.
+- Start the CGM import BPM process through `InfrastructureUtils`.
+- Process object-level `CgmesTransform` calls from `bpm.cgm.import`.
 - Persist searchable equipment and import-status documents through utility document repositories.
-- Publish stored-object and import-completion events through the utility event publisher.
+- Publish stored-object and CGMES transformed-document events through the utility event publisher.
+- Consume transformed-document events to run IIDM conversion and update the file-level IIDM transform flag.
 - Expose REST APIs for import, search, import history, and comparison.
 
 ## Package Layout
 
 - `api`
-  - `CgmImportController`: import and import-history endpoints.
+  - `CgmImportController`: import, BPM start, transform callback, status, and import-history endpoints.
   - `EquipmentController`: equipment search and network comparison endpoints.
 - `domain`
   - `EquipmentDocument`: searchable equipment document persisted through the utility document repository.
@@ -28,7 +31,8 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - `EquipmentSearchRepository`: application adapter around utility document search.
   - `ImportStatusRepository`: application adapter around utility document listing.
 - `service`
-  - `CgmImportService`: orchestrates import, raw storage, indexing, status persistence, and event publishing.
+  - `CgmImportService`: orchestrates raw storage, BPM start, object transform, status persistence, and event publishing.
+  - `CgmesTransformedDocumentsListener`: consumes CGMES transformed-document events, runs IIDM conversion, and updates IIDM status.
   - `PowsyblCgmesNetworkReader`: service adapter that delegates CGMES XML/ZIP reading to `data.cgm`.
   - `EquipmentQueryService`: search and comparison use cases.
   - `IidmConversionService`: reads indexed equipment and delegates IIDM DTO projection to `data.cgm`.
@@ -43,7 +47,15 @@ The module owns CGMES import and query behavior. Infrastructure access is delega
   - Multipart import.
   - Required fields: `file`, `region`, `process`.
   - Business day, timestamp, time frame, TSO name, profile type, version, and extension are parsed from filenames.
-  - Stores every uploaded file in object storage, saves an `In Progress` import status, publishes `cgm.import.stored`, and returns immediately with the new network id.
+  - Stores every uploaded file in object storage using one worker per file, saves an `Init` import status with per-file entries, publishes `cgm.import.stored`, and returns immediately with the new network id.
+- `POST /api/cgm/imports/processes/start`
+  - Starts process id `cgm-import` for a stored `ImportStatus` through `InfrastructureUtils.businessProcessService()`.
+- `POST /api/cgm/imports/{networkId}/transforms/cgmes`
+  - Accepts an object id, retrieves the raw object from MinIO, parses/transforms it into CGMES DTO documents, stores those documents, publishes `cgm.cgmes.transformed`, and updates file status.
+- `POST /api/cgm/imports/{networkId}/statuses/files`
+  - Updates one file's import and IIDM transform state. Used by BPM callbacks and the IIDM event reader.
+- `GET /api/cgm/imports/{networkId}/process-history`
+  - Returns the persisted process id, network id, per-file import status, IIDM transform status, and document counts.
 - `GET /api/cgm/networks/{networkId}/equipment`
   - Searches indexed equipment.
   - Filters are executed in Elasticsearch through `com.infra`, not in memory.
@@ -72,7 +84,9 @@ Search uses a dedicated Elasticsearch query path. The backend no longer fetches 
 
 CGMES parsing is intentionally decoupled from service orchestration. Complete CGMES uploads are delegated to the shared data reader in `data.cgm`, which owns the PowSyBl conversion path, graph fallback, and IIDM DTO projection. This service module depends on `data.cgm` for CGM data behavior and does not depend on PowSyBl directly.
 
-Import processing is asynchronous after raw storage. A batch with `n` uploaded files creates `n` internal parsing workers, indexes each file's CGMES equipment projection independently, then updates the import status to `Complete` or `Failed`. The initial screen reads `ImportStatus` documents so users can see upload date, filename context, selected region/process, and current state while background processing continues.
+Upload storage is parallelized. A batch with `n` uploaded files creates `n` internal storage workers, then stores a single `ImportStatus` document in state `Init`.
+
+Parsing and indexing are process-driven. The GUI starts `startCGMImport`, the BPM process invokes `CgmesTransform` once per object id, and each transform updates its file row to `Complete` or `Failed`. Successful CGMES transforms publish `cgm.cgmes.transformed`; the event reader converts the network projection to IIDM and updates the file's IIDM transform flag to `Done` or `Failed`.
 
 Detailed import, explore, and IIDM invocation sequences are documented in [CGM Import Detail Design](../doc.arch/CGM_IMPORT_DETAIL_DESIGN.md).
 
@@ -94,6 +108,17 @@ The service sets `module=srv.cgm.importer` at startup and uses `com.utils.config
 When `env` or `ENV` is not set, `local` is used.
 
 The base Vault configuration is a sample in `base/srv.cgm.importer-vault.yml`. It defines the client id and allowed secret keys for `${vault:...}` references while leaving `vault.enabled` disabled by default. Environment-specific deployments can add `<env>/srv.cgm.importer-vault.yml` with `vault.enabled: true`, Vault address, and token source.
+
+The BPM process module is referenced through the infra config:
+
+```yaml
+utility:
+  bpm:
+    remote:
+      base-url: "${CGM_IMPORT_BPM_URL:http://localhost:8083}"
+```
+
+This keeps `srv.cgm.importer` free of a Maven dependency on `bpm.cgm.import` while still invoking the process through `InfrastructureUtils`.
 
 ## Developer Commands
 

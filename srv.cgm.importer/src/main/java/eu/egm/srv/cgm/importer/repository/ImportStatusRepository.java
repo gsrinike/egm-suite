@@ -28,6 +28,12 @@ public class ImportStatusRepository {
         return documentRepository.findAll(MAX_IMPORTS, DocumentSort.descending("createdAt"));
     }
 
+    public ImportStatusDocument findByNetworkId(String networkId) {
+        return documentRepository.findByField("networkId", networkId, 1).stream()
+                .findFirst()
+                .orElse(null);
+    }
+
     private static class ImportStatusDocumentAdapter implements DocumentAdapter<ImportStatusDocument> {
         @Override
         public String indexName() {

@@ -9,6 +9,7 @@ Each module has a narrow purpose and a clear owner boundary:
 - `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, authorized secret lookup, infrastructure adapters, and authentication.
 - `data.*` modules define shared data contracts and PowSyBl-aligned domain vocabulary.
 - `map.*` modules transform between data models.
+- `bpm.*` modules own BPMN process definitions and process delegates.
 - `srv.*` modules expose backend APIs and orchestrate use cases.
 - `gui.*` modules provide user-facing React applications.
 
@@ -21,6 +22,7 @@ Dependencies flow from use-case modules toward stable contracts and utilities:
 - Services may depend on required `data`, `com.utils`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
 - `com.vault` depends on `com.utils` for bootstrap secret authorization. `com.auth` must not depend on `com.vault`, and `com.vault` must not depend on `com.auth`.
 - Mapping modules may depend on source/target data modules and `com.mapping`.
+- BPM modules may depend on `data.*`, `com.utils`, and `com.infra`, and call service modules over HTTP. Service modules should not depend on BPM modules.
 - Data modules must not depend on infrastructure, Spring MVC, RabbitMQ, MinIO, or Elasticsearch.
 - GUI modules communicate through HTTP contracts instead of importing backend Java code.
 

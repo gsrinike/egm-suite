@@ -2,6 +2,7 @@ package com.infra.storage.object.minio;
 
 import com.infra.storage.object.ObjectStorageService;
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -39,6 +40,18 @@ public class MinioObjectStorageService implements ObjectStorageService {
             LOGGER.info("Stored object {}/{}", bucketName, objectName);
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to store object payload", exception);
+        }
+    }
+
+    @Override
+    public byte[] read(String bucketName, String objectName) {
+        try (var stream = minioClient.getObject(GetObjectArgs.builder()
+                .bucket(bucketName)
+                .object(objectName)
+                .build())) {
+            return stream.readAllBytes();
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to read object payload", exception);
         }
     }
 }

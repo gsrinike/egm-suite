@@ -8,6 +8,9 @@ spring:
     password: "${RABBITMQ_PASSWORD:guest}"
 
 utility:
+  bpm:
+    remote:
+      base-url: "${CGM_IMPORT_BPM_URL:http://localhost:8083}"
   object-storage:
     endpoint: "${MINIO_ENDPOINT:http://localhost:9000}"
     access-key: "${MINIO_ACCESS_KEY:minioadmin}"

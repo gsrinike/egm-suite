@@ -19,4 +19,8 @@ public class RawCgmesStorage {
         objectStorageService.store(CgmesConstants.RAW_BUCKET, objectName, bytes, contentType);
         LOGGER.info("Stored raw CGMES object {}/{}", CgmesConstants.RAW_BUCKET, objectName);
     }
+
+    public byte[] read(String objectName) {
+        return objectStorageService.read(CgmesConstants.RAW_BUCKET, objectName);
+    }
 }

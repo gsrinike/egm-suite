@@ -10,7 +10,7 @@ class DisabledBusinessProcessServiceTest {
     void returnsEmptyMonitorResultWhenBpmIsDisabled() {
         DisabledBusinessProcessService service = new DisabledBusinessProcessService();
 
-        assertThat(service.findProcessInstance(42L)).isEmpty();
+        assertThat(service.findProcessInstance("42")).isEmpty();
     }
 
     @Test

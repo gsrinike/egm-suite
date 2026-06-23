@@ -25,6 +25,7 @@
         <module>com.infra</module>
         <module>com.auth</module>
         <module>com.vault</module>
+        <module>bpm.cgm.import</module>
         <module>srv.cgm.importer</module>
         <module>gui.cgm.explorer</module>
     </modules>

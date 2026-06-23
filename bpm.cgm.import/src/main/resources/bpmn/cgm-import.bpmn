@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_CgmImport"
+                  targetNamespace="https://egm.eu/bpm/cgm/import">
+    <bpmn:process id="cgm-import" name="CGM Import" isExecutable="true">
+        <bpmn:startEvent id="Start_CgmImport" name="Start CGM Import">
+            <bpmn:outgoing>Flow_Start_Init</bpmn:outgoing>
+        </bpmn:startEvent>
+        <bpmn:serviceTask id="Task_Init" name="Init" camunda:delegateExpression="${initCgmImportDelegate}">
+            <bpmn:incoming>Flow_Start_Init</bpmn:incoming>
+            <bpmn:outgoing>Flow_Init_Parse</bpmn:outgoing>
+        </bpmn:serviceTask>
+        <bpmn:serviceTask id="Task_ParseAndTransform" name="Parse And Transform" camunda:delegateExpression="${parseAndTransformDelegate}">
+            <bpmn:incoming>Flow_Init_Parse</bpmn:incoming>
+            <bpmn:outgoing>Flow_Parse_Update</bpmn:outgoing>
+            <bpmn:multiInstanceLoopCharacteristics isSequential="false" camunda:collection="objectIds" camunda:elementVariable="objectId" />
+        </bpmn:serviceTask>
+        <bpmn:serviceTask id="Task_UpdateStatus" name="Update Import Status" camunda:delegateExpression="${updateImportStatusDelegate}">
+            <bpmn:incoming>Flow_Parse_Update</bpmn:incoming>
+            <bpmn:outgoing>Flow_Update_End</bpmn:outgoing>
+        </bpmn:serviceTask>
+        <bpmn:endEvent id="End_CgmImport" name="CGM Import Complete">
+            <bpmn:incoming>Flow_Update_End</bpmn:incoming>
+        </bpmn:endEvent>
+        <bpmn:sequenceFlow id="Flow_Start_Init" sourceRef="Start_CgmImport" targetRef="Task_Init" />
+        <bpmn:sequenceFlow id="Flow_Init_Parse" sourceRef="Task_Init" targetRef="Task_ParseAndTransform" />
+        <bpmn:sequenceFlow id="Flow_Parse_Update" sourceRef="Task_ParseAndTransform" targetRef="Task_UpdateStatus" />
+        <bpmn:sequenceFlow id="Flow_Update_End" sourceRef="Task_UpdateStatus" targetRef="End_CgmImport" />
+    </bpmn:process>
+    <bpmndi:BPMNDiagram id="Diagram_CgmImport">
+        <bpmndi:BPMNPlane id="Plane_CgmImport" bpmnElement="cgm-import">
+            <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_CgmImport">
+                <dc:Bounds x="160" y="120" width="36" height="36" />
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape id="Shape_Init" bpmnElement="Task_Init">
+                <dc:Bounds x="250" y="98" width="130" height="80" />
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape id="Shape_Parse" bpmnElement="Task_ParseAndTransform">
+                <dc:Bounds x="440" y="98" width="170" height="80" />
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape id="Shape_Update" bpmnElement="Task_UpdateStatus">
+                <dc:Bounds x="670" y="98" width="160" height="80" />
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_CgmImport">
+                <dc:Bounds x="890" y="120" width="36" height="36" />
+            </bpmndi:BPMNShape>
+            <bpmndi:BPMNEdge id="Edge_Start_Init" bpmnElement="Flow_Start_Init">
+                <di:waypoint x="196" y="138" />
+                <di:waypoint x="250" y="138" />
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge id="Edge_Init_Parse" bpmnElement="Flow_Init_Parse">
+                <di:waypoint x="380" y="138" />
+                <di:waypoint x="440" y="138" />
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge id="Edge_Parse_Update" bpmnElement="Flow_Parse_Update">
+                <di:waypoint x="610" y="138" />
+                <di:waypoint x="670" y="138" />
+            </bpmndi:BPMNEdge>
+            <bpmndi:BPMNEdge id="Edge_Update_End" bpmnElement="Flow_Update_End">
+                <di:waypoint x="830" y="138" />
+                <di:waypoint x="890" y="138" />
+            </bpmndi:BPMNEdge>
+        </bpmndi:BPMNPlane>
+    </bpmndi:BPMNDiagram>
+</bpmn:definitions>

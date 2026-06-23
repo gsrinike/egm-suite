@@ -34,6 +34,18 @@ export interface ImportStatus {
   indexedEquipmentCount: number;
   createdAt: string;
   message: string;
+  processInstanceId?: string;
+  files: ImportFileStatus[];
+}
+
+export interface ImportFileStatus {
+  objectId: string;
+  fileName: string;
+  status: string;
+  iidmTransformStatus: string;
+  documentIds: string[];
+  message: string;
+  updatedAt: string;
 }
 
 export interface EquipmentView {
@@ -114,6 +126,26 @@ export async function listImports(): Promise<ImportStatus[]> {
   const response = await fetch('/api/cgm/imports');
   if (!response.ok) {
     throw new Error(`Loading imports failed with HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function startCgmImport(status: ImportStatus): Promise<ImportStatus> {
+  const response = await fetch('/api/cgm/imports/processes/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(status)
+  });
+  if (!response.ok) {
+    throw new Error(`Starting BPM import failed with HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getProcessHistory(networkId: string): Promise<ImportStatus> {
+  const response = await fetch(`/api/cgm/imports/${networkId}/process-history`);
+  if (!response.ok) {
+    throw new Error(`Loading process history failed with HTTP ${response.status}`);
   }
   return response.json();
 }

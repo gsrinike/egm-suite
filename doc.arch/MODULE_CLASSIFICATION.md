@@ -63,6 +63,21 @@ Rules:
 - Use Spring Boot only in runnable service modules.
 - Use standard logging and OpenTelemetry where runtime telemetry is emitted.
 
+## `bpm.*` Modules
+
+`bpm.*` modules own BPMN definitions, Camunda delegates, and process-specific orchestration. They may call service modules over HTTP, but service modules should not take Maven dependencies on BPM modules.
+
+Current modules:
+
+- `bpm.cgm.import`: embedded Camunda process module for CGM import. It owns process id `cgm-import`, delegates object-level transform work to `srv.cgm.importer`, and exposes BPM callback/history APIs. See [README](../bpm.cgm.import/README.md).
+
+Rules:
+
+- Use Java package `eu.egm.bpm.<domain>.<capability>`.
+- Keep BPMN files and process delegates in the BPM module.
+- Trigger technical adapters through `com.infra` and domain work through service APIs.
+- Do not place document parsing or domain DTO mapping logic inside BPM modules.
+
 ## `gui.*` Modules
 
 `gui.*` modules are frontend applications wrapped by Maven for consistent build and Docker lifecycle.
@@ -82,6 +97,7 @@ Rules:
 - Common capability: `com.audit`
 - Data model: `data.market`
 - Mapping module: `map.market.iidm`
+- BPM module: `bpm.cgm.import`
 - Backend service: `srv.cgm.analysis`
 - Frontend app: `gui.cgm.analysis`
 

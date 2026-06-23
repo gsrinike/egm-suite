@@ -39,4 +39,43 @@ public class CgmImportController {
                                     @RequestParam("process") CgmesProcess process) {
         return importService.importCgmes(files, region, process);
     }
+
+    @PostMapping("/processes/start")
+    @Operation(summary = "Start the asynchronous CGM import BPM process for a stored import")
+    public ImportStatus startCgmImport(@org.springframework.web.bind.annotation.RequestBody ImportStatus status) {
+        return importService.startCgmImport(status);
+    }
+
+    @PostMapping("/{networkId}/transforms/cgmes")
+    @Operation(summary = "Transform one stored raw CGMES object into searchable CGMES documents")
+    public ImportStatus transformCgmes(@org.springframework.web.bind.annotation.PathVariable String networkId,
+                                       @org.springframework.web.bind.annotation.RequestBody CgmesTransformRequest request) {
+        return importService.transformObject(networkId, request.objectId());
+    }
+
+    @PostMapping("/{networkId}/statuses/files")
+    @Operation(summary = "Update file-level import and IIDM transform status")
+    public ImportStatus updateImportStatus(@org.springframework.web.bind.annotation.PathVariable String networkId,
+                                           @org.springframework.web.bind.annotation.RequestBody ImportFileStatusUpdate request) {
+        return importService.updateFileStatus(networkId, request.objectId(), request.status(),
+                request.iidmTransformStatus(), request.documentIds(), request.message());
+    }
+
+    @GetMapping("/{networkId}/process-history")
+    @Operation(summary = "Return process instance and per-file import status history for a network")
+    public ImportStatus processHistory(@org.springframework.web.bind.annotation.PathVariable String networkId) {
+        return importService.requireStatus(networkId);
+    }
+
+    public record CgmesTransformRequest(String objectId) {
+    }
+
+    public record ImportFileStatusUpdate(
+            String objectId,
+            String status,
+            String iidmTransformStatus,
+            List<String> documentIds,
+            String message
+    ) {
+    }
 }

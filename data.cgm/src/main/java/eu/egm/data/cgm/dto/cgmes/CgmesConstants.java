@@ -6,6 +6,7 @@ public final class CgmesConstants {
     public static final String IMPORT_EXCHANGE = "cgm.import.exchange";
     public static final String IMPORT_STORED_ROUTING_KEY = "cgm.import.stored";
     public static final String IMPORTED_ROUTING_KEY = "cgm.import.completed";
+    public static final String CGMES_TRANSFORMED_ROUTING_KEY = "cgm.cgmes.transformed";
     public static final String RAW_BUCKET = "cgm-raw";
 
     private CgmesConstants() {

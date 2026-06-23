@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`gui.cgm.explorer` is the React frontend for importing CGMES data, selecting imported network ids, exploring indexed equipment, and comparing network states.
+`gui.cgm.explorer` is the React frontend for importing CGMES data, starting the CGM import BPM process, visualizing process/file status history, selecting imported network ids, exploring indexed equipment, and comparing network states.
 
 It is built with React, TypeScript, Vite, and lucide-react icons. Maven wraps the npm lifecycle so the GUI can be built as part of the monorepo.
 
@@ -11,6 +11,8 @@ It is built with React, TypeScript, Vite, and lucide-react icons. Maven wraps th
 - `src/App.tsx`
   - Main application shell.
   - Loads import history.
+  - Starts the CGM import BPM process for `Init` imports.
+  - Displays process instance id and per-file import/IIDM status history.
   - Provides the network-id selector.
   - Hosts the `Explore` and `Compare` tabs.
 - `src/components/ImportPanel.tsx`
@@ -36,6 +38,8 @@ The GUI calls:
 
 - `POST /api/cgm/imports`
 - `GET /api/cgm/imports`
+- `POST /api/cgm/imports/processes/start`
+- `GET /api/cgm/imports/{networkId}/process-history`
 - `GET /api/cgm/networks/{networkId}/equipment`
 - `GET /api/cgm/networks/{leftNetworkId}/compare/{rightNetworkId}`
 

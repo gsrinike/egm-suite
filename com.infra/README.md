@@ -21,13 +21,14 @@ Service modules depend on this module for persistence, object storage, event pub
 ### Technology Adapters
 
 - `storage.document.elasticsearch.ElasticsearchDocumentRepository<T>`: Spring Data Elasticsearch implementation of `DocumentRepositoryService<T>`.
-- `storage.object.ObjectStorageService`: object-storage abstraction.
+- `storage.object.ObjectStorageService`: object-storage abstraction for storing and reading binary objects.
 - `storage.object.minio.MinioObjectStorageService`: MinIO implementation of `ObjectStorageService`.
 - `event.EventPublisherService`: event-publishing abstraction.
 - `event.rabbitmq.RabbitMqEventPublisher`: RabbitMQ implementation of `EventPublisherService`.
 - `bpm.BusinessProcessService`: BPM abstraction for starting, canceling, correlating messages with, and monitoring business process instances.
 - `bpm.ProcessStartRequest`, `ProcessInstance`, `ProcessInstanceStatus`, `ProcessMessage`, and `ProcessMessageResult`: storage-neutral BPM request and response contracts.
-- `bpm.camunda.CamundaBusinessProcessService`: Camunda 8 adapter backed by Zeebe for process commands and optional Operate HTTP lookup for monitoring.
+- `bpm.camunda.CamundaBusinessProcessService`: embedded Camunda Platform adapter backed by `RuntimeService`, `RepositoryService`, and `HistoryService`.
+- `bpm.remote.RemoteBusinessProcessService`: HTTP adapter that proxies the same BPM contract to a standalone BPM module.
 - `bpm.DisabledBusinessProcessService`: default no-op monitor and fail-fast command adapter used when BPM is not enabled.
 
 ### Spring Configuration
@@ -38,26 +39,19 @@ Service modules depend on this module for persistence, object storage, event pub
   - MinIO client
   - object storage adapter
   - event publisher adapter
-  - optional Camunda Zeebe client from `utility.bpm.camunda.*`
-  - BPM adapter, using Camunda when enabled or the disabled adapter otherwise
+  - BPM adapter when embedded Camunda engine services are present
+  - remote BPM adapter from `utility.bpm.remote.base-url` when a process module runs separately
   - infrastructure utility factory
 
-Example Camunda configuration:
+Example embedded Camunda configuration belongs in the runnable BPM module:
 
 ```yaml
-utility:
+camunda:
   bpm:
-    camunda:
-      enabled: true
-      zeebe:
-        gateway-address: localhost:26500
-        plaintext: true
-      operate:
-        base-url: http://localhost:8081
-        bearer-token: "${vault:CAMUNDA_OPERATE_TOKEN}"
+    auto-deployment-enabled: true
+    deployment-resource-pattern:
+      - classpath*:/bpmn/*.bpmn
 ```
-
-`operate` settings are optional. Without `utility.bpm.camunda.operate.base-url`, process commands still use Zeebe, while monitor lookups return an empty result.
 
 ## Implementation Notes
 
@@ -71,7 +65,18 @@ This keeps service modules isolated from Elasticsearch classes while still allow
 
 Paged filters are executed inside Elasticsearch. This matters for large imports because callers should not load the first N records and then filter in memory.
 
-The same boundary is used for BPM. Service modules call `InfrastructureUtils.businessProcessService()` and depend only on `BusinessProcessService`. Camunda-specific Zeebe and Operate classes remain inside `com.infra.bpm.camunda`.
+The same boundary is used for BPM. Modules call `InfrastructureUtils.businessProcessService()` and depend only on `BusinessProcessService`. Camunda-specific engine classes remain inside `com.infra.bpm.camunda`; BPMN definitions and Java delegates belong in `bpm.*` modules.
+
+When a service must not depend on a BPM module, configure:
+
+```yaml
+utility:
+  bpm:
+    remote:
+      base-url: http://bpm-cgm-import:8083
+```
+
+The service still uses `InfrastructureUtils.businessProcessService()`, while the BPM process runs in the standalone module that owns the embedded Camunda engine.
 
 ## Developer Commands
 

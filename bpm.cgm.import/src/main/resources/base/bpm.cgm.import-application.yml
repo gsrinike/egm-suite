@@ -1,0 +1,28 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: bpm.cgm.import
+
+camunda:
+  bpm:
+    enabled: true
+    auto-deployment-enabled: true
+    deployment-resource-pattern:
+      - classpath*:/bpmn/*.bpmn
+    admin-user:
+      id: admin
+      password: admin
+      first-name: Admin
+
+bpm:
+  cgm:
+    import:
+      service-base-url: http://localhost:8080
+
+springdoc:
+  api-docs:
+    path: /openapi
+  swagger-ui:
+    path: /swagger-ui.html

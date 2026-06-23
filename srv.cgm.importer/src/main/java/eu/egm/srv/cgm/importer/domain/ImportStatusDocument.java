@@ -2,11 +2,13 @@ package eu.egm.srv.cgm.importer.domain;
 
 import eu.egm.data.cgm.dto.cgmes.CgmesProcess;
 import eu.egm.data.cgm.dto.cgmes.CgmesRegion;
+import eu.egm.data.cgm.dto.cgmes.ImportFileStatus;
 import eu.egm.data.cgm.dto.cgmes.ImportMetadata;
 import eu.egm.data.cgm.dto.cgmes.ImportStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Storage document for one import batch. It backs the GUI network-id selector
@@ -28,6 +30,8 @@ public class ImportStatusDocument {
     private int indexedEquipmentCount;
     private Instant createdAt;
     private String message;
+    private String processInstanceId;
+    private List<ImportFileStatus> files;
 
     public ImportStatusDocument() {
     }
@@ -35,7 +39,8 @@ public class ImportStatusDocument {
     public ImportStatusDocument(String networkId, String fileName, String businessDay, String timestamp,
                                 CgmesRegion region, CgmesProcess process, String timeFrame, String tsoName,
                                 String cgmesProfileType, String versionNumber, String extension, String state,
-                                int indexedEquipmentCount, Instant createdAt, String message) {
+                                int indexedEquipmentCount, Instant createdAt, String message,
+                                String processInstanceId, List<ImportFileStatus> files) {
         this.networkId = networkId;
         this.fileName = fileName;
         this.businessDay = businessDay;
@@ -51,6 +56,8 @@ public class ImportStatusDocument {
         this.indexedEquipmentCount = indexedEquipmentCount;
         this.createdAt = createdAt;
         this.message = message;
+        this.processInstanceId = processInstanceId;
+        this.files = files;
     }
 
     public static ImportStatusDocument fromStatus(ImportStatus status) {
@@ -69,12 +76,14 @@ public class ImportStatusDocument {
                 status.state(),
                 status.indexedEquipmentCount(),
                 status.createdAt(),
-                status.message());
+                status.message(),
+                status.processInstanceId(),
+                status.files());
     }
 
     public ImportStatus toStatus() {
         ImportMetadata metadata = ImportMetadata.of(LocalDate.parse(businessDay), timestamp, region, process, timeFrame, tsoName, cgmesProfileType, versionNumber, extension);
-        return new ImportStatus(networkId, fileName, metadata, state, indexedEquipmentCount, createdAt, message);
+        return new ImportStatus(networkId, fileName, metadata, state, indexedEquipmentCount, createdAt, message, processInstanceId, files);
     }
 
     public String getNetworkId() {
@@ -83,5 +92,13 @@ public class ImportStatusDocument {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public List<ImportFileStatus> getFiles() {
+        return files;
+    }
+
+    public String getProcessInstanceId() {
+        return processInstanceId;
     }
 }
