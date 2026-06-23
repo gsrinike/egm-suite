@@ -180,6 +180,23 @@ Spring Boot applications should:
 - Include resources under `base`, `local`, and any supported runtime environment folders.
 - Keep secrets outside committed files and provide them through environment variables or deployment configuration.
 
+Modules that use `com.infra` BPM should enable Camunda through infrastructure YAML:
+
+```yaml
+utility:
+  bpm:
+    camunda:
+      enabled: true
+      zeebe:
+        gateway-address: localhost:26500
+        plaintext: true
+      operate:
+        base-url: http://localhost:8081
+        bearer-token: "${vault:CAMUNDA_OPERATE_TOKEN}"
+```
+
+The Zeebe gateway is required for process commands. Operate is optional and is used only for process instance monitoring lookups.
+
 See:
 
 - [com.utils README](../com.utils/README.md)

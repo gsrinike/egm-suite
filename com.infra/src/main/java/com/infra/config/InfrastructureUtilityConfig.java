@@ -1,22 +1,29 @@
 package com.infra.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.infra.InfrastructureUtils;
+import com.infra.bpm.BusinessProcessService;
+import com.infra.bpm.DisabledBusinessProcessService;
+import com.infra.bpm.camunda.CamundaBusinessProcessService;
+import com.infra.event.EventPublisherService;
+import com.infra.event.rabbitmq.RabbitMqEventPublisher;
 import com.infra.storage.document.DocumentAdapter;
 import com.infra.storage.document.DocumentRepositoryService;
-import com.infra.InfrastructureUtils;
 import com.infra.storage.document.elasticsearch.ElasticsearchDocumentRepository;
-import com.infra.event.EventPublisherService;
-import com.infra.storage.object.minio.MinioObjectStorageService;
-import com.infra.event.rabbitmq.RabbitMqEventPublisher;
 import com.infra.storage.object.ObjectStorageService;
+import com.infra.storage.object.minio.MinioObjectStorageService;
 import io.minio.MinioClient;
+import org.camunda.bpm.engine.HistoryService;
+import org.camunda.bpm.engine.RepositoryService;
+import org.camunda.bpm.engine.RuntimeService;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.amqp.RabbitTemplateCustomizer;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -67,9 +74,25 @@ public class InfrastructureUtilityConfig {
     }
 
     @Bean
+    @ConditionalOnBean(RuntimeService.class)
+    BusinessProcessService camundaBusinessProcessService(
+            RuntimeService runtimeService,
+            RepositoryService repositoryService,
+            HistoryService historyService) {
+        return new CamundaBusinessProcessService(runtimeService, repositoryService, historyService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BusinessProcessService.class)
+    BusinessProcessService disabledBusinessProcessService() {
+        return new DisabledBusinessProcessService();
+    }
+
+    @Bean
     InfrastructureUtils infrastructureUtils(ElasticsearchOperations elasticsearchOperations,
                                             ObjectStorageService objectStorageService,
-                                            EventPublisherService eventPublisher) {
+                                            EventPublisherService eventPublisher,
+                                            BusinessProcessService businessProcessService) {
         // Anonymous factory keeps the public extension point small while centralizing adapter construction.
         return new InfrastructureUtils() {
             @Override
@@ -85,6 +108,11 @@ public class InfrastructureUtilityConfig {
             @Override
             public EventPublisherService eventPublisher() {
                 return eventPublisher;
+            }
+
+            @Override
+            public BusinessProcessService businessProcessService() {
+                return businessProcessService;
             }
         };
     }

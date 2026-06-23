@@ -1,8 +1,9 @@
 package com.infra;
 
+import com.infra.bpm.BusinessProcessService;
+import com.infra.event.EventPublisherService;
 import com.infra.storage.document.DocumentAdapter;
 import com.infra.storage.document.DocumentRepositoryService;
-import com.infra.event.EventPublisherService;
 import com.infra.storage.object.ObjectStorageService;
 
 /**
@@ -17,4 +18,6 @@ public interface InfrastructureUtils {
     ObjectStorageService objectStorageService();
 
     EventPublisherService eventPublisher();
+
+    BusinessProcessService businessProcessService();
 }

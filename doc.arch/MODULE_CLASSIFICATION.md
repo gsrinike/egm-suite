@@ -10,7 +10,7 @@ Current modules:
 
 - `com.utils`: shared utilities, cache abstractions, environment resolution, module configuration loading, and bootstrap secret access authorization contracts. See [README](../com.utils/README.md).
 - `com.vault`: HashiCorp Vault and fallback secret lookup, including authorized `${vault:...}` configuration placeholders. Depends on `com.utils` for bootstrap client/key authorization. See [README](../com.vault/README.md).
-- `com.infra`: infrastructure adapters for document storage, object storage, and messaging. Document abstractions live under `com.infra.storage.document`, object storage under `com.infra.storage.object`, and message adapters under `com.infra.event`. See [README](../com.infra/README.md).
+- `com.infra`: infrastructure adapters for document storage, object storage, messaging, and BPM process orchestration. Document abstractions live under `com.infra.storage.document`, object storage under `com.infra.storage.object`, message adapters under `com.infra.event`, and BPM adapters under `com.infra.bpm`. Camunda-specific implementation classes live under `com.infra.bpm.camunda`. See [README](../com.infra/README.md).
 - `com.auth`: authentication and runtime authorization services. It must not depend on `com.vault`. See [README](../com.auth/README.md).
 - `com.mapping`: generic object mapping service. See [README](../com.mapping/README.md).
 

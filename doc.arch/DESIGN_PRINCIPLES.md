@@ -50,6 +50,7 @@ Technology-specific behavior is hidden behind service interfaces and adapters:
 - `com.infra.storage.document.DocumentRepositoryService` hides Elasticsearch access.
 - `com.infra.storage.object.ObjectStorageService` hides MinIO access.
 - `com.infra.event.EventPublisherService` hides RabbitMQ access.
+- `com.infra.bpm.BusinessProcessService` hides Camunda process orchestration and monitoring access.
 - `InfrastructureUtils` resolves concrete adapters.
 - `VaultService` hides HashiCorp Vault and environment/config fallback secret lookup, while `com.utils.secret.SecretAuthorizationService` authorizes each client/key pair before a secret is returned.
 - `MappingService` hides the mapping implementation used by domain transformers.
