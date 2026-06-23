@@ -1,6 +1,6 @@
 # Module Classification
 
-This document classifies project modules and links to module READMEs for details.
+This document classifies current project modules and links to module READMEs for details.
 
 ## `com.*` Modules
 
@@ -20,85 +20,8 @@ Rules:
 - Hide technology dependencies behind services/adapters.
 - Avoid importing service modules.
 
-## `data.*` Modules
-
-`data.*` modules define stable DTOs, enums, validation rules, and domain vocabulary.
-
-Current modules:
-
-- `data.cgm`: CGMES and IIDM DTOs, CGMES profile loading, PowSyBl-backed reading, fallback graph projection, and topology strategies. See [README](../data.cgm/README.md).
-
-Rules:
-
-- No Spring MVC, persistence, RabbitMQ, MinIO, or Elasticsearch dependencies.
-- PowSyBl dependencies are isolated in `data.cgm` for CGM import/projection behavior.
-- Keep storage, messaging, web, and UI behavior out of data modules.
-
-## `map.*` Modules
-
-`map.*` modules transform between data models.
-
-Current modules:
-
-- `map.cgm`: CGMES-to-IIDM and IIDM-to-CGMES transformations. See [README](../map.cgm/README.md).
-
-Rules:
-
-- Depend on source and target `data.*` modules.
-- Use `eu.egm.mapping.MappingService` for generic field transfer.
-- Keep technology adapters and API orchestration outside mapping modules.
-
-## `srv.*` Modules
-
-`srv.*` modules are backend services. They expose APIs, orchestrate workflows, apply validation, call infrastructure adapters, and publish domain events.
-
-Current modules:
-
-- `srv.cgm.importer`: CGMES import, indexing, search, comparison, and IIDM projection API. See [README](../srv.cgm.importer/README.md).
-
-Rules:
-
-- Use Java package `eu.egm.srv.<domain>.<capability>`.
-- Depend only on required `data`, `map`, `com.utils`, and `com.infra` modules. `srv.cgm.importer` depends on `data.cgm` for CGM data behavior and does not import PowSyBl directly.
-- Use Spring Boot only in runnable service modules.
-- Use standard logging and OpenTelemetry where runtime telemetry is emitted.
-
-## `bpm.*` Modules
-
-`bpm.*` modules own BPMN definitions, Camunda delegates, and process-specific orchestration. They may call service modules over HTTP, but service modules should not take Maven dependencies on BPM modules.
-
-Current modules:
-
-- `bpm.cgm.import`: embedded Camunda process module for CGM import. It owns process id `cgm-import`, delegates object-level transform work to `srv.cgm.importer`, and exposes BPM callback/history APIs. See [README](../bpm.cgm.import/README.md).
-
-Rules:
-
-- Use Java package `eu.egm.bpm.<domain>.<capability>`.
-- Keep BPMN files and process delegates in the BPM module.
-- Trigger technical adapters through `com.infra` and domain work through service APIs.
-- Do not place document parsing or domain DTO mapping logic inside BPM modules.
-
-## `gui.*` Modules
-
-`gui.*` modules are frontend applications wrapped by Maven for consistent build and Docker lifecycle.
-
-Current modules:
-
-- `gui.cgm.explorer`: React explorer for import, filtering, comparison, and IIDM visualization. See [README](../gui.cgm.explorer/README.md).
-
-Rules:
-
-- Use HTTP API contracts rather than importing Java code.
-- Keep UI workflows feature-complete and responsive.
-- Use Maven only as the wrapper for npm build/test/package and Docker lifecycle.
-
 ## Naming Examples
 
 - Common capability: `com.audit`
-- Data model: `data.market`
-- Mapping module: `map.market.iidm`
-- BPM module: `bpm.cgm.import`
-- Backend service: `srv.cgm.analysis`
-- Frontend app: `gui.cgm.analysis`
 
 All Maven modules use group id `eu.egm`.

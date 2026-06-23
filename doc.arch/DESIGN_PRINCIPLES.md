@@ -7,24 +7,17 @@ This document records the principles adopted in the Energy Grid Management Suite
 Each module has a narrow purpose and a clear owner boundary:
 
 - `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, authorized secret lookup, infrastructure adapters, and authentication.
-- `data.*` modules define shared data contracts and PowSyBl-aligned domain vocabulary.
-- `map.*` modules transform between data models.
-- `bpm.*` modules own BPMN process definitions and process delegates.
-- `srv.*` modules expose backend APIs and orchestrate use cases.
-- `gui.*` modules provide user-facing React applications.
 
-This keeps services focused on workflow orchestration instead of owning all technical details.
+This keeps shared platform capabilities focused and prevents technology-specific details from leaking across module boundaries.
 
 ## 2. Dependency Direction
 
 Dependencies flow from use-case modules toward stable contracts and utilities:
 
-- Services may depend on required `data`, `com.utils`, and `com.infra` modules. CGM service modules keep mapping/runtime model behavior in `data.cgm`.
-- `com.vault` depends on `com.utils` for bootstrap secret authorization. `com.auth` must not depend on `com.vault`, and `com.vault` must not depend on `com.auth`.
-- Mapping modules may depend on source/target data modules and `com.mapping`.
-- BPM modules may depend on `data.*`, `com.utils`, and `com.infra`, and call service modules over HTTP. Service modules should not depend on BPM modules.
-- Data modules must not depend on infrastructure, Spring MVC, RabbitMQ, MinIO, or Elasticsearch.
-- GUI modules communicate through HTTP contracts instead of importing backend Java code.
+- Services may depend on required shared modules such as `com.utils`, `com.mapping`, and `com.infra`.
+- `com.vault` depends on `com.utils` for bootstrap secret authorization. `com.auth` must not depend on `com.vault`.
+- Shared mapping behavior belongs in `com.mapping`.
+- Shared infrastructure behavior belongs in `com.infra` and is exposed through adapter interfaces.
 
 The root Maven POM manages versions but does not force technology dependencies into every module.
 
@@ -59,23 +52,12 @@ Technology-specific behavior is hidden behind service interfaces and adapters:
 
 This makes backend services easier to test and keeps infrastructure replacement possible.
 
-## 5. PowSyBl Alignment Without Runtime Lock-In
-
-The CGM data module aligns vocabulary with PowSyBl while keeping services free of PowSyBl dependencies:
-
-- `data.cgm` owns CGMES DTOs in `eu.egm.data.cgm.dto.cgmes`.
-- `data.cgm` owns IIDM DTOs in `eu.egm.data.cgm.dto.iidm`.
-- `data.cgm` owns CGMES reading, PowSyBl conversion, fallback graph loading, topology strategies, and IIDM DTO projection under `eu.egm.data.cgm.mapping`.
-- `map.cgm` performs reusable CGMES/IIDM transformations through `eu.egm.mapping.MappingService`.
-
-Service modules consume DTO projections. Full PowSyBl runtime model creation remains isolated behind adapters so APIs and GUI contracts remain stable.
-
-## 6. Local-First Developer Workflow
+## 5. Local-First Developer Workflow
 
 The project is designed to run locally with Maven and Docker Compose:
 
 - Maven compiles/tests/builds modules.
-- Docker Compose starts Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, Keycloak, backend services, and GUI containers.
+- Docker Compose starts shared local dependencies such as Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, and Keycloak.
 - Docker image build/push behavior is controlled through Maven properties.
 
 Developers can run targeted module builds with `-pl <module> -am` and disable Docker work with:
@@ -84,19 +66,17 @@ Developers can run targeted module builds with `-pl <module> -am` and disable Do
 -Ddocker.skip.build=true -Ddocker.skip.push=true
 ```
 
-## 7. Observability by Default in Services
+## 6. Observability by Default in Services
 
 Runnable backend modules include standard logging and OpenTelemetry dependencies when they emit runtime telemetry. Libraries and DTO modules avoid runtime observability dependencies.
 
-## 8. Test Scope Matches Risk
+## 7. Test Scope Matches Risk
 
 Tests are kept close to the behavior being changed:
 
-- Data modules test parsing, catalog alignment, and invariants.
-- Mapping modules test A-to-B and B-to-A transformations.
-- Service modules test controller validation, service orchestration, and adapter-facing behavior.
-- GUI modules use TypeScript build and focused component tests.
+- Utility modules test configuration, cache, mapping, infrastructure, authorization, and vault behavior close to the owning package.
+- Runnable service modules test controller validation, service orchestration, and adapter-facing behavior when such modules are added.
 
-## 9. Documentation Beside the Module
+## 8. Documentation Beside the Module
 
 Each module owns a `README.md` explaining purpose, contents, implementation notes, and developer commands. Architecture documents link to those module READMEs instead of duplicating every detail.

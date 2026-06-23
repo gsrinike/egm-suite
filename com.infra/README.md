@@ -65,7 +65,7 @@ This keeps service modules isolated from Elasticsearch classes while still allow
 
 Paged filters are executed inside Elasticsearch. This matters for large imports because callers should not load the first N records and then filter in memory.
 
-The same boundary is used for BPM. Modules call `InfrastructureUtils.businessProcessService()` and depend only on `BusinessProcessService`. Camunda-specific engine classes remain inside `com.infra.bpm.camunda`; BPMN definitions and Java delegates belong in `bpm.*` modules.
+The same boundary is used for BPM. Modules call `InfrastructureUtils.businessProcessService()` and depend only on `BusinessProcessService`. Camunda-specific engine classes remain inside `com.infra.bpm.camunda`.
 
 When a service must not depend on a BPM module, configure:
 
@@ -73,7 +73,7 @@ When a service must not depend on a BPM module, configure:
 utility:
   bpm:
     remote:
-      base-url: http://bpm-cgm-import:8083
+      base-url: http://process-runtime:8083
 ```
 
 The service still uses `InfrastructureUtils.businessProcessService()`, while the BPM process runs in the standalone module that owns the embedded Camunda engine.

@@ -6,6 +6,10 @@ import com.utils.secret.SecretAuthorizationService;
 
 import java.util.Optional;
 
+/**
+ * Vault decorator that checks whether the current client is allowed to read a
+ * secret before delegating to the configured provider.
+ */
 public class AuthorizedVaultService implements VaultService {
     private final VaultService delegate;
     private final SecretAuthorizationService authorizationService;

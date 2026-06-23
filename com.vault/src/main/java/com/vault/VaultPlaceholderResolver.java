@@ -5,6 +5,10 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Resolves {@code ${vault:KEY}} placeholders in configuration maps by asking a
+ * {@link VaultService} for each referenced key.
+ */
 public class VaultPlaceholderResolver {
     private static final Pattern VAULT_PATTERN = Pattern.compile("\\$\\{vault:([^}]+)}");
 
@@ -14,6 +18,12 @@ public class VaultPlaceholderResolver {
         this.vaultService = vaultService;
     }
 
+    /**
+     * Resolves vault placeholders for all string values in the supplied map.
+     *
+     * @param properties flattened configuration properties
+     * @return copy of the configuration with vault placeholders replaced
+     */
     public Map<String, Object> resolve(Map<String, Object> properties) {
         Map<String, Object> resolved = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : properties.entrySet()) {

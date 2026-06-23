@@ -28,23 +28,23 @@ public class RemoteBusinessProcessService implements BusinessProcessService {
 
     @Override
     public ProcessInstance start(ProcessStartRequest request) {
-        return send("POST", "/api/bpm/cgm-imports/start", request.variables().get("importStatus"), ProcessInstance.class);
+        return send("POST", "/api/bpm/processes/" + encode(request.processId()) + "/start", request, ProcessInstance.class);
     }
 
     @Override
     public void cancel(String processInstanceId) {
-        send("POST", "/api/bpm/cgm-imports/instances/" + encode(processInstanceId) + "/cancel", null, Void.class);
+        send("POST", "/api/bpm/instances/" + encode(processInstanceId) + "/cancel", null, Void.class);
     }
 
     @Override
     public ProcessMessageResult correlateMessage(ProcessMessage message) {
-        return send("POST", "/api/bpm/cgm-imports/callback", message, ProcessMessageResult.class);
+        return send("POST", "/api/bpm/messages", message, ProcessMessageResult.class);
     }
 
     @Override
     public Optional<ProcessInstance> findProcessInstance(String processInstanceId) {
         try {
-            return Optional.of(send("GET", "/api/bpm/cgm-imports/instances/" + encode(processInstanceId), null, ProcessInstance.class));
+            return Optional.of(send("GET", "/api/bpm/instances/" + encode(processInstanceId), null, ProcessInstance.class));
         } catch (IllegalStateException exception) {
             if (exception.getMessage().contains("status 404")) {
                 return Optional.empty();
@@ -55,7 +55,8 @@ public class RemoteBusinessProcessService implements BusinessProcessService {
 
     private <T> T send(String method, String path, Object body, Class<T> responseType) {
         try {
-            HttpRequest.Builder builder = HttpRequest.newBuilder(baseUri.resolve(path));
+            URI requestUri = baseUri.resolve(path);
+            HttpRequest.Builder builder = HttpRequest.newBuilder(requestUri);
             if ("GET".equals(method)) {
                 builder.GET();
             } else {
@@ -64,14 +65,14 @@ public class RemoteBusinessProcessService implements BusinessProcessService {
             }
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("Remote BPM call failed with status " + response.statusCode());
+                throw new IllegalStateException("Remote BPM call to " + requestUri + " failed with status " + response.statusCode());
             }
             if (responseType == Void.class) {
                 return null;
             }
             return objectMapper.readValue(response.body(), responseType);
         } catch (IOException exception) {
-            throw new IllegalStateException("Remote BPM call failed", exception);
+            throw new IllegalStateException("Remote BPM call to " + baseUri.resolve(path) + " failed", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Remote BPM call interrupted", exception);

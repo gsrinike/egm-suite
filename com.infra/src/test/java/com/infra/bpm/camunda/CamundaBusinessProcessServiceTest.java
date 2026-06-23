@@ -28,14 +28,14 @@ class CamundaBusinessProcessServiceTest {
         ProcessDefinitionQuery definitionQuery = mock(ProcessDefinitionQuery.class);
         IncidentQuery incidentQuery = mock(IncidentQuery.class);
 
-        when(runtimeService.startProcessInstanceByKey("cgm-import", "network-1", Map.of("networkId", "network-1")))
+        when(runtimeService.startProcessInstanceByKey("sample-process", "business-1", Map.of("businessKey", "business-1")))
                 .thenReturn(camundaInstance);
         when(camundaInstance.getProcessInstanceId()).thenReturn("pi-1");
         when(camundaInstance.getProcessDefinitionId()).thenReturn("definition-1");
         when(repositoryService.createProcessDefinitionQuery()).thenReturn(definitionQuery);
         when(definitionQuery.processDefinitionId("definition-1")).thenReturn(definitionQuery);
         when(definitionQuery.singleResult()).thenReturn(definition);
-        when(definition.getKey()).thenReturn("cgm-import");
+        when(definition.getKey()).thenReturn("sample-process");
         when(definition.getVersion()).thenReturn(3);
         when(runtimeService.createIncidentQuery()).thenReturn(incidentQuery);
         when(incidentQuery.processInstanceId("pi-1")).thenReturn(incidentQuery);
@@ -46,10 +46,10 @@ class CamundaBusinessProcessServiceTest {
                 repositoryService,
                 historyService);
 
-        assertThat(service.start(new ProcessStartRequest("cgm-import", Map.of("networkId", "network-1"), "network-1")))
+        assertThat(service.start(new ProcessStartRequest("sample-process", Map.of("businessKey", "business-1"), "business-1")))
                 .satisfies(instance -> {
                     assertThat(instance.processInstanceId()).isEqualTo("pi-1");
-                    assertThat(instance.processId()).isEqualTo("cgm-import");
+                    assertThat(instance.processId()).isEqualTo("sample-process");
                     assertThat(instance.version()).isEqualTo(3);
                     assertThat(instance.status()).isEqualTo(ProcessInstanceStatus.ACTIVE);
                 });

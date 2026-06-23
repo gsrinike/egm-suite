@@ -43,12 +43,12 @@ Example:
 ```yaml
 vault:
   authorization:
-    client-id: srv.cgm.importer
-    allowed-keys: MINIO_SECRET_KEY
+    client-id: sample.app
+    allowed-keys: APP_SECRET
 
 utility:
-  object-storage:
-    access-key: "${vault:MINIO_SECRET_KEY}"
+  credentials:
+    password: "${vault:APP_SECRET}"
 ```
 
 The module can also be used directly by creating a service through `VaultServiceFactory`.

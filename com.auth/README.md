@@ -53,7 +53,7 @@ Gateways can call `POST /api/authz/check` before routing to protected services. 
 ```json
 {
   "method": "GET",
-  "path": "/api/cgm/imports",
+  "path": "/api/resources",
   "tenantId": "egm",
   "requiredRoles": ["grid_reader"],
   "requiredScopes": ["openid"]

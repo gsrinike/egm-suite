@@ -2,12 +2,7 @@
 # Maven aggregators still require the active module list inline in pom.xml.
 modules:
   - com.utils
-  - data.cgm
   - com.mapping
-  - map.cgm
   - com.infra
   - com.auth
   - com.vault
-  - bpm.cgm.import
-  - srv.cgm.importer
-  - gui.cgm.explorer

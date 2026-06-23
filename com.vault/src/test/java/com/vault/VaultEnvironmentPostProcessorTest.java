@@ -13,9 +13,9 @@ class VaultEnvironmentPostProcessorTest {
     @Test
     void resolvesVaultPlaceholderOnlyWhenApplicationIsAuthorized() {
         StandardEnvironment environment = new StandardEnvironment();
-        environment.getSystemProperties().put("module", "srv.cgm.importer");
+        environment.getSystemProperties().put("module", "sample.app");
         environment.getPropertySources().addFirst(new MapPropertySource("test", Map.of(
-                "vault.authorization.client-id", "srv.cgm.importer",
+                "vault.authorization.client-id", "sample.app",
                 "vault.authorization.allowed-keys", "MINIO_SECRET_KEY",
                 "MINIO_SECRET_KEY", "secret-value",
                 "utility.object-storage.access-key", "${vault:MINIO_SECRET_KEY}")));

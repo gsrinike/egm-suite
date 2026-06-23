@@ -1,0 +1,4 @@
+sample:
+  uri: "${SAMPLE_URI:http://localhost:9200}"
+  default-uri: "${MISSING_SAMPLE_URI:http://default:9200}"
+  secret: "${vault:MINIO_SECRET_KEY}"

@@ -14,11 +14,13 @@ import com.infra.storage.object.ObjectStorageService;
 import com.infra.storage.object.minio.MinioObjectStorageService;
 import io.minio.MinioClient;
 import java.net.http.HttpClient;
+import java.util.Arrays;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.amqp.RabbitTemplateCustomizer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -64,6 +66,16 @@ public class InfrastructureUtilityConfig {
     @Bean
     ObjectStorageService objectStorageService(MinioClient minioClient) {
         return new MinioObjectStorageService(minioClient);
+    }
+
+    @Bean
+    SmartInitializingSingleton objectStorageBucketInitializer(
+            ObjectStorageService objectStorageService,
+            @Value("${utility.object-storage.buckets:}") String buckets) {
+        return () -> Arrays.stream(buckets.split(","))
+                .map(String::trim)
+                .filter(bucket -> !bucket.isBlank())
+                .forEach(objectStorageService::initializeBucket);
     }
 
     @Bean

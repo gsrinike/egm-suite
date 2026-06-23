@@ -19,7 +19,7 @@ class AuthorizationServiceTest {
 
     @Test
     void allowsRequestWhenRequiredRoleAndScopeExist() {
-        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/cgm/imports",
+        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/resources",
                 "egm", Set.of("grid_reader"), Set.of("openid"));
 
         var response = service.check("Bearer token", request);
@@ -43,7 +43,7 @@ class AuthorizationServiceTest {
 
     @Test
     void deniesRequestWhenBearerTokenIsMissing() {
-        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/cgm/imports", "egm", Set.of(), Set.of());
+        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/resources", "egm", Set.of(), Set.of());
 
         var response = service.check(null, request);
 
@@ -53,7 +53,7 @@ class AuthorizationServiceTest {
 
     @Test
     void deniesRequestWhenTenantDoesNotMatchToken() {
-        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/cgm/imports",
+        AuthorizationCheckRequest request = new AuthorizationCheckRequest("GET", "/api/resources",
                 "other-tenant", Set.of("grid_reader"), Set.of("openid"));
 
         var response = service.check("Bearer token", request);

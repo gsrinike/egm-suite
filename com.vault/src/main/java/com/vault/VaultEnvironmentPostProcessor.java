@@ -11,6 +11,10 @@ import org.springframework.core.env.PropertySource;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Spring environment post-processor that resolves vault placeholders after the
+ * module YAML files are loaded and before application beans are created.
+ */
 public class VaultEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
     private static final String MODULE_PROPERTY = "module";
     private static final String MODULE_ENV = "MODULE";

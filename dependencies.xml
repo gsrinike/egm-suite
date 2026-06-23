@@ -26,7 +26,6 @@
         <version.camunda>7.22.0</version.camunda>
         <version.minio>8.5.12</version.minio>
         <version.springdoc-openapi>2.6.0</version.springdoc-openapi>
-        <version.powsybl>6.8.0</version.powsybl>
 
         <maven.compiler.release>${version.java}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -57,36 +56,6 @@
                 <groupId>io.minio</groupId>
                 <artifactId>minio</artifactId>
                 <version>${version.minio}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-cgmes-model</artifactId>
-                <version>${version.powsybl}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-cgmes-conversion</artifactId>
-                <version>${version.powsybl}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-iidm-extensions</artifactId>
-                <version>${version.powsybl}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-iidm-api</artifactId>
-                <version>${version.powsybl}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-iidm-impl</artifactId>
-                <version>${version.powsybl}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.powsybl</groupId>
-                <artifactId>powsybl-triple-store-impl-rdf4j</artifactId>
-                <version>${version.powsybl}</version>
             </dependency>
             <dependency>
                 <groupId>org.camunda.bpm.springboot</groupId>

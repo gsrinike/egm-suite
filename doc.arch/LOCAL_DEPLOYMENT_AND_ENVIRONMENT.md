@@ -18,17 +18,10 @@ Build the application without Docker image work:
 mvn -Dmaven.repo.local=work/m2 -Ddocker.skip.build=true -Ddocker.skip.push=true clean package
 ```
 
-Run a focused backend slice:
+Run a focused module slice:
 
 ```bash
-mvn -Dmaven.repo.local=work/m2 -Ddocker.skip.build=true -Ddocker.skip.push=true -pl srv.cgm.importer -am test
-```
-
-Run the frontend build:
-
-```bash
-cd gui.cgm.explorer
-npm run build
+mvn -Dmaven.repo.local=work/m2 -Ddocker.skip.build=true -Ddocker.skip.push=true -pl com.infra -am test
 ```
 
 ## Docker Compose
@@ -39,7 +32,7 @@ Start the local stack:
 docker compose -f docker/docker-compose.yml up
 ```
 
-The stack includes dependencies such as Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, and Keycloak where applicable. The backend service and GUI images are built from local Maven/npm artifacts.
+The stack includes shared dependencies such as Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, and Keycloak where applicable. Application images are built from local Maven artifacts.
 
 ## Docker Maven Lifecycle
 
@@ -110,23 +103,23 @@ vault:
   token: "${VAULT_TOKEN}"
   kv:
     mount: secret
-    path: srv-cgm-importer
+    path: sample-app
     version: 2
   authorization:
-    client-id: srv.cgm.importer
-    allowed-keys: MINIO_SECRET_KEY,ELASTIC_PASSWORD
+    client-id: sample.app
+    allowed-keys: APP_SECRET
 ```
 
 The `vault.authorization.client-id` value must match the module/client being bootstrapped, usually the same value set through the `module` system property. The `vault.authorization.allowed-keys` list is the allowlist for `${vault:...}` references used by that client. A `*` value is supported for controlled local/test contexts, but explicit keys are preferred.
 
 ### Referencing Secrets In App Config
 
-Reference secrets from application or infrastructure config with the `${vault:SECRET_KEY}` placeholder. For example, `base/srv.cgm.importer-infra.yml` can keep the object storage key as a reference rather than a committed value:
+Reference secrets from application or infrastructure config with the `${vault:SECRET_KEY}` placeholder. For example, `base/<module>-infra.yml` can keep a credential as a reference rather than a committed value:
 
 ```yaml
 utility:
-  object-storage:
-    access-key: "${vault:MINIO_SECRET_KEY}"
+  credentials:
+    password: "${vault:APP_SECRET}"
 ```
 
 Do not place the secret value itself in the app config. Store it in HashiCorp Vault under the configured KV mount/path, or provide it through the environment as a local fallback only.
@@ -179,23 +172,6 @@ Spring Boot applications should:
 - Set `module` before `SpringApplication.run(...)`, or set `MODULE`.
 - Include resources under `base`, `local`, and any supported runtime environment folders.
 - Keep secrets outside committed files and provide them through environment variables or deployment configuration.
-
-`bpm.*` modules that embed Camunda should keep BPMN deployment configuration in their application YAML:
-
-```yaml
-camunda:
-  bpm:
-    auto-deployment-enabled: true
-    deployment-resource-pattern:
-      - classpath*:/bpmn/*.bpmn
-
-bpm:
-  cgm:
-    import:
-      service-base-url: "${CGM_IMPORT_SERVICE_URL:http://srv-cgm-importer:8080}"
-```
-
-The process module owns Camunda runtime state and calls service APIs over HTTP. Service modules should not add Maven dependencies on BPM modules.
 
 See:
 

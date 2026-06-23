@@ -45,27 +45,7 @@ services:
       - ./otel-collector.yml:/etc/otel-collector.yml:ro
     ports:
       - "4318:4318"
-
-  srv-cgm-importer:
-    build:
-      context: ..
-      dockerfile: srv.cgm.importer/Dockerfile
-      args:
-        JAR_FILE: srv.cgm.importer/target/srv.cgm.importer-0.1.0-SNAPSHOT.jar
-    environment:
-      ELASTICSEARCH_URIS: http://elasticsearch:9200
-      MINIO_ENDPOINT: http://minio:9000
-      RABBITMQ_HOST: rabbitmq
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
-    ports:
-      - "8080:8080"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-      minio:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
+      - "13133:13133"
 
   com-auth:
     build:
@@ -86,12 +66,5 @@ services:
     depends_on:
       keycloak:
         condition: service_started
-
-  gui-cgm-explorer:
-    build:
-      context: ../gui.cgm.explorer
-      dockerfile: Dockerfile
-    ports:
-      - "5173:80"
-    depends_on:
-      - srv-cgm-importer
+      otel-collector:
+        condition: service_started

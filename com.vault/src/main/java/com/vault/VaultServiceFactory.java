@@ -6,6 +6,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Creates the configured vault service chain for an application context.
+ *
+ * <p>HashiCorp Vault is preferred when connection settings are available; the
+ * environment/configuration fallback remains available for local development
+ * and tests. Every provider is wrapped with authorization.</p>
+ */
 public final class VaultServiceFactory {
     private VaultServiceFactory() {
     }
