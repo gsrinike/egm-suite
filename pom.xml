@@ -19,10 +19,15 @@
     -->
     <modules>
         <module>com.utils</module>
+        <module>data.cnm</module>
         <module>com.mapping</module>
         <module>com.infra</module>
         <module>com.auth</module>
         <module>com.vault</module>
+        <module>srv.cnm.services</module>
+        <module>mock.srv.cnm.services</module>
+        <module>gui.common</module>
+        <module>gui.cnm.manager</module>
     </modules>
 
     <properties>

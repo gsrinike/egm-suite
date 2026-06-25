@@ -8,7 +8,9 @@ spring:
       client:
         provider:
           keycloak:
-            issuer-uri: "${OIDC_ISSUER_URI:http://localhost:8081/realms/egm}"
+            authorization-uri: "${OIDC_AUTHORIZATION_URI:http://localhost:8081/realms/egm/protocol/openid-connect/auth}"
+            token-uri: "${OIDC_TOKEN_URI:http://localhost:8081/realms/egm/protocol/openid-connect/token}"
+            jwk-set-uri: "${OIDC_JWK_SET_URI:http://localhost:8081/realms/egm/protocol/openid-connect/certs}"
         registration:
           keycloak-admin:
             client-id: "${KEYCLOAK_ADMIN_CLIENT_ID:egm-auth-admin}"

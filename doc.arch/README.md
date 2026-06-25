@@ -5,8 +5,10 @@
 ## Contents
 
 - `DESIGN_PRINCIPLES.md`: design principles adopted by the project and how they are applied in the current modules.
+- `CNM_IMPORT_DESIGN.md`: Common Network Model import application module boundaries and import sequence.
 - `LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`: local deployment workflow, Docker/Maven behavior, and environment resolution rules.
 - `MODULE_CLASSIFICATION.md`: classification rules for current modules with links to module README files.
+- `codegen/codex`: repository-specific Codex rules, workflow guidance, and applied architecture decisions used for future changes.
 - `egm-module-archetype`: standalone Maven archetype for generating a new EGM Java module skeleton.
 
 ## Archetype Quick Start

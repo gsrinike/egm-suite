@@ -1,0 +1,12 @@
+spring:
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+utility:
+  object-storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${vault:MINIO_SECRET_KEY}
+    buckets: cnm-rdf-models
+  messaging:
+    topic-exchange:
+      name: cnm.events

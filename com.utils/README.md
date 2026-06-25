@@ -9,6 +9,21 @@
 - `com.utils.env`: suite runtime environment resolution.
 - `com.utils.config`: Spring Boot environment post-processing and module-scoped configuration loading.
 - `com.utils.secret`: bootstrap-time secret access authorization contracts used during configuration resolution.
+- `com.utils.restservice`: shared REST service support and outbound `RestTemplate` configuration.
+
+## REST Service Support
+
+`RestServiceSupport` supplies reusable logger, environment, module-name, and
+observation-registry fields for REST-facing service implementations.
+
+`RestServiceConfiguration` is opt-in Spring configuration. Runnable applications
+import it to register the shared timeout-configured `RestTemplate`:
+
+```java
+@Import(RestServiceConfiguration.class)
+```
+
+`srv.cnm.services` and `mock.srv.cnm.services` currently import this configuration.
 
 ## Configuration Loading
 

@@ -7,6 +7,7 @@ This document records the principles adopted in the Energy Grid Management Suite
 Each module has a narrow purpose and a clear owner boundary:
 
 - `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, authorized secret lookup, infrastructure adapters, and authentication.
+- CNM modules provide the application-specific surface for Common Network Model import and future CGM, CSA, and CC use cases.
 
 This keeps shared platform capabilities focused and prevents technology-specific details from leaking across module boundaries.
 
@@ -15,8 +16,11 @@ This keeps shared platform capabilities focused and prevents technology-specific
 Dependencies flow from use-case modules toward stable contracts and utilities:
 
 - Services may depend on required shared modules such as `com.utils`, `com.mapping`, and `com.infra`.
+- CNM service modules depend on `data.cnm` for transport contracts and invoke infrastructure through `com.infra`.
+- CNM GUI modules depend on `gui.common` for reusable Vue components.
 - `com.vault` depends on `com.utils` for bootstrap secret authorization. `com.auth` must not depend on `com.vault`.
 - Shared mapping behavior belongs in `com.mapping`.
+- Shared REST service support and outbound HTTP client wiring belong in `com.utils.restservice`.
 - Shared infrastructure behavior belongs in `com.infra` and is exposed through adapter interfaces.
 
 The root Maven POM manages versions but does not force technology dependencies into every module.
@@ -80,3 +84,7 @@ Tests are kept close to the behavior being changed:
 ## 8. Documentation Beside the Module
 
 Each module owns a `README.md` explaining purpose, contents, implementation notes, and developer commands. Architecture documents link to those module READMEs instead of duplicating every detail.
+
+## 9. Contract-First Service Surfaces
+
+Runnable REST services publish OpenAPI specifications with the module. Mock services are built against the same contract shape so GUI work can continue without the production backend or infrastructure stack.

@@ -1,0 +1,344 @@
+openapi: 3.0.3
+info:
+  title: CNM Services API
+  version: 0.1.0
+  description: REST API for CGMES/NCP RDF import and network-model status tracking.
+paths:
+  /api/cnm/imports:
+    post:
+      summary: Import RDF network models
+      operationId: importModel
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [serviceType, timeFrame, file]
+              properties:
+                importId:
+                  type: string
+                  description: Client-generated identifier reused when a failed import is re-uploaded.
+                serviceType:
+                  $ref: '#/components/schemas/CnmServiceType'
+                timeFrame:
+                  $ref: '#/components/schemas/TimeFrame'
+                message:
+                  type: string
+                  description: User-provided context stored on the import status.
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more RDF/XML files or ZIP bundles. ZIP bundles may contain nested ZIP files.
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+        '413':
+          description: Upload exceeds the configured proxy or service request limit.
+    get:
+      summary: List imports
+      operationId: listImports
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+      responses:
+        '200':
+          description: Paged imports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatusPage'
+  /api/cnm/imports/{importId}:
+    get:
+      summary: Get one import
+      operationId: getImport
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+  /api/cnm/imports/{importId}/files/{fileId}/status:
+    put:
+      summary: Update one imported file status
+      operationId: updateImportFileStatus
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportFileStatusUpdateRequest'
+      responses:
+        '200':
+          description: Updated aggregate and file status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+  /api/cnm/imports/failures:
+    post:
+      summary: Record an upload failure
+      operationId: reportImportFailure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportFailureRequest'
+      responses:
+        '200':
+          description: Persisted failed import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+  /api/cnm/imports/chunks:
+    post:
+      summary: Upload one bounded binary file chunk
+      parameters:
+        - { name: importId, in: query, required: true, schema: { type: string } }
+        - { name: fileId, in: query, required: true, schema: { type: string } }
+        - { name: fileName, in: query, required: true, schema: { type: string } }
+        - { name: chunkIndex, in: query, required: true, schema: { type: integer } }
+        - { name: totalChunks, in: query, required: true, schema: { type: integer } }
+        - { name: fileSize, in: query, required: true, schema: { type: integer, format: int64, maximum: 1073741824 } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200': { description: Chunk stored }
+  /api/cnm/imports/chunks/complete:
+    post:
+      summary: Assemble uploaded chunks and start import processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChunkUploadCompleteRequest'
+      responses:
+        '200':
+          description: Completed import status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportStatus'
+  /api/cnm/imports/profiles:
+    get:
+      summary: Search imported profile metadata
+      parameters:
+        - { name: profileType, in: query, schema: { type: string } }
+        - { name: tso, in: query, schema: { type: string } }
+        - { name: businessDay, in: query, schema: { type: string, format: date } }
+        - { name: businessTime, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        '200':
+          description: Matching profile metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CnmProfileMetadata'
+                  total:
+                    type: integer
+                    format: int64
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+components:
+  schemas:
+    CnmServiceType:
+      type: string
+      enum: [CGM, CSA, CC]
+    TimeFrame:
+      type: string
+      enum: [ID, DAY_AHEAD, TWO_DAYS_AHEAD]
+    ImportState:
+      type: string
+      enum: [INIT, STORED, FAILED]
+    ImportFileState:
+      type: string
+      enum: [INIT, STORED, PARSED, FAILED]
+    ProfileFamily:
+      type: string
+      enum: [EQ, DL, DY, EB, GL, OP, SC, SV, SSH, TP, NCP, CGMES, UK]
+    RdfProfileReference:
+      type: object
+      properties:
+        family:
+          $ref: '#/components/schemas/ProfileFamily'
+        uri:
+          type: string
+        version:
+          type: string
+    ImportFileStatus:
+      type: object
+      properties:
+        fileId:
+          type: string
+        fileName:
+          type: string
+        objectId:
+          type: string
+        state:
+          $ref: '#/components/schemas/ImportFileState'
+        profileFamily:
+          $ref: '#/components/schemas/ProfileFamily'
+        businessDay:
+          type: string
+          format: date
+        businessTime:
+          type: string
+        modelTimeFrame:
+          type: string
+        tsoName:
+          type: string
+        profileType:
+          type: string
+        modelVersion:
+          type: string
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RdfProfileReference'
+        message:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+    ImportFileStatusUpdateRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          $ref: '#/components/schemas/ImportFileState'
+        message:
+          type: string
+    CnmProfileMetadata:
+      type: object
+      properties:
+        profileId:
+          type: string
+        importId:
+          type: string
+        fileName:
+          type: string
+        objectId:
+          type: string
+        state:
+          $ref: '#/components/schemas/ImportFileState'
+        profileFamily:
+          $ref: '#/components/schemas/ProfileFamily'
+        profileType:
+          type: string
+        tsoName:
+          type: string
+        businessDay:
+          type: string
+          format: date
+        businessTime:
+          type: string
+        timeFrame:
+          type: string
+        version:
+          type: string
+        importedAt:
+          type: string
+          format: date-time
+    ImportStatus:
+      type: object
+      properties:
+        importId:
+          type: string
+        serviceType:
+          $ref: '#/components/schemas/CnmServiceType'
+        timeFrame:
+          $ref: '#/components/schemas/TimeFrame'
+        state:
+          $ref: '#/components/schemas/ImportState'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportFileStatus'
+        createdAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+    ImportFailureRequest:
+      type: object
+      required: [importId, serviceType, timeFrame, fileNames, message]
+      properties:
+        importId:
+          type: string
+        serviceType:
+          $ref: '#/components/schemas/CnmServiceType'
+        timeFrame:
+          $ref: '#/components/schemas/TimeFrame'
+        fileNames:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+    ChunkUploadCompleteRequest:
+      type: object
+      required: [importId, serviceType, timeFrame]
+      properties:
+        importId: { type: string }
+        serviceType:
+          $ref: '#/components/schemas/CnmServiceType'
+        timeFrame:
+          $ref: '#/components/schemas/TimeFrame'
+        message:
+          type: string
+          description: User-provided context stored on the import status.
+    ImportStatusPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportStatus'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        size:
+          type: integer

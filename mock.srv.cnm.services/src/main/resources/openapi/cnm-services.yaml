@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Mock CNM Services API
+  version: 0.1.0
+paths:
+  /api/cnm/imports:
+    get:
+      summary: List mocked imports
+      responses:
+        '200':
+          description: Mocked import page
+    post:
+      summary: Mock an RDF import
+      responses:
+        '200':
+          description: Mocked import status
+  /api/cnm/imports/failures:
+    post:
+      summary: Record a mocked upload failure
+      responses:
+        '200':
+          description: Mocked failed import status
+  /api/cnm/imports/{importId}:
+    get:
+      summary: Get mocked import
+      responses:
+        '200':
+          description: Mocked import status
+  /api/cnm/imports/chunks:
+    post:
+      summary: Acknowledge a mocked binary chunk
+      responses:
+        '200':
+          description: Chunk accepted
+  /api/cnm/imports/chunks/complete:
+    post:
+      summary: Complete a mocked chunked import
+      responses:
+        '200':
+          description: Mocked completed import
+  /api/cnm/imports/profiles:
+    get:
+      summary: List mocked profile metadata
+      responses:
+        '200':
+          description: Mocked profiles

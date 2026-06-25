@@ -8,7 +8,9 @@ spring:
       client:
         provider:
           keycloak:
-            issuer-uri: http://localhost:8081/realms/egm
+            authorization-uri: http://localhost:8081/realms/egm/protocol/openid-connect/auth
+            token-uri: http://localhost:8081/realms/egm/protocol/openid-connect/token
+            jwk-set-uri: http://localhost:8081/realms/egm/protocol/openid-connect/certs
         registration:
           keycloak-admin:
             provider: keycloak

@@ -55,6 +55,8 @@ services:
         JAR_FILE: com.auth/target/com.auth-0.1.0-SNAPSHOT.jar
     environment:
       OIDC_ISSUER_URI: http://keycloak:8080/realms/egm
+      OIDC_AUTHORIZATION_URI: http://keycloak:8080/realms/egm/protocol/openid-connect/auth
+      OIDC_TOKEN_URI: http://keycloak:8080/realms/egm/protocol/openid-connect/token
       OIDC_JWK_SET_URI: http://keycloak:8080/realms/egm/protocol/openid-connect/certs
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: egm
@@ -67,4 +69,52 @@ services:
       keycloak:
         condition: service_started
       otel-collector:
+        condition: service_started
+
+  srv-cnm-services:
+    build:
+      context: ..
+      dockerfile: srv.cnm.services/Dockerfile
+      args:
+        JAR_FILE: srv.cnm.services/target/srv.cnm.services-0.1.0-SNAPSHOT.jar
+    environment:
+      ENV: local
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      SPRING_RABBITMQ_HOST: rabbitmq
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8080:8080"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
+  mock-srv-cnm-services:
+    build:
+      context: ..
+      dockerfile: mock.srv.cnm.services/Dockerfile
+      args:
+        JAR_FILE: mock.srv.cnm.services/target/mock.srv.cnm.services-0.1.0-SNAPSHOT.jar
+    environment:
+      ENV: local
+      MOCK_CNM_SERVICES_PORT: 8084
+    ports:
+      - "8084:8084"
+
+  gui-cnm-manager:
+    build:
+      context: ..
+      dockerfile: gui.cnm.manager/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      srv-cnm-services:
         condition: service_started

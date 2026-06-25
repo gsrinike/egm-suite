@@ -1,0 +1,6 @@
+vault:
+  enabled: false
+  authorization:
+    client-id: srv.cnm.services
+    allowed-keys: MINIO_SECRET_KEY
+MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:minioadmin}

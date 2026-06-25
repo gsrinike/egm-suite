@@ -1,0 +1,2 @@
+server:
+  port: ${MOCK_CNM_SERVICES_PORT:8084}

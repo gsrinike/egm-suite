@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: mock.srv.cnm.services
+  servlet:
+    multipart:
+      max-file-size: ${CNM_MAX_FILE_SIZE:16MB}
+      max-request-size: ${CNM_MAX_REQUEST_SIZE:16MB}
+server:
+  port: ${MOCK_CNM_SERVICES_PORT:8084}
+springdoc:
+  swagger-ui:
+    url: /openapi/cnm-services.yaml

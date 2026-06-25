@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: srv.cnm.services
+  servlet:
+    multipart:
+      max-file-size: ${CNM_MAX_FILE_SIZE:16MB}
+      max-request-size: ${CNM_MAX_REQUEST_SIZE:16MB}
+server:
+  port: ${CNM_SERVICES_PORT:8080}
+  tomcat:
+    connection-timeout: ${CNM_UPLOAD_CONNECTION_TIMEOUT:10m}
+cnm:
+  import:
+    raw-bucket: cnm-rdf-models
+    event:
+      exchange: cnm.events
+      routing-key: cnm.import.completed
+springdoc:
+  swagger-ui:
+    url: /openapi/cnm-services.yaml

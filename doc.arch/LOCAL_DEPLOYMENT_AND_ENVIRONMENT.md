@@ -34,6 +34,13 @@ docker compose -f docker/docker-compose.yml up
 
 The stack includes shared dependencies such as Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, and Keycloak where applicable. Application images are built from local Maven artifacts.
 
+Current application ports:
+
+- `srv.cnm.services`: `8080`
+- `mock.srv.cnm.services`: `8084`
+- `gui.cnm.manager`: `5173`
+- `com.auth`: `8082`
+
 ## Docker Maven Lifecycle
 
 Docker behavior is configured from root Maven properties:
