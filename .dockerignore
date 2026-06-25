@@ -1,0 +1,8 @@
+.git
+.idea
+.vscode
+**/node
+**/node_modules
+**/dist
+**/target
+work

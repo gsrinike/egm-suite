@@ -42,6 +42,11 @@ and legacy `Instant` values at the API boundary. `CnmProfileDocument` stores the
 literal filename `profileType`, derived `profileFamily`, and `ImportFileState`
 separately.
 
+The Docker image compiles `srv.cnm.services` and its Maven dependencies from
+the current source tree. It does not copy a previously built local JAR. Startup
+validates that persisted `createdAt` and `uploadedAt` record components use the
+schema-tolerant `Object` type.
+
 ## Developer Commands
 
 ```bash

@@ -75,8 +75,6 @@ services:
     build:
       context: ..
       dockerfile: srv.cnm.services/Dockerfile
-      args:
-        JAR_FILE: srv.cnm.services/target/srv.cnm.services-0.1.0-SNAPSHOT.jar
     environment:
       ENV: local
       ELASTICSEARCH_URIS: http://elasticsearch:9200

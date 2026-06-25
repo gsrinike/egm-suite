@@ -147,3 +147,10 @@ Application Elasticsearch documents write timestamps as epoch milliseconds and
 read them through schema-tolerant document fields. API DTOs normalize numeric,
 numeric-string, ISO, and legacy `Instant` values at the service boundary. This
 avoids converter registration requirements for nested records.
+
+## ADR 021: CNM Docker Builds Compile Current Sources
+
+The `srv.cnm.services` Dockerfile uses a Maven builder stage and packages the
+service from the current source tree. It must not copy a potentially stale
+local `target` JAR. Service startup validates the loaded CNM persistence record
+timestamp component types.
