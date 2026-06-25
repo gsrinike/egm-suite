@@ -50,57 +50,124 @@ sequenceDiagram
     autonumber
     participant User as "User"
     participant GUI as "gui.cnm.manager"
-    participant API as "srv.cnm.services REST API"
-    participant Service as "CnmImportRestService"
+    participant Boot as "Spring application startup"
+    participant API as "CnmImportController"
+    participant Chunks as "CnmChunkUploadService"
+    participant Import as "CnmImportRestService"
     participant RDF as "RdfMetadataExtractor"
     participant Infra as "com.infra InfrastructureUtils"
-    participant ObjectStore as "ObjectStorageService"
-    participant Docs as "DocumentRepositoryService"
+    participant MinIO as "MinIO ObjectStorageService"
+    participant Imports as "Elasticsearch cnm-imports"
+    participant Profiles as "Elasticsearch cnm-profiles"
+    participant Events as "RabbitMQ EventPublisherService"
     participant Downstream as "Downstream processor"
 
-    User->>GUI: choose service type, timeframe, RDF file, and message
-    GUI->>GUI: create import ID
-    loop each 8 MB chunk
-        GUI->>API: POST /api/cnm/imports/chunks
-        API-->>GUI: chunk accepted
+    rect rgb(245, 247, 250)
+        Note over Boot,MinIO: Application initialization
+        Boot->>Infra: create configured infrastructure capabilities
+        Infra->>MinIO: initializeBucket(cnm-rdf-models)
+        MinIO-->>Infra: bucket ready
+        Infra-->>Boot: service initialization continues
     end
+
+    User->>GUI: select service, timeframe, message, and one or more RDF/ZIP files
+    GUI->>GUI: create import ID
+
+    loop each source file
+        GUI->>GUI: reject files larger than 1 GB
+        GUI->>GUI: split file into 8 MB chunks
+        loop each chunk
+            GUI->>API: POST /api/cnm/imports/chunks with upload coordinates
+            API->>Chunks: storeChunk(importId, fileId, index, bytes)
+            Chunks->>Chunks: validate IDs, size, and chunk coordinates
+            Chunks->>Chunks: persist part in temporary staging directory
+            API-->>GUI: 200 chunk accepted
+        end
+    end
+
     GUI->>API: POST /api/cnm/imports/chunks/complete with message
-    API->>Service: importModels(serviceType, timeframe, staged files, message)
-    Service->>Docs: save INIT import
-    Service->>RDF: extract profile references from RDF metadata
-    RDF-->>Service: RdfMetadata with CGMES/NCP references
-    Service->>Infra: objectStorageService()
-    Infra-->>Service: ObjectStorageService
-    Service->>ObjectStore: putObject(cnm-rdf-models, object key, bytes)
-    ObjectStore-->>Service: objectId
-    Service->>Infra: documentRepository(adapter)
-    Infra-->>Service: DocumentRepositoryService
-    Service->>Docs: save ImportStatus document
-    Service->>Docs: save searchable profile documents
-    Service->>Infra: eventPublisher()
-    Infra-->>Service: EventPublisherService
-    Service->>Infra: publish cnm.import.completed
-    Docs-->>Service: stored metadata
-    Service-->>API: ImportStatus
-    API-->>GUI: 201 Created ImportStatus
-    GUI->>GUI: update import table with INIT, STORED, or FAILED
-    User->>GUI: select File link
-    GUI->>API: GET /api/cnm/imports/{importId}
-    API-->>GUI: import with file-level profile metadata
-    GUI->>GUI: show searchable file detail table
+    API->>Chunks: complete(importId)
+    Chunks->>Chunks: assemble parts in index order
+    Chunks->>Chunks: validate every part and final file size
+    Chunks-->>API: staged MultipartFile list
+    API->>Import: importModels(files, serviceType, timeframe, importId, message)
+    Import->>Imports: save aggregate INIT document and INIT file rows
+
+    loop each staged source
+        Import->>Import: recursively expand ZIP and nested ZIP entries
+        Import->>Import: ignore metadata entries and collect RDF/XML payloads
+    end
+
+    alt no RDF/XML payload was found or extraction failed
+        Import->>Imports: replace import with FAILED document
+        Import-->>API: FAILED ImportStatus
+    else RDF/XML payloads were found
+        Import->>Import: create one worker thread per RDF/XML payload
+        par each RDF/XML payload
+            Import->>Import: parse filename metadata
+            Note right of Import: timestamp, timeframe, TSO,<br/>profile type, version, and profile family
+            Import->>MinIO: store(cnm-rdf-models, importId/path, bytes)
+            alt object storage and metadata extraction succeed
+                MinIO-->>Import: object stored
+                Import->>RDF: extract RDF profile references
+                RDF-->>Import: CGMES/NCP metadata
+                Import->>Import: create PARSED file document
+            else processing fails
+                Import->>Import: capture exception as FAILED file document
+            end
+        end
+
+        Import->>Import: aggregate state as STORED or FAILED
+        Import->>Imports: replace aggregate import document
+        Import->>Profiles: save one searchable profile document per PARSED file
+        Import->>Events: publish cnm.import.completed with profile metadata
+        Import-->>API: ImportStatus
+    end
+
+    API->>Chunks: discard(importId) in finally block
+    API-->>GUI: completed ImportStatus
+    GUI->>GUI: show aggregate INIT, STORED, or FAILED state
+
+    opt view files for an import
+        User->>GUI: select the File link
+        GUI->>API: GET /api/cnm/imports/{importId}
+        API->>Import: findImport(importId)
+        Import->>Imports: findByField(id, importId)
+        Imports-->>Import: persisted CnmImportDocument
+        Import->>Import: restore missing filename metadata
+        Import->>Import: normalize epoch, numeric-string, ISO, or legacy Instant timestamps
+        Import-->>API: ImportStatus with file details
+        API-->>GUI: import and file-level metadata
+        GUI->>GUI: show searchable, sortable, paginated file table
+    end
+
+    opt search imported profiles
+        User->>GUI: filter by profile, TSO, business day, or business time
+        GUI->>API: GET /api/cnm/imports/profiles
+        API->>Import: searchProfiles(filters, page, size)
+        Import->>Profiles: filtered document search
+        Profiles-->>Import: matching profile documents
+        Import-->>API: paginated profile metadata
+        API-->>GUI: profile search results
+    end
 
     opt downstream file processing
         Downstream->>API: PUT file status as STORED, PARSED, or FAILED
-        API->>Docs: replace file status and recompute aggregate state
+        API->>Import: updateFileStatus(importId, fileId, state)
+        Import->>Imports: replace file status and recompute aggregate state
+        Import->>Profiles: update matching profile state
+        Import-->>API: updated ImportStatus
         API-->>Downstream: updated ImportStatus
     end
 
-    alt proxy, network, or multipart rejection
+    opt chunk, proxy, network, or completion failure
+        GUI->>GUI: retain import ID and expose re-upload
         GUI->>API: POST /api/cnm/imports/failures
-        API->>Docs: save FAILED import and file names
+        API->>Import: reportFailure(importId, file names, message)
+        Import->>Imports: save FAILED import and file rows
         API-->>GUI: failed ImportStatus
-        User->>GUI: select Re-upload and replacement files
-        GUI->>API: upload replacement chunks with the same import ID
+        User->>GUI: select Re-upload
+        GUI->>API: repeat chunk upload with the same import ID
     end
 ```
 
