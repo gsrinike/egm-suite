@@ -2,6 +2,7 @@ FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .
 RUN mvn -DskipTests \
+    -Ddocker.skip=true \
     -Ddocker.skip.build=true \
     -Ddocker.skip.push=true \
     -pl srv.cnm.services \

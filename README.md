@@ -20,7 +20,7 @@ This README is the suite entry point. Detailed behavior belongs in each module R
 
 ## Build Metadata
 
-- `dependencies.xml` is the Maven parent dependency catalog. It centralizes dependency and plugin versions through Maven-compatible `version.*` property tags, `dependencyManagement`, and `pluginManagement`; it does not add those dependencies to every module.
+- `egm-dependencies/pom.xml` is the Maven parent dependency catalog. It centralizes dependency and plugin versions through Maven-compatible `version.*` property tags, `dependencyManagement`, and `pluginManagement`; it does not add those dependencies to every module.
 - `modules.yml` is the standalone module inventory for developer review and automation. Maven requires the active aggregator module list to remain inline in `pom.xml`, so keep both lists synchronized when adding or removing modules.
 - Module POMs should declare only the dependencies they directly use. Infrastructure dependencies such as MinIO, Elasticsearch, RabbitMQ, Camunda, and Spring Boot belong in backend modules that need them.
 

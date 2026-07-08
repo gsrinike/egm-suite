@@ -6,6 +6,7 @@
         <groupId>eu.egm</groupId>
         <artifactId>egm-suite</artifactId>
         <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>com.auth</artifactId>
@@ -83,9 +84,33 @@
                 </executions>
             </plugin>
             <plugin>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-docker-context</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/docker-context</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>${project.build.finalName}.jar</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>io.fabric8</groupId>
                 <artifactId>docker-maven-plugin</artifactId>
                 <configuration>
+                    <skip>${docker.skip.build}</skip>
                     <skipBuild>${docker.skip.build}</skipBuild>
                     <skipPush>${docker.skip.push}</skipPush>
                     <images>
@@ -93,8 +118,8 @@
                             <name>${docker.registry}/${docker.namespace}/${docker.image.name}:${docker.image.tag}</name>
                             <alias>${docker.image.name}</alias>
                             <build>
-                                <contextDir>${project.basedir}</contextDir>
-                                <dockerFile>${project.basedir}/Dockerfile</dockerFile>
+                                <contextDir>${project.build.directory}/docker-context</contextDir>
+                                <dockerFile>${project.basedir}/Dockerfile.fabric8</dockerFile>
                                 <tags>
                                     <tag>${docker.image.latest-tag}</tag>
                                 </tags>

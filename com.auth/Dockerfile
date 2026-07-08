@@ -1,6 +1,16 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY . .
+RUN mvn -DskipTests \
+    -Ddocker.skip=true \
+    -Ddocker.skip.build=true \
+    -Ddocker.skip.push=true \
+    -pl com.auth \
+    -am \
+    package
+
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-ARG JAR_FILE=target/com.auth-0.1.0-SNAPSHOT.jar
-COPY ${JAR_FILE} app.jar
+COPY --from=build /workspace/com.auth/target/com.auth-0.1.0-SNAPSHOT.jar app.jar
 EXPOSE 8082
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

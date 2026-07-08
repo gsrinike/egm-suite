@@ -6,6 +6,7 @@
         <groupId>eu.egm</groupId>
         <artifactId>egm-suite</artifactId>
         <version>${version}</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>${artifactId}</artifactId>

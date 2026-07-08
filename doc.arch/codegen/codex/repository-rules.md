@@ -4,6 +4,7 @@
 
 The active Maven reactor contains only these modules:
 
+- `egm-dependencies`
 - `com.utils`
 - `data.cnm`
 - `com.mapping`
@@ -53,7 +54,7 @@ CNM modules own Common Network Model application behavior:
 - `srv.cnm.services` depends on `data.cnm`, `com.utils`, and `com.infra`; it should not import GUI or mock modules.
 - `gui.cnm.manager` depends on `gui.common` and calls CNM REST APIs through HTTP.
 - `data.cnm` should not depend on Spring, PowSyBl, Elasticsearch, MinIO, or RabbitMQ.
-- Do not add dependencies to `dependencies.xml` unless at least one active module directly needs them.
+- Do not add dependencies to `egm-dependencies/pom.xml` unless at least one active module directly needs them.
 
 ## Configuration Rules
 

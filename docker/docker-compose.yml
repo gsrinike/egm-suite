@@ -51,8 +51,6 @@ services:
     build:
       context: ..
       dockerfile: com.auth/Dockerfile
-      args:
-        JAR_FILE: com.auth/target/com.auth-0.1.0-SNAPSHOT.jar
     environment:
       OIDC_ISSUER_URI: http://keycloak:8080/realms/egm
       OIDC_AUTHORIZATION_URI: http://keycloak:8080/realms/egm/protocol/openid-connect/auth
@@ -99,8 +97,6 @@ services:
     build:
       context: ..
       dockerfile: mock.srv.cnm.services/Dockerfile
-      args:
-        JAR_FILE: mock.srv.cnm.services/target/mock.srv.cnm.services-0.1.0-SNAPSHOT.jar
     environment:
       ENV: local
       MOCK_CNM_SERVICES_PORT: 8084

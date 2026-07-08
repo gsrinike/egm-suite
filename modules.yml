@@ -1,6 +1,7 @@
 # Standalone module inventory for developer review and automation.
 # Maven aggregators still require the active module list inline in pom.xml.
 modules:
+  - egm-dependencies
   - com.utils
   - data.cnm
   - com.mapping
