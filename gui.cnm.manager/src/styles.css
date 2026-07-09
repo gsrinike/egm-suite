@@ -1,6 +1,46 @@
+:root {
+  --bg-base: #0B0A19;
+  --bg-sidebar: rgba(16, 15, 34, 0.7);
+  --bg-card: rgba(22, 21, 47, 0.45);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --primary: #00F2FE;
+  --accent: #B026FF;
+  --text-main: #E2E8F0;
+  --text-muted: #94A3B8;
+  --button-text: #031018;
+  --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+body.light-theme {
+  --bg-base: #F8FAFC;
+  --bg-sidebar: #E2E8F0;
+  --bg-card: #FFFFFF;
+  --border-color: #CBD5E1;
+  --primary: #0076FF;
+  --accent: #8B5CF6;
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --button-text: #FFFFFF;
+  --shadow-card: 0 8px 32px 0 rgba(148, 163, 184, 0.15);
+}
+
 body {
-  background: #f7f9fb;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(0, 242, 254, 0.14), transparent 30%),
+    radial-gradient(circle at 86% 8%, rgba(176, 38, 255, 0.16), transparent 28%),
+    var(--bg-base);
+  color: var(--text-main);
   margin: 0;
+}
+
+body.light-theme {
+  background: var(--bg-base);
+}
+
+button,
+input,
+select {
+  font: inherit;
 }
 
 .app-shell {
@@ -11,11 +51,54 @@ body {
   padding: 24px;
 }
 
+.app-header,
+.glass-panel {
+  backdrop-filter: blur(18px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+}
+
+.app-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.app-header p,
+.detail-heading p {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.theme-toggle {
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .toolbar {
   align-items: end;
   display: grid;
   gap: 12px;
   grid-template-columns: 190px 160px minmax(220px, 1fr) minmax(220px, 1fr) auto auto;
+  padding: 14px;
 }
 
 .profile-filters {
@@ -23,40 +106,27 @@ body {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+  padding: 14px;
 }
 
-.profile-filters label {
-  display: grid;
-  font-size: 13px;
-  font-weight: 650;
-  gap: 6px;
-}
-
-.profile-filters input {
-  border: 1px solid #bac7d5;
-  border-radius: 6px;
-  box-sizing: border-box;
-  min-height: 36px;
-  padding: 0 10px;
-  width: 100%;
-}
-
+.profile-filters label,
 .file-picker,
 .message-input {
+  color: var(--text-main);
   display: grid;
-  gap: 6px;
   font-size: 13px;
   font-weight: 650;
+  gap: 6px;
 }
 
-.file-picker input {
-  min-height: 36px;
-}
-
-.message-input input {
-  border: 1px solid #bac7d5;
+.file-picker input,
+.message-input input,
+.profile-filters input {
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   box-sizing: border-box;
+  color: var(--text-main);
   min-height: 36px;
   padding: 0 10px;
   width: 100%;
@@ -66,12 +136,7 @@ body {
   align-items: center;
   display: flex;
   justify-content: space-between;
-}
-
-.detail-heading p {
-  color: #526272;
-  font-size: 13px;
-  margin: 0 0 4px;
+  padding: 14px;
 }
 
 .detail-heading strong {
@@ -79,18 +144,15 @@ body {
 }
 
 .status-message {
-  background: #fff;
-  border: 1px solid #d8e0e8;
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   margin: 0;
   padding: 10px 12px;
 }
 
 @media (max-width: 860px) {
-  .toolbar {
-    grid-template-columns: 1fr;
-  }
-
+  .toolbar,
   .profile-filters {
     grid-template-columns: 1fr;
   }

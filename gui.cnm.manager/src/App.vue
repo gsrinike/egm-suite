@@ -1,8 +1,18 @@
 <template>
   <main class="app-shell">
+    <div class="app-header">
+      <div>
+        <p>CNM Manager</p>
+        <h1>Model Imports</h1>
+      </div>
+      <button class="theme-toggle" type="button" @click="toggleTheme">
+        {{ lightTheme ? 'Dark' : 'Light' }}
+      </button>
+    </div>
+
     <Menu :items="menuItems" :active-id="activeView" @select="activeView = $event" />
 
-    <section v-if="activeView === 'imports'" class="toolbar">
+    <section v-if="activeView === 'imports'" class="toolbar glass-panel">
       <Dropdown v-model="serviceType" label="Service" :options="serviceOptions" />
       <Dropdown v-model="timeFrame" label="Timeframe" :options="timeFrameOptions" />
       <label class="file-picker">
@@ -21,7 +31,7 @@
       </Button>
     </section>
 
-    <section v-if="activeView === 'profiles'" class="profile-filters">
+    <section v-if="activeView === 'profiles'" class="profile-filters glass-panel">
       <label>Profile type<input v-model="profileFilters.profileType" placeholder="EQ, SV, SSH..." /></label>
       <label>TSO<input v-model="profileFilters.tso" placeholder="TSCNET-EU" /></label>
       <label>Business day<input v-model="profileFilters.businessDay" type="date" /></label>
@@ -29,7 +39,7 @@
       <Button :disabled="busy" @click="refreshProfiles">Search</Button>
     </section>
 
-    <section v-if="activeView === 'import-files'" class="detail-heading">
+    <section v-if="activeView === 'import-files'" class="detail-heading glass-panel">
       <div>
         <p>Import files</p>
         <strong>{{ selectedImport?.importId }}</strong>
@@ -104,6 +114,7 @@ const fileInput = ref<HTMLInputElement>();
 const retryImportId = ref('');
 const selectedImport = ref<ImportStatus>();
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
+const lightTheme = ref(false);
 
 const menuItems = [
   { id: 'imports', label: 'Imports' },
@@ -182,6 +193,11 @@ watch(activeView, (view) => {
     void refreshProfiles();
   }
 });
+
+function toggleTheme() {
+  lightTheme.value = !lightTheme.value;
+  document.body.classList.toggle('light-theme', lightTheme.value);
+}
 
 function selectFiles(event: Event) {
   selectedFiles.value = Array.from((event.target as HTMLInputElement).files ?? []);
