@@ -43,9 +43,8 @@ export interface CsaCaseStatus {
   message: string;
 }
 
-const baseUrl = import.meta.env.VITE_CSA_API_BASE_URL ?? '';
-
 export async function startCsaCase(request: CsaStartRequest): Promise<CsaCaseStatus> {
+  const baseUrl = csaBaseUrl();
   const response = await fetch(`${baseUrl}/api/csa/cases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -58,9 +57,14 @@ export async function startCsaCase(request: CsaStartRequest): Promise<CsaCaseSta
 }
 
 export async function listCsaCases(): Promise<{ items: CsaCaseStatus[]; total: number; page: number; size: number }> {
+  const baseUrl = csaBaseUrl();
   const response = await fetch(`${baseUrl}/api/csa/cases?page=0&size=50`);
   if (!response.ok) {
     throw new Error(`Unable to load CSA cases: ${response.status}`);
   }
   return response.json();
+}
+
+function csaBaseUrl() {
+  return window.EGM_CONFIG?.apis?.csaBaseUrl ?? import.meta.env.VITE_CSA_API_BASE_URL ?? '';
 }

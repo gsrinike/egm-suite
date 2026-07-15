@@ -211,5 +211,7 @@ services:
     ports:
       - "5174:80"
     depends_on:
+      srv-cnm-services:
+        condition: service_started
       srv-csa-services:
         condition: service_started

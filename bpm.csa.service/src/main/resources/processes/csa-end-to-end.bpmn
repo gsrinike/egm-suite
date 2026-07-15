@@ -6,7 +6,7 @@
                   xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
                   id="Definitions_Csa"
                   targetNamespace="http://egm.eu/bpm/csa">
-  <bpmn:process id="csa-end-to-end" name="CSA End-to-End Workflow" isExecutable="true">
+  <bpmn:process id="csa-end-to-end" name="CSA End-to-End Workflow" isExecutable="true" camunda:historyTimeToLive="180">
     <bpmn:startEvent id="StartEvent_Csa" name="CSA case accepted">
       <bpmn:outgoing>Flow_Start_Init</bpmn:outgoing>
     </bpmn:startEvent>

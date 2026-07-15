@@ -11,6 +11,19 @@
   --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
+body.light-theme {
+  --bg-base: #F8FAFC;
+  --bg-sidebar: #E2E8F0;
+  --bg-card: #FFFFFF;
+  --border-color: #CBD5E1;
+  --primary: #0076FF;
+  --accent: #8B5CF6;
+  --text-main: #0F172A;
+  --text-muted: #475569;
+  --button-text: #FFFFFF;
+  --shadow-card: 0 8px 32px 0 rgba(148, 163, 184, 0.15);
+}
+
 body {
   background:
     radial-gradient(circle at 12% 10%, rgba(0, 242, 254, 0.14), transparent 30%),
@@ -18,6 +31,10 @@ body {
     var(--bg-base);
   color: var(--text-main);
   margin: 0;
+}
+
+body.light-theme {
+  background: var(--bg-base);
 }
 
 input,
@@ -49,7 +66,7 @@ button {
   align-self: start;
   background: var(--bg-sidebar);
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding: 16px;
   position: sticky;
   top: 18px;
@@ -76,6 +93,12 @@ button {
   font-size: 22px;
 }
 
+.navigation,
+.nav-group {
+  display: grid;
+  gap: 8px;
+}
+
 .nav-button {
   background: transparent;
   border: 1px solid var(--border-color);
@@ -85,6 +108,11 @@ button {
   min-height: 40px;
   text-align: left;
   padding: 0 12px;
+}
+
+.sub-nav-button {
+  margin-left: 14px;
+  min-height: 36px;
 }
 
 .nav-button.active {
@@ -113,6 +141,22 @@ button {
 
 .hero h1 {
   margin: 4px 0 0;
+}
+
+.hero-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.theme-toggle {
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .panel {
@@ -163,6 +207,10 @@ button {
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
+}
+
+.cnm-embed {
+  min-width: 0;
 }
 
 .muted {

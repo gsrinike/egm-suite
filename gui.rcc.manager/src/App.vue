@@ -5,27 +5,49 @@
         <span>RCC Manager</span>
         <strong>Operational Services</strong>
       </div>
-      <button
-        v-for="item in navigation"
-        :key="item.id"
-        class="nav-button"
-        :class="{ active: activeView === item.id }"
-        type="button"
-        :disabled="item.disabled"
-        @click="activeView = item.id"
-      >
-        {{ item.label }}
-      </button>
+      <nav class="navigation" aria-label="RCC capabilities">
+        <div v-for="group in navigation" :key="group.id" class="nav-group">
+          <button
+            class="nav-button"
+            :class="{ active: activeView === group.id }"
+            type="button"
+            :disabled="group.disabled || Boolean(group.children?.length)"
+            @click="selectView(group.id)"
+          >
+            {{ group.label }}
+          </button>
+          <button
+            v-for="child in group.children ?? []"
+            :key="child.id"
+            class="nav-button sub-nav-button"
+            :class="{ active: activeView === child.id }"
+            type="button"
+            :disabled="child.disabled"
+            @click="selectView(child.id)"
+          >
+            {{ child.label }}
+          </button>
+        </div>
+      </nav>
     </aside>
 
     <section class="workspace">
       <header class="hero">
         <div>
-          <p>Coordinated Security Analysis</p>
+          <p>{{ activeCapability }}</p>
           <h1>{{ activeTitle }}</h1>
         </div>
-        <Button :disabled="busy" @click="refresh">Refresh</Button>
+        <div class="hero-actions">
+          <button class="theme-toggle" type="button" @click="toggleTheme">
+            {{ lightTheme ? 'Dark' : 'Light' }}
+          </button>
+          <Button v-if="activeView !== 'cgm-import'" :disabled="busy" @click="refresh">Refresh</Button>
+        </div>
       </header>
+
+      <section v-if="activeView === 'cgm-import'" class="cnm-embed">
+        <CnmManagerView embedded />
+      </section>
 
       <section v-if="activeView === 'csa'" class="panel">
         <h2>CSA Case Setup</h2>
@@ -69,7 +91,7 @@
         <DataTable :columns="caseColumns" :rows="caseRows" id-key="csaCaseId" />
       </section>
 
-      <section v-if="activeView !== 'csa' && activeView !== 'workflow'" class="panel muted">
+      <section v-if="!['cgm-import', 'csa', 'workflow'].includes(activeView)" class="panel muted">
         <h2>{{ activeTitle }}</h2>
         <p>This capability is reserved for a later RCC increment.</p>
       </section>
@@ -80,13 +102,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Button, DataTable } from '@egm/gui.common/src';
+import CnmManagerView from '@egm/gui.cnm.manager/src/components/CnmManagerView.vue';
 import { listCsaCases, startCsaCase, type CsaCaseStatus } from './services/csaApi';
 
-const activeView = ref('csa');
+const activeView = ref('cgm-import');
 const busy = ref(false);
 const message = ref('');
 const cases = ref<CsaCaseStatus[]>([]);
 const selectedCase = ref<CsaCaseStatus>();
+const lightTheme = ref(false);
 const caseName = ref('Day-ahead CSA');
 const networkId = ref('sample-network');
 const businessDay = ref(new Date().toISOString().slice(0, 10));
@@ -95,7 +119,8 @@ const timeFrame = ref<'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD'>('DAY_AHEAD');
 const contingencies = ref('N-1-LINE-1,N-1-GEN-2');
 const optimizeRemedialActions = ref(true);
 
-const navigation = [
+const navigation: NavigationItem[] = [
+  { id: 'cgm', label: 'CGM', children: [{ id: 'cgm-import', label: 'Import Manager' }] },
   { id: 'csa', label: 'CSA' },
   { id: 'cc', label: 'CC', disabled: true },
   { id: 'opc', label: 'OPC', disabled: true },
@@ -103,13 +128,22 @@ const navigation = [
 ];
 
 const titles: Record<string, string> = {
+  'cgm-import': 'Import Manager',
   csa: 'CSA Workspace',
+  cc: 'Capacity Calculation',
+  opc: 'Operational Planning Coordination',
+  workflow: 'Workflow Monitor'
+};
+const capabilities: Record<string, string> = {
+  'cgm-import': 'Common Grid Model',
+  csa: 'Coordinated Security Analysis',
   cc: 'Capacity Calculation',
   opc: 'Operational Planning Coordination',
   workflow: 'Workflow Monitor'
 };
 
 const activeTitle = computed(() => titles[activeView.value] ?? 'RCC');
+const activeCapability = computed(() => capabilities[activeView.value] ?? 'RCC');
 const caseRows = computed(() => cases.value.map((item) => ({
   csaCaseId: item.csaCaseId,
   caseName: item.caseName,
@@ -149,6 +183,22 @@ const actionColumns = [
 ];
 
 onMounted(refresh);
+
+interface NavigationItem {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  children?: NavigationItem[];
+}
+
+function selectView(view: string) {
+  activeView.value = view;
+}
+
+function toggleTheme() {
+  lightTheme.value = !lightTheme.value;
+  document.body.classList.toggle('light-theme', lightTheme.value);
+}
 
 async function startCase() {
   busy.value = true;

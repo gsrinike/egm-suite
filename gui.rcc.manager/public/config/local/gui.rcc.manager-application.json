@@ -1,0 +1,7 @@
+{
+  "environment": "local",
+  "apis": {
+    "csaBaseUrl": "",
+    "cnmBaseUrl": ""
+  }
+}

@@ -52,11 +52,11 @@ export interface ImportPage {
   size: number;
 }
 
-const baseUrl = import.meta.env.VITE_CNM_API_BASE_URL ?? '';
 const CHUNK_SIZE = 8 * 1024 * 1024;
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 
 export async function listImports(): Promise<ImportPage> {
+  const baseUrl = cnmBaseUrl();
   const response = await fetch(`${baseUrl}/api/cnm/imports?page=0&size=50`);
   if (!response.ok) {
     throw new Error(`Unable to load imports: ${response.status}`);
@@ -65,6 +65,7 @@ export async function listImports(): Promise<ImportPage> {
 }
 
 export async function getImport(importId: string): Promise<ImportStatus> {
+  const baseUrl = cnmBaseUrl();
   const response = await fetch(`${baseUrl}/api/cnm/imports/${encodeURIComponent(importId)}`);
   if (!response.ok) {
     throw new Error(`Unable to load import files: ${response.status}`);
@@ -79,6 +80,7 @@ export async function uploadImport(
   message: string,
   importId = crypto.randomUUID()
 ): Promise<ImportStatus> {
+  const baseUrl = cnmBaseUrl();
   try {
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
@@ -128,6 +130,7 @@ export async function listProfiles(filters: {
   businessDay?: string;
   businessTime?: string;
 }): Promise<{ items: ProfileMetadata[]; total: number; page: number; size: number }> {
+  const baseUrl = cnmBaseUrl();
   const params = new URLSearchParams({ page: '0', size: '100' });
   Object.entries(filters).forEach(([key, value]) => {
     if (value) {
@@ -148,6 +151,7 @@ export async function reportImportFailure(
   timeFrame: TimeFrame,
   message: string
 ): Promise<ImportStatus | undefined> {
+  const baseUrl = cnmBaseUrl();
   try {
     const response = await fetch(`${baseUrl}/api/cnm/imports/failures`, {
       method: 'POST',
@@ -170,4 +174,8 @@ export class ImportUploadError extends Error {
   constructor(message: string, readonly importId: string) {
     super(message);
   }
+}
+
+function cnmBaseUrl() {
+  return window.EGM_CONFIG?.apis?.cnmBaseUrl ?? import.meta.env.VITE_CNM_API_BASE_URL ?? '';
 }

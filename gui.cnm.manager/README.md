@@ -28,4 +28,9 @@ npm install
 npm run dev
 ```
 
+Runtime API URLs are loaded before the Vue app mounts. Defaults live in
+`public/config/base/gui.cnm.manager-application.json`; environment overrides
+live in `public/config/<env>/gui.cnm.manager-application.json`, where `<env>`
+defaults to `local` and can be changed through `VITE_APP_ENV`.
+
 The Vite dev server proxies `/api` to `http://localhost:8084` by default.

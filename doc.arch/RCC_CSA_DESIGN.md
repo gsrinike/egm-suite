@@ -111,7 +111,28 @@ sequenceDiagram
     CSA-->>GUI: CsaCaseStatus detail
 ```
 
-The first GUI increment exposes CSA and Workflow Monitor as active navigation items. CC and OPC remain disabled placeholders until their service modules are introduced.
+## CGM Import Manager Entry
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant RCC as gui.rcc.manager
+    participant CNM as gui.cnm.manager component
+    participant API as srv.cnm.services
+
+    User->>RCC: Select CGM / Import Manager
+    RCC->>CNM: Render CnmManagerView
+    CNM->>API: GET /api/cnm/imports
+    API-->>CNM: ImportStatus page
+    User->>CNM: Upload RDF/XML or ZIP files
+    CNM->>API: POST /api/cnm/imports/chunks
+    CNM->>API: POST /api/cnm/imports/chunks/complete
+    API-->>CNM: ImportStatus
+```
+
+The RCC GUI exposes CGM above CSA, CC, and OPC. The CGM / Import Manager entry embeds the CNM manager screens and preserves the existing CNM backend integration. Runtime frontend configuration keeps the CSA and CNM API base URLs separate so each environment can route `/api/csa/**` and `/api/cnm/**` independently.
+
+CSA and Workflow Monitor remain active RCC items. CC and OPC remain disabled placeholders until their service modules are introduced.
 
 ## Local Ports
 
