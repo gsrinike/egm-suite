@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: srv.common.rao
+server:
+  port: ${RAO_SERVICES_PORT:8093}
+springdoc:
+  swagger-ui:
+    url: /openapi/rao-services.yaml

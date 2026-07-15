@@ -4,11 +4,20 @@ modules:
   - egm-dependencies
   - com.utils
   - data.cnm
+  - data.common
   - com.mapping
   - com.infra
   - com.auth
   - com.vault
   - srv.cnm.services
+  - srv.common.lfsa
+  - mock.srv.common.lfsa
+  - srv.common.rao
+  - mock.srv.common.rao
+  - srv.csa.services
+  - mock.srv.csa.services
+  - bpm.csa.service
   - mock.srv.cnm.services
   - gui.common
   - gui.cnm.manager
+  - gui.rcc.manager

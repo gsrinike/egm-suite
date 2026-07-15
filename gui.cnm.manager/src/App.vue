@@ -33,7 +33,7 @@
 
     <section v-if="activeView === 'profiles'" class="profile-filters glass-panel">
       <label>Profile type<input v-model="profileFilters.profileType" placeholder="EQ, SV, SSH..." /></label>
-      <label>TSO<input v-model="profileFilters.tso" placeholder="TSCNET-EU" /></label>
+      <label>TSO<input v-model="profileFilters.tso" placeholder="TSO-XYZ" /></label>
       <label>Business day<input v-model="profileFilters.businessDay" type="date" /></label>
       <label>Business time<input v-model="profileFilters.businessTime" type="time" /></label>
       <Button :disabled="busy" @click="refreshProfiles">Search</Button>

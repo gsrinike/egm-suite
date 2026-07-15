@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: CSA Services API
+  version: 0.1.0
+paths:
+  /api/csa/cases:
+    post:
+      summary: Start a CSA case workflow
+      responses:
+        '200': { description: CSA case status }
+    get:
+      summary: List CSA cases
+      responses:
+        '200': { description: Paged CSA case statuses }
+  /api/csa/cases/{csaCaseId}:
+    get:
+      summary: Get one CSA case
+      responses:
+        '200': { description: CSA case status }

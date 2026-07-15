@@ -1,6 +1,6 @@
 # Energy Grid Management Suite
 
-Open-source baseline for shared Energy Grid Management platform capabilities. The current repository contains reusable utility, mapping, infrastructure, authentication, and vault modules plus the first Common Network Model (CNM) import application modules.
+Open-source baseline for shared Energy Grid Management platform capabilities. The current repository contains reusable utility, mapping, infrastructure, authentication, and vault modules plus CNM import and RCC/CSA workflow application modules.
 
 ## Module Map
 
@@ -12,10 +12,19 @@ This README is the suite entry point. Detailed behavior belongs in each module R
 - `com.auth`: OIDC/OAuth 2.0 authorization service backed by Keycloak.
 - `com.vault`: HashiCorp Vault and fallback secret lookup with bootstrap authorization checks.
 - `data.cnm`: DTOs exchanged by CNM GUI, service, and mock modules for CGMES, NCP, and IIDM metadata.
+- `data.common`: DTOs exchanged by RCC workflow, CSA, LF/SA, RAO, GUI, BPM, and mock modules.
 - `srv.cnm.services`: Spring Boot REST service for CNM RDF import and import status retrieval.
 - `mock.srv.cnm.services`: mock Spring Boot service compatible with the CNM import OpenAPI contract.
+- `srv.common.lfsa`: Spring Boot REST service for reusable load-flow and security-analysis capability.
+- `mock.srv.common.lfsa`: mock LF/SA service compatible with the common LF/SA OpenAPI contract.
+- `srv.common.rao`: Spring Boot REST service for reusable remedial-action optimization capability.
+- `mock.srv.common.rao`: mock RAO service compatible with the common RAO OpenAPI contract.
+- `srv.csa.services`: Spring Boot REST service that coordinates CSA case workflow and invokes common LF/SA, RAO, and BPM services.
+- `mock.srv.csa.services`: mock CSA service compatible with the CSA OpenAPI contract.
+- `bpm.csa.service`: Camunda-backed CSA workflow process service exposed through generic BPM REST endpoints.
 - `gui.common`: Vue shared component and styling module for standard buttons, links, menus, dropdowns, and data tables.
 - `gui.cnm.manager`: Vue CNM manager application for importing RDF models and viewing upload status.
+- `gui.rcc.manager`: Vue RCC manager application focused on CSA execution and workflow monitoring.
 - `doc.arch`: architecture notes, local deployment details, module classification, and the module archetype.
 
 ## Build Metadata
@@ -36,6 +45,13 @@ Run the CNM service:
 
 ```bash
 mvn -pl srv.cnm.services -am spring-boot:run
+```
+
+Run the CSA mock backend and GUI during frontend development:
+
+```bash
+mvn -pl mock.srv.csa.services -am spring-boot:run
+cd gui.rcc.manager && npm run dev
 ```
 
 ## Common Builds
@@ -67,6 +83,7 @@ docker compose -f docker/docker-compose.yml up
 - Mapping implementation details: `com.mapping/README.md`.
 - Vault configuration and authorized secret resolution: `com.vault/README.md`.
 - CNM import application details: `data.cnm/README.md`, `srv.cnm.services/README.md`, `mock.srv.cnm.services/README.md`, `gui.common/README.md`, and `gui.cnm.manager/README.md`.
+- RCC/CSA application details: `data.common/README.md`, `srv.common.lfsa/README.md`, `srv.common.rao/README.md`, `srv.csa.services/README.md`, `bpm.csa.service/README.md`, `mock.srv.csa.services/README.md`, and `gui.rcc.manager/README.md`.
 - Local deployment, environment rules, and architecture guidance: `doc.arch/README.md` and the documents under `doc.arch`.
 
 ## Tests

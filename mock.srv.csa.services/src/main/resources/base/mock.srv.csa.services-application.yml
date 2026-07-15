@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: mock.srv.csa.services
+server:
+  port: ${MOCK_CSA_SERVICES_PORT:8096}
+springdoc:
+  swagger-ui:
+    url: /openapi/csa-services.yaml

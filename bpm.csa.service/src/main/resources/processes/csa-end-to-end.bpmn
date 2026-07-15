@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  id="Definitions_Csa"
+                  targetNamespace="http://egm.eu/bpm/csa">
+  <bpmn:process id="csa-end-to-end" name="CSA End-to-End Workflow" isExecutable="true">
+    <bpmn:startEvent id="StartEvent_Csa" name="CSA case accepted">
+      <bpmn:outgoing>Flow_Start_Init</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Init" name="Initialize CSA case" camunda:candidateGroups="csa-operators">
+      <bpmn:incoming>Flow_Start_Init</bpmn:incoming>
+      <bpmn:outgoing>Flow_Init_Lfsa</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_Lfsa" name="Run Load Flow and Security Analysis" camunda:candidateGroups="csa-operators">
+      <bpmn:incoming>Flow_Init_Lfsa</bpmn:incoming>
+      <bpmn:outgoing>Flow_Lfsa_Gateway</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_Violations" name="Violations detected?">
+      <bpmn:incoming>Flow_Lfsa_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Gateway_Rao</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Gateway_Final</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_Rao" name="Optimize remedial actions" camunda:candidateGroups="csa-operators">
+      <bpmn:incoming>Flow_Gateway_Rao</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rao_Validate</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_Validate" name="Validate CSA outcome" camunda:candidateGroups="csa-operators">
+      <bpmn:incoming>Flow_Rao_Validate</bpmn:incoming>
+      <bpmn:incoming>Flow_Gateway_Final</bpmn:incoming>
+      <bpmn:outgoing>Flow_Validate_End</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="EndEvent_Csa" name="CSA completed">
+      <bpmn:incoming>Flow_Validate_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Init" sourceRef="StartEvent_Csa" targetRef="Task_Init" />
+    <bpmn:sequenceFlow id="Flow_Init_Lfsa" sourceRef="Task_Init" targetRef="Task_Lfsa" />
+    <bpmn:sequenceFlow id="Flow_Lfsa_Gateway" sourceRef="Task_Lfsa" targetRef="Gateway_Violations" />
+    <bpmn:sequenceFlow id="Flow_Gateway_Rao" sourceRef="Gateway_Violations" targetRef="Task_Rao">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${violationsDetected == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Gateway_Final" sourceRef="Gateway_Violations" targetRef="Task_Validate">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${violationsDetected != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rao_Validate" sourceRef="Task_Rao" targetRef="Task_Validate" />
+    <bpmn:sequenceFlow id="Flow_Validate_End" sourceRef="Task_Validate" targetRef="EndEvent_Csa" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Csa">
+    <bpmndi:BPMNPlane id="BPMNPlane_Csa" bpmnElement="csa-end-to-end">
+      <bpmndi:BPMNShape id="StartEvent_Csa_di" bpmnElement="StartEvent_Csa"><dc:Bounds x="160" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Init_di" bpmnElement="Task_Init"><dc:Bounds x="240" y="98" width="140" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Lfsa_di" bpmnElement="Task_Lfsa"><dc:Bounds x="420" y="98" width="170" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Violations_di" bpmnElement="Gateway_Violations" isMarkerVisible="true"><dc:Bounds x="640" y="113" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Rao_di" bpmnElement="Task_Rao"><dc:Bounds x="740" y="40" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate"><dc:Bounds x="960" y="98" width="160" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Csa_di" bpmnElement="EndEvent_Csa"><dc:Bounds x="1170" y="120" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Init_di" bpmnElement="Flow_Start_Init"><di:waypoint x="196" y="138" /><di:waypoint x="240" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Init_Lfsa_di" bpmnElement="Flow_Init_Lfsa"><di:waypoint x="380" y="138" /><di:waypoint x="420" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Lfsa_Gateway_di" bpmnElement="Flow_Lfsa_Gateway"><di:waypoint x="590" y="138" /><di:waypoint x="640" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Gateway_Rao_di" bpmnElement="Flow_Gateway_Rao"><di:waypoint x="665" y="113" /><di:waypoint x="665" y="80" /><di:waypoint x="740" y="80" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Gateway_Final_di" bpmnElement="Flow_Gateway_Final"><di:waypoint x="690" y="138" /><di:waypoint x="960" y="138" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Rao_Validate_di" bpmnElement="Flow_Rao_Validate"><di:waypoint x="900" y="80" /><di:waypoint x="1040" y="80" /><di:waypoint x="1040" y="98" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Validate_End_di" bpmnElement="Flow_Validate_End"><di:waypoint x="1120" y="138" /><di:waypoint x="1170" y="138" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

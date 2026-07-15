@@ -154,3 +154,34 @@ The `srv.cnm.services` Dockerfile uses a Maven builder stage and packages the
 service from the current source tree. It must not copy a potentially stale
 local `target` JAR. Service startup validates the loaded CNM persistence record
 timestamp component types.
+
+## ADR 022: RCC CSA Uses Common Analysis Services
+
+RCC CSA is introduced as a separate module family instead of extending CNM
+business logic. CNM remains responsible for network model import; CSA consumes
+network case references and coordinates analysis workflow.
+
+The active RCC/CSA module family is:
+
+- `data.common`
+- `srv.common.lfsa`
+- `mock.srv.common.lfsa`
+- `srv.common.rao`
+- `mock.srv.common.rao`
+- `srv.csa.services`
+- `mock.srv.csa.services`
+- `bpm.csa.service`
+- `gui.rcc.manager`
+
+Load flow and security analysis live in `srv.common.lfsa`; remedial-action
+optimization lives in `srv.common.rao`. These services are common because CSA,
+capacity calculation, and operational planning workflows can reuse them.
+
+`srv.csa.services` must not depend directly on `bpm.csa.service`. It starts and
+observes process instances through `com.infra.bpm` contracts or remote BPM REST
+endpoints. `bpm.csa.service` owns the Camunda process definition for
+`csa-end-to-end`.
+
+`gui.rcc.manager` focuses on CSA execution and workflow monitoring. Other RCC
+capabilities such as CC and OPC may appear in navigation as disabled placeholders
+until their service modules are introduced.

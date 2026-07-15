@@ -204,7 +204,7 @@ business time values are reconstructed from the filename.
 
 Filename metadata is authoritative for profile type, TSO, timeframe, version,
 business day, and business time. For example,
-`20241202T2330Z_1D_TSCNET-EU_SV_002.xml` is stored as profile `SV`, business day
+`20241202T2330Z_1D_TSO-XYZ_SV_002.xml` is stored as profile `SV`, business day
 `2024-12-02`, and business time `23:30`.
 
 After successful object storage, the service stores profile metadata in the

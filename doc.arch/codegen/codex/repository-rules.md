@@ -7,14 +7,23 @@ The active Maven reactor contains only these modules:
 - `egm-dependencies`
 - `com.utils`
 - `data.cnm`
+- `data.common`
 - `com.mapping`
 - `com.infra`
 - `com.auth`
 - `com.vault`
 - `srv.cnm.services`
+- `srv.common.lfsa`
+- `mock.srv.common.lfsa`
+- `srv.common.rao`
+- `mock.srv.common.rao`
+- `srv.csa.services`
+- `mock.srv.csa.services`
+- `bpm.csa.service`
 - `mock.srv.cnm.services`
 - `gui.common`
 - `gui.cnm.manager`
+- `gui.rcc.manager`
 
 Keep `pom.xml` and `modules.yml` synchronized whenever modules are added or removed.
 
@@ -44,6 +53,18 @@ CNM modules own Common Network Model application behavior:
 - `gui.common`: reusable Vue components and styling.
 - `gui.cnm.manager`: Vue CNM manager application.
 
+RCC and common analysis modules own CSA workflow behavior and reusable analysis capabilities:
+
+- `data.common`: transport DTOs shared by RCC, CSA, LF/SA, RAO, BPM, GUI, and mock modules.
+- `srv.common.lfsa`: reusable load-flow and security-analysis REST service.
+- `mock.srv.common.lfsa`: mock REST service aligned with the common LF/SA OpenAPI contract.
+- `srv.common.rao`: reusable remedial-action optimization REST service.
+- `mock.srv.common.rao`: mock REST service aligned with the common RAO OpenAPI contract.
+- `srv.csa.services`: CSA REST service that coordinates CSA cases, invokes common LF/SA and RAO services, and starts BPM through `com.infra` BPM contracts.
+- `mock.srv.csa.services`: mock REST service aligned with the CSA OpenAPI contract.
+- `bpm.csa.service`: Camunda-backed CSA workflow process module exposed through process-neutral BPM REST endpoints.
+- `gui.rcc.manager`: Vue RCC manager focused on CSA execution and workflow monitoring.
+
 ## Dependency Direction
 
 - Shared modules should expose stable contracts and hide implementation details behind adapters or factories.
@@ -52,8 +73,13 @@ CNM modules own Common Network Model application behavior:
 - `com.infra` owns technology-specific dependencies such as Elasticsearch, MinIO, RabbitMQ, and Camunda.
 - Service modules added in the future should depend on shared contracts and call external process runtimes over interfaces or HTTP, not by importing BPM process modules.
 - `srv.cnm.services` depends on `data.cnm`, `com.utils`, and `com.infra`; it should not import GUI or mock modules.
+- `srv.csa.services` depends on `data.common`, `com.utils`, and `com.infra`; it should not import GUI, mock, or BPM process modules.
+- `srv.common.lfsa` and `srv.common.rao` depend on `data.common` and shared `com.*` utilities, not on CSA-specific modules.
+- `bpm.csa.service` may depend on `com.infra` BPM adapters and `data.common`; service modules invoke it remotely or through `com.infra.bpm` interfaces.
 - `gui.cnm.manager` depends on `gui.common` and calls CNM REST APIs through HTTP.
+- `gui.rcc.manager` depends on `gui.common` and calls CSA REST APIs through HTTP.
 - `data.cnm` should not depend on Spring, PowSyBl, Elasticsearch, MinIO, or RabbitMQ.
+- `data.common` should not depend on Spring, Camunda, Elasticsearch, MinIO, RabbitMQ, or grid-engine implementations.
 - Do not add dependencies to `egm-dependencies/pom.xml` unless at least one active module directly needs them.
 
 ## Configuration Rules
@@ -118,6 +144,7 @@ Remote BPM paths and tests should remain process-neutral in `com.infra`; concret
 - Each active module should own a `README.md` explaining purpose, contents, implementation notes, and developer commands.
 - Root `README.md` should describe the current active module map only.
 - CNM design details belong in `doc.arch/CNM_IMPORT_DESIGN.md` and module READMEs.
+- RCC CSA design details belong in `doc.arch/RCC_CSA_DESIGN.md` and module READMEs.
 
 ## Verification Rules
 

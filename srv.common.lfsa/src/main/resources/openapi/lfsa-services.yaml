@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: Common LF/SA Services API
+  version: 0.1.0
+paths:
+  /api/common/lfsa/load-flow:
+    post:
+      summary: Run load flow
+      responses:
+        '200': { description: Load-flow result }
+  /api/common/lfsa/security-analysis:
+    post:
+      summary: Run security analysis
+      responses:
+        '200': { description: Security-analysis result }

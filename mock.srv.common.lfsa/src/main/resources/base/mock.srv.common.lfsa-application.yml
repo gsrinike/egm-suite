@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: mock.srv.common.lfsa
+server:
+  port: ${MOCK_LFSA_SERVICES_PORT:8092}
+springdoc:
+  swagger-ui:
+    url: /openapi/lfsa-services.yaml

@@ -22,7 +22,7 @@ Rules:
 
 ## CNM Application Modules
 
-`cnm` modules implement the Common Network Model application surface for CGMES/NCP based import and future CGM, CSA, and CC workflows.
+`cnm` modules implement the Common Network Model application surface for CGMES/NCP based import.
 
 Current modules:
 
@@ -39,10 +39,38 @@ Rules:
 - `mock.srv.cnm.services` follows the REST contract and must not own production infrastructure behavior.
 - `data.cnm` remains transport-focused and does not depend on Spring, PowSyBl, Elasticsearch, MinIO, or RabbitMQ.
 
+## RCC And Common Analysis Modules
+
+`rcc` and CSA modules implement the Regional Coordination Centre workflow surface. Load flow, security analysis, and remedial-action optimization are common service capabilities because they are reused by CSA, capacity calculation, and operational planning workflows.
+
+Current modules:
+
+- `data.common`: transport DTOs shared by RCC, CSA, LF/SA, RAO, BPM, GUI, and mock modules. See [README](../data.common/README.md).
+- `srv.common.lfsa`: Spring Boot REST service for load-flow and security-analysis execution. See [README](../srv.common.lfsa/README.md).
+- `mock.srv.common.lfsa`: mock REST service aligned with the common LF/SA OpenAPI contract. See [README](../mock.srv.common.lfsa/README.md).
+- `srv.common.rao`: Spring Boot REST service for remedial-action optimization execution. See [README](../srv.common.rao/README.md).
+- `mock.srv.common.rao`: mock REST service aligned with the common RAO OpenAPI contract. See [README](../mock.srv.common.rao/README.md).
+- `srv.csa.services`: Spring Boot REST service that starts CSA cases, invokes common LF/SA and RAO services, and delegates process start to BPM through `com.infra` BPM contracts. See [README](../srv.csa.services/README.md).
+- `mock.srv.csa.services`: mock REST service aligned with the CSA OpenAPI contract. See [README](../mock.srv.csa.services/README.md).
+- `bpm.csa.service`: Camunda-backed CSA process module exposed through process-neutral BPM REST endpoints. See [README](../bpm.csa.service/README.md).
+- `gui.rcc.manager`: Vue RCC manager focused on CSA execution and workflow monitoring. See [README](../gui.rcc.manager/README.md).
+
+Rules:
+
+- CSA service modules must not depend directly on `bpm.csa.service`; they use `com.infra.bpm` interfaces or remote BPM REST endpoints.
+- LF/SA and RAO service contracts stay outside CSA so CSA, CC, and OPC can share them.
+- Mock modules mirror OpenAPI shapes and avoid production infrastructure ownership.
+- `data.common` remains transport-focused and does not depend on Spring, Camunda, Elasticsearch, or grid-engine implementations.
+
 ## Naming Examples
 
 - Common capability: `com.audit`
 - CNM application module: `srv.cnm.services`
 - CNM GUI module: `gui.cnm.manager`
+- RCC common data module: `data.common`
+- Common service module: `srv.common.lfsa`
+- CSA service module: `srv.csa.services`
+- CSA process module: `bpm.csa.service`
+- RCC GUI module: `gui.rcc.manager`
 
 All Maven modules use group id `eu.egm`.

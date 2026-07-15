@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: Mock Common RAO Services API
+  version: 0.1.0
+paths:
+  /api/common/rao/optimize:
+    post:
+      summary: Optimize mocked remedial actions
+      responses:
+        '200': { description: Mock RAO result }

@@ -49,9 +49,9 @@ class CnmImportRestServiceTest {
                 "cnm-rdf-models",
                 "cnm.events",
                 "cnm.import.completed");
-        byte[] innerZip = zip("20241202T2330Z_1D_TSCNET-EU_SV_002.xml", rdf("StateVariables"));
+        byte[] innerZip = zip("20241202T2330Z_1D_TSO-XYZ_SV_002.xml", rdf("StateVariables"));
         byte[] outerZip = zip(
-                new ZipItem("models/CGM/20241202T2330Z_1D_TSCNET-EU_SV_002.zip", innerZip),
+                new ZipItem("models/CGM/20241202T2330Z_1D_TSO-XYZ_SV_002.zip", innerZip),
                 new ZipItem("models/IGM/20241202T2330Z_1D_RTEFRANCE_EQ_000.xml", rdf("Equipment")),
                 new ZipItem("__MACOSX/models/._ignored.xml", rdf("Ignored")));
         MockMultipartFile upload = new MockMultipartFile("file", "models.zip", "application/zip", outerZip);
@@ -73,11 +73,11 @@ class CnmImportRestServiceTest {
                 .extracting(file -> file.fileName())
                 .containsExactly(
                         "20241202T2330Z_1D_RTEFRANCE_EQ_000.xml",
-                        "20241202T2330Z_1D_TSCNET-EU_SV_002.xml");
+                        "20241202T2330Z_1D_TSO-XYZ_SV_002.xml");
         assertThat(status.files().get(1).businessDay()).isEqualTo("2024-12-02");
         assertThat(status.files().get(1).businessTime()).isEqualTo("23:30");
         assertThat(status.files().get(1).modelTimeFrame()).isEqualTo("1D");
-        assertThat(status.files().get(1).tsoName()).isEqualTo("TSCNET-EU");
+        assertThat(status.files().get(1).tsoName()).isEqualTo("TSO-XYZ");
         assertThat(status.files().get(1).profileType()).isEqualTo("SV");
         assertThat(status.files().get(1).modelVersion()).isEqualTo("002");
         assertThat(status.files().get(1).profileFamily()).isEqualTo(ProfileFamily.SV);
@@ -89,7 +89,7 @@ class CnmImportRestServiceTest {
                 .orElseThrow();
         assertThat(svProfile.state()).isEqualTo(ImportFileState.PARSED);
         assertThat(svProfile.profileFamily()).isEqualTo(ProfileFamily.SV);
-        assertThat(svProfile.tsoName()).isEqualTo("TSCNET-EU");
+        assertThat(svProfile.tsoName()).isEqualTo("TSO-XYZ");
         assertThat(svProfile.timeFrame()).isEqualTo("1D");
         assertThat(svProfile.version()).isEqualTo("002");
     }
@@ -118,7 +118,7 @@ class CnmImportRestServiceTest {
 
         MockMultipartFile retry = new MockMultipartFile(
                 "file",
-                "20241202T2330Z_1D_TSCNET-EU_SV_002.xml",
+                "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
                 "application/xml",
                 rdf("StateVariables"));
         ImportStatus completed = service.importModels(
@@ -152,7 +152,7 @@ class CnmImportRestServiceTest {
                 "cnm.import.completed");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
-                "20241202T2330Z_1D_TSCNET-EU_SV_002.xml",
+                "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
                 "application/xml",
                 rdf("StateVariables"));
         ImportStatus imported = service.importModels(List.of(upload), CnmServiceType.CGM, TimeFrame.DAY_AHEAD);
@@ -209,7 +209,7 @@ class CnmImportRestServiceTest {
                 ImportState.STORED,
                 List.of(new CnmImportDocument.CnmImportFileDocument(
                         "legacy-file",
-                        "20241202T2330Z_1D_TSCNET-EU_SV_002.xml",
+                        "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
                         "legacy-import/model.xml",
                         ImportFileState.PARSED,
                         null,
@@ -233,7 +233,7 @@ class CnmImportRestServiceTest {
             assertThat(file.businessDay()).isEqualTo("2024-12-02");
             assertThat(file.businessTime()).isEqualTo("23:30");
             assertThat(file.modelTimeFrame()).isEqualTo("1D");
-            assertThat(file.tsoName()).isEqualTo("TSCNET-EU");
+            assertThat(file.tsoName()).isEqualTo("TSO-XYZ");
             assertThat(file.profileType()).isEqualTo("SV");
             assertThat(file.profileFamily()).isEqualTo(ProfileFamily.SV);
         });

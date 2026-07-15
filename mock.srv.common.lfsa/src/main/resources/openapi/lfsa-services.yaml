@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: Mock Common LF/SA Services API
+  version: 0.1.0
+paths:
+  /api/common/lfsa/load-flow:
+    post:
+      summary: Run mocked load flow
+      responses:
+        '200': { description: Mock load-flow result }
+  /api/common/lfsa/security-analysis:
+    post:
+      summary: Run mocked security analysis
+      responses:
+        '200': { description: Mock security-analysis result }

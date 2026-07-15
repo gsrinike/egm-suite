@@ -215,7 +215,7 @@ public class MockCnmImportController {
                 "2024-12-02",
                 "23:30",
                 "1D",
-                "TSCNET-EU",
+                "TSO-XYZ",
                 "SV",
                 "002",
                 List.of(profile),

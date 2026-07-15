@@ -103,6 +103,97 @@ services:
     ports:
       - "8084:8084"
 
+  srv-common-lfsa:
+    build:
+      context: ..
+      dockerfile: srv.common.lfsa/Dockerfile
+    environment:
+      ENV: local
+      LFSA_SERVICES_PORT: 8091
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8091:8091"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  mock-srv-common-lfsa:
+    build:
+      context: ..
+      dockerfile: mock.srv.common.lfsa/Dockerfile
+    environment:
+      ENV: local
+      MOCK_LFSA_SERVICES_PORT: 8092
+    ports:
+      - "8092:8092"
+
+  srv-common-rao:
+    build:
+      context: ..
+      dockerfile: srv.common.rao/Dockerfile
+    environment:
+      ENV: local
+      RAO_SERVICES_PORT: 8093
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8093:8093"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  mock-srv-common-rao:
+    build:
+      context: ..
+      dockerfile: mock.srv.common.rao/Dockerfile
+    environment:
+      ENV: local
+      MOCK_RAO_SERVICES_PORT: 8094
+    ports:
+      - "8094:8094"
+
+  bpm-csa-service:
+    build:
+      context: ..
+      dockerfile: bpm.csa.service/Dockerfile
+    environment:
+      ENV: local
+      CSA_BPM_PORT: 8097
+    ports:
+      - "8097:8097"
+
+  srv-csa-services:
+    build:
+      context: ..
+      dockerfile: srv.csa.services/Dockerfile
+    environment:
+      ENV: local
+      CSA_SERVICES_PORT: 8095
+      LFSA_BASE_URL: http://srv-common-lfsa:8091
+      RAO_BASE_URL: http://srv-common-rao:8093
+      CSA_BPM_BASE_URL: http://bpm-csa-service:8097
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8095:8095"
+    depends_on:
+      srv-common-lfsa:
+        condition: service_started
+      srv-common-rao:
+        condition: service_started
+      bpm-csa-service:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
+  mock-srv-csa-services:
+    build:
+      context: ..
+      dockerfile: mock.srv.csa.services/Dockerfile
+    environment:
+      ENV: local
+      MOCK_CSA_SERVICES_PORT: 8096
+    ports:
+      - "8096:8096"
+
   gui-cnm-manager:
     build:
       context: ..
@@ -111,4 +202,14 @@ services:
       - "5173:80"
     depends_on:
       srv-cnm-services:
+        condition: service_started
+
+  gui-rcc-manager:
+    build:
+      context: ..
+      dockerfile: gui.rcc.manager/Dockerfile
+    ports:
+      - "5174:80"
+    depends_on:
+      srv-csa-services:
         condition: service_started
