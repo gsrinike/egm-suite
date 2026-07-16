@@ -178,7 +178,9 @@ public class MockCnmImportController {
                 ? ImportState.FAILED
                 : files.stream().anyMatch(file -> file.state() == ImportFileState.INIT)
                         ? ImportState.INIT
-                        : ImportState.STORED;
+                        : files.stream().allMatch(file -> file.state() == ImportFileState.PARSED)
+                                ? ImportState.SUCCESS
+                                : ImportState.STORED;
         ImportStatus updated = new ImportStatus(
                 current.importId(),
                 current.serviceType(),
@@ -222,6 +224,6 @@ public class MockCnmImportController {
                 "RDF metadata parsed and raw model stored",
                 now);
         String statusMessage = message == null || message.isBlank() ? "Mock import ready" : message.trim();
-        return new ImportStatus(id, serviceType, timeFrame, ImportState.STORED, List.of(file), now, statusMessage);
+        return new ImportStatus(id, serviceType, timeFrame, ImportState.SUCCESS, List.of(file), now, statusMessage);
     }
 }

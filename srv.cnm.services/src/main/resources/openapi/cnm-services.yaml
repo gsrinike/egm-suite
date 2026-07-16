@@ -190,7 +190,7 @@ components:
       enum: [ID, DAY_AHEAD, TWO_DAYS_AHEAD]
     ImportState:
       type: string
-      enum: [INIT, STORED, FAILED]
+      enum: [INIT, STORED, SUCCESS, FAILED]
     ImportFileState:
       type: string
       enum: [INIT, STORED, PARSED, FAILED]

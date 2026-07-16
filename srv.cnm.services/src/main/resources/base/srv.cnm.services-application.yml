@@ -14,7 +14,8 @@ cnm:
     raw-bucket: cnm-rdf-models
     event:
       exchange: cnm.events
-      routing-key: cnm.import.completed
+      file-processing-routing-key: cnm.file.processing.requested
+      file-processing-queue: cnm.file.process
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

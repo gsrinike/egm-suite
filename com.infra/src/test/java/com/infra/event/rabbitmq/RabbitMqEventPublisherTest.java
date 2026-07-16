@@ -9,13 +9,14 @@ import static org.mockito.Mockito.verify;
 
 class RabbitMqEventPublisherTest {
     @Test
-    void serializesPayloadBeforePublishing() {
+    void publishesPayloadThroughRabbitTemplateConverter() {
         RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
         RabbitMqEventPublisher publisher = new RabbitMqEventPublisher(rabbitTemplate, new ObjectMapper());
+        TestEvent payload = new TestEvent("network-a", 12);
 
-        publisher.publish("exchange", "route", new TestEvent("network-a", 12));
+        publisher.publish("exchange", "route", payload);
 
-        verify(rabbitTemplate).convertAndSend("exchange", "route", "{\"networkId\":\"network-a\",\"count\":12}");
+        verify(rabbitTemplate).convertAndSend("exchange", "route", payload);
     }
 
     private record TestEvent(String networkId, int count) {

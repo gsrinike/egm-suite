@@ -9,8 +9,8 @@ import com.infra.storage.document.DocumentSearchRequest;
 import com.infra.storage.document.DocumentSort;
 import com.infra.storage.object.ObjectStorageService;
 import com.utils.restservice.RestServiceSupport;
+import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmPage;
-import eu.egm.data.cnm.common.CnmImportEvent;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
 import eu.egm.data.cnm.common.ImportFailureRequest;
@@ -68,7 +68,7 @@ public class CnmImportRestService extends RestServiceSupport {
     private final RdfMetadataExtractor metadataExtractor;
     private final String rawBucket;
     private final String eventExchange;
-    private final String eventRoutingKey;
+    private final String fileProcessingRoutingKey;
 
     public CnmImportRestService(
             Environment environment,
@@ -77,7 +77,7 @@ public class CnmImportRestService extends RestServiceSupport {
             RdfMetadataExtractor metadataExtractor,
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
-            @Value("${cnm.import.event.routing-key:cnm.import.completed}") String eventRoutingKey) {
+            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey) {
         super(environment, observationRegistry);
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
@@ -86,7 +86,7 @@ public class CnmImportRestService extends RestServiceSupport {
         this.metadataExtractor = metadataExtractor;
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
-        this.eventRoutingKey = eventRoutingKey;
+        this.fileProcessingRoutingKey = fileProcessingRoutingKey;
     }
 
     public ImportStatus importModels(Collection<MultipartFile> uploads, CnmServiceType serviceType, TimeFrame timeFrame)
@@ -151,7 +151,7 @@ public class CnmImportRestService extends RestServiceSupport {
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         try {
             List<CnmImportFileDocument> files = payloads.stream()
-                    .map(payload -> CompletableFuture.supplyAsync(() -> processPayload(importId, payload), executorService))
+                    .map(payload -> CompletableFuture.supplyAsync(() -> storePayload(importId, payload), executorService))
                     .map(CompletableFuture::join)
                     .sorted(Comparator.comparing(CnmImportFileDocument::fileName))
                     .toList();
@@ -160,7 +160,8 @@ public class CnmImportRestService extends RestServiceSupport {
                     : ImportState.STORED;
             String message = statusMessage(
                     importMessage,
-                    "Imported " + files.size() + " RDF/XML model file" + (files.size() == 1 ? "" : "s"));
+                    "Stored " + files.size() + " RDF/XML model file" + (files.size() == 1 ? "" : "s")
+                            + "; metadata processing queued");
             CnmImportDocument document = new CnmImportDocument(
                     importId,
                     serviceType,
@@ -170,21 +171,11 @@ public class CnmImportRestService extends RestServiceSupport {
                     createdAt.toEpochMilli(),
                     message);
             documentRepository.save(document);
-            List<CnmProfileDocument> profileDocuments = files.stream()
-                    .filter(file -> file.state() == ImportFileState.PARSED)
-                    .map(file -> toProfileDocument(importId, file))
-                    .toList();
-            profileRepository.saveAll(profileDocuments);
-            eventPublisher.publish(
-                    eventExchange,
-                    eventRoutingKey,
-                    new CnmImportEvent(
-                            importId,
-                            serviceType,
-                            timeFrame,
-                            state,
-                            profileDocuments.stream().map(this::toProfileMetadata).toList(),
-                            Instant.now()));
+            CnmImportDocument queuedDocument = publishProcessingEvents(document);
+            if (queuedDocument != document) {
+                documentRepository.save(queuedDocument);
+                document = queuedDocument;
+            }
             logger.info("Imported CNM upload {} with {} RDF/XML payloads", importId, files.size());
             return toStatus(document);
         } finally {
@@ -278,6 +269,7 @@ public class CnmImportRestService extends RestServiceSupport {
         return switch (state) {
             case INIT -> ImportFileState.INIT;
             case STORED -> ImportFileState.STORED;
+            case SUCCESS -> ImportFileState.PARSED;
             case FAILED -> ImportFileState.FAILED;
         };
     }
@@ -302,19 +294,18 @@ public class CnmImportRestService extends RestServiceSupport {
         return requestedMessage == null || requestedMessage.isBlank() ? fallback : requestedMessage.trim();
     }
 
-    private CnmImportFileDocument processPayload(String importId, RdfPayload payload) {
+    private CnmImportFileDocument storePayload(String importId, RdfPayload payload) {
         Instant uploadedAt = Instant.now();
         ModelFileName modelFileName = parseModelFileName(payload.fileName());
         String fileId = UUID.randomUUID().toString();
         String objectId = importId + "/" + sanitize(payload.relativePath());
         try {
             objectStorageService.store(rawBucket, objectId, payload.bytes(), contentType(payload.fileName()));
-            RdfMetadata metadata = metadataExtractor.extract(payload.bytes());
             return new CnmImportFileDocument(
                     fileId,
                     payload.fileName(),
                     objectId,
-                    ImportFileState.PARSED,
+                    ImportFileState.STORED,
                     modelFileName.profileFamily(),
                     modelFileName.businessDay(),
                     modelFileName.businessTime(),
@@ -322,8 +313,8 @@ public class CnmImportRestService extends RestServiceSupport {
                     modelFileName.tsoName(),
                     modelFileName.profileType(),
                     modelFileName.version(),
-                    metadata.profiles(),
-                    "Raw model stored and RDF metadata parsed",
+                    List.of(),
+                    "Raw model stored; metadata processing queued",
                     uploadedAt.toEpochMilli());
         } catch (Exception exception) {
             logger.warn("Unable to import CNM RDF/XML payload {}", payload.relativePath(), exception);
@@ -343,6 +334,51 @@ public class CnmImportRestService extends RestServiceSupport {
                     exception.getMessage(),
                     uploadedAt.toEpochMilli());
         }
+    }
+
+    private CnmImportDocument publishProcessingEvents(CnmImportDocument document) {
+        List<CnmImportFileDocument> files = document.files();
+        List<CnmImportFileDocument> updatedFiles = new ArrayList<>(files.size());
+        boolean changed = false;
+        for (CnmImportFileDocument file : files) {
+            if (file.state() != ImportFileState.STORED) {
+                updatedFiles.add(file);
+                continue;
+            }
+            try {
+                eventPublisher.publish(
+                        eventExchange,
+                        fileProcessingRoutingKey,
+                        new CnmFileProcessingRequested(
+                                document.id(),
+                                file.fileId(),
+                                file.objectId(),
+                                file.fileName(),
+                                document.serviceType(),
+                                document.timeFrame(),
+                                0,
+                                Instant.now()));
+                updatedFiles.add(file);
+            } catch (RuntimeException exception) {
+                changed = true;
+                logger.warn("Unable to publish CNM file-processing event for {}", file.fileId(), exception);
+                updatedFiles.add(withStatus(
+                        file,
+                        ImportFileState.FAILED,
+                        "Unable to queue metadata processing: " + message(exception)));
+            }
+        }
+        if (!changed) {
+            return document;
+        }
+        return new CnmImportDocument(
+                document.id(),
+                document.serviceType(),
+                document.timeFrame(),
+                aggregateState(updatedFiles),
+                updatedFiles,
+                document.createdAt(),
+                "One or more files could not be queued for metadata processing");
     }
 
     private void collectRdfPayloads(String sourceName, byte[] payload, List<RdfPayload> payloads) throws IOException {
@@ -475,7 +511,7 @@ public class CnmImportRestService extends RestServiceSupport {
     public ImportStatus importRdf(String fileName, byte[] payload, CnmServiceType serviceType, TimeFrame timeFrame) {
         String importId = UUID.randomUUID().toString();
         RdfPayload rdfPayload = new RdfPayload(fileName, baseName(fileName), payload);
-        CnmImportFileDocument file = processPayload(importId, rdfPayload);
+        CnmImportFileDocument file = storePayload(importId, rdfPayload);
         CnmImportDocument document = new CnmImportDocument(
                 importId,
                 serviceType,
@@ -485,8 +521,56 @@ public class CnmImportRestService extends RestServiceSupport {
                 Instant.now().toEpochMilli(),
                 file.message());
         documentRepository.save(document);
+        CnmImportDocument queuedDocument = publishProcessingEvents(document);
+        if (queuedDocument != document) {
+            documentRepository.save(queuedDocument);
+            document = queuedDocument;
+        }
         logger.info("Imported CNM RDF file {} as {}", fileName, importId);
         return toStatus(document);
+    }
+
+    public synchronized ImportStatus processFile(CnmFileProcessingRequested event) {
+        if (event == null) {
+            throw new IllegalArgumentException("File-processing event is required");
+        }
+        CnmImportDocument current = findImportDocument(event.importId());
+        CnmImportFileDocument target = current.files().stream()
+                .filter(file -> file.fileId().equals(event.fileId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Import file not found: " + event.fileId()));
+        if (target.state() == ImportFileState.PARSED || target.state() == ImportFileState.FAILED) {
+            return toStatus(current);
+        }
+
+        CnmImportFileDocument processed;
+        try {
+            byte[] payload = objectStorageService.read(rawBucket, target.objectId());
+            RdfMetadata metadata = metadataExtractor.extract(payload);
+            processed = withParsedMetadata(target, metadata);
+            profileRepository.save(toProfileDocument(current.id(), processed));
+        } catch (Exception exception) {
+            logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
+            processed = withStatus(target, ImportFileState.FAILED, message(exception));
+        }
+
+        CnmImportFileDocument processedFile = processed;
+        List<CnmImportFileDocument> files = current.files().stream()
+                .map(file -> file.fileId().equals(target.fileId()) ? processedFile : file)
+                .toList();
+        CnmImportDocument updated = new CnmImportDocument(
+                current.id(),
+                current.serviceType(),
+                current.timeFrame(),
+                aggregateState(files),
+                files,
+                current.createdAt(),
+                aggregateMessage(current.message(), files));
+        documentRepository.save(updated);
+        if (processed.state() == ImportFileState.FAILED) {
+            updateProfileStatus(processed.fileId(), ImportFileState.FAILED);
+        }
+        return toStatus(updated);
     }
 
     public CnmPage<ImportStatus> listImports(int page, int size) {
@@ -600,7 +684,42 @@ public class CnmImportRestService extends RestServiceSupport {
         if (files.stream().anyMatch(file -> file.state() == ImportFileState.INIT)) {
             return ImportState.INIT;
         }
+        if (files.stream().allMatch(file -> file.state() == ImportFileState.PARSED)) {
+            return ImportState.SUCCESS;
+        }
         return ImportState.STORED;
+    }
+
+    private String aggregateMessage(String currentMessage, List<CnmImportFileDocument> files) {
+        ImportState state = aggregateState(files);
+        return switch (state) {
+            case SUCCESS -> "All CNM files processed successfully";
+            case FAILED -> files.stream()
+                    .filter(file -> file.state() == ImportFileState.FAILED)
+                    .map(CnmImportFileDocument::message)
+                    .filter(message -> message != null && !message.isBlank())
+                    .findFirst()
+                    .orElse("One or more CNM files failed processing");
+            default -> currentMessage;
+        };
+    }
+
+    private CnmImportFileDocument withParsedMetadata(CnmImportFileDocument file, RdfMetadata metadata) {
+        return new CnmImportFileDocument(
+                file.fileId(),
+                file.fileName(),
+                file.objectId(),
+                ImportFileState.PARSED,
+                file.profileFamily(),
+                file.businessDay(),
+                file.businessTime(),
+                file.modelTimeFrame(),
+                file.tsoName(),
+                file.profileType(),
+                file.modelVersion(),
+                metadata.profiles(),
+                "RDF metadata parsed",
+                file.uploadedAt());
     }
 
     public CnmPage<CnmProfileMetadata> searchProfiles(

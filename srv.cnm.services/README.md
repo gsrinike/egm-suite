@@ -6,7 +6,7 @@
 
 - Accept RDF/XML model files for CGM, CSA, and CC use cases.
 - Support ID, 1D, and 2D timeframes.
-- Extract RDF profile metadata such as `dcterms:conformsTo`.
+- Extract RDF profile metadata such as `dcterms:conformsTo` asynchronously after object storage succeeds.
 - Classify imported payloads as CGMES, NCP, or unknown.
 - Store raw RDF payloads through `com.infra.storage.object`.
 - Persist import metadata through `com.infra.storage.document`.
@@ -24,17 +24,21 @@ The GUI supports files up to 1 GB by sending 8 MB binary chunks. Nginx and Sprin
 accept 16 MB per request, leaving headroom around each chunk without buffering a
 1 GB HTTP body.
 
-Successful imports publish `cnm.import.completed` metadata events and persist one
+Successful imports first persist every raw RDF/XML payload to object storage and
+then publish one `cnm.file.processing.requested` event per stored file. The
+worker consumes those events, extracts profile metadata, and persists one
 searchable document per profile in the `cnm-profiles` Elasticsearch index.
 
 The import aggregate transitions from `INIT` to `STORED` after all successful
-RDF payloads have been parsed and written to object storage. Any file failure
-sets the aggregate state to `FAILED`; profile metadata remains file-level data.
+RDF payloads have been written to object storage and queued for metadata
+processing. Once every file is parsed, the aggregate becomes `SUCCESS`. Any file
+failure sets the aggregate state to `FAILED`; profile metadata remains file-level data.
 
 Individual files use `ImportFileState`: `INIT`, `STORED`, `PARSED`, or
 `FAILED`. Downstream processors update a file through
 `PUT /api/cnm/imports/{importId}/files/{fileId}/status`. The service persists
-the update and recomputes the aggregate as `INIT`, `STORED`, or `FAILED`.
+the update and recomputes the aggregate as `INIT`, `STORED`, `SUCCESS`, or
+`FAILED`.
 
 Elasticsearch persistence records accept schema-tolerant timestamp values and
 write epoch milliseconds. The service normalizes numeric, numeric-string, ISO,

@@ -9,6 +9,7 @@ import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.DocumentSearchRequest;
 import com.infra.storage.document.DocumentSort;
 import com.infra.storage.object.ObjectStorageService;
+import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmServiceType;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
@@ -25,7 +26,9 @@ import io.micrometer.observation.ObservationRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
@@ -41,14 +44,15 @@ class CnmImportRestServiceTest {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository),
+                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.import.completed");
+                "cnm.file.processing.requested");
         byte[] innerZip = zip("20241202T2330Z_1D_TSO-XYZ_SV_002.xml", rdf("StateVariables"));
         byte[] outerZip = zip(
                 new ZipItem("models/CGM/20241202T2330Z_1D_TSO-XYZ_SV_002.zip", innerZip),
@@ -81,7 +85,21 @@ class CnmImportRestServiceTest {
         assertThat(status.files().get(1).profileType()).isEqualTo("SV");
         assertThat(status.files().get(1).modelVersion()).isEqualTo("002");
         assertThat(status.files().get(1).profileFamily()).isEqualTo(ProfileFamily.SV);
-        assertThat(status.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
+        assertThat(status.files()).allMatch(file -> file.state() == ImportFileState.STORED);
+        assertThat(profileRepository.saved).isEmpty();
+        assertThat(eventPublisher.published)
+                .extracting(event -> event.routingKey)
+                .containsExactly("cnm.file.processing.requested", "cnm.file.processing.requested");
+        assertThat(eventPublisher.processingEvents()).hasSize(2);
+
+        ImportStatus processed = status;
+        for (CnmFileProcessingRequested event : eventPublisher.processingEvents()) {
+            processed = service.processFile(event);
+        }
+
+        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(processed.message()).isEqualTo("All CNM files processed successfully");
+        assertThat(processed.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
         assertThat(profileRepository.saved).hasSize(2);
         CnmProfileDocument svProfile = profileRepository.saved.stream()
                 .filter(profile -> "SV".equals(profile.profileType()))
@@ -99,14 +117,15 @@ class CnmImportRestServiceTest {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository),
+                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.import.completed");
+                "cnm.file.processing.requested");
         String importId = "client-import-id";
 
         ImportStatus failed = service.reportFailure(new ImportFailureRequest(
@@ -135,6 +154,9 @@ class CnmImportRestServiceTest {
         assertThat(documentRepository.saved)
                 .extracting(CnmImportDocument::state)
                 .containsExactly(ImportState.FAILED, ImportState.INIT, ImportState.STORED);
+        assertThat(eventPublisher.processingEvents()).singleElement()
+                .extracting(CnmFileProcessingRequested::importId)
+                .isEqualTo(importId);
     }
 
     @Test
@@ -142,14 +164,15 @@ class CnmImportRestServiceTest {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository),
+                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.import.completed");
+                "cnm.file.processing.requested");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
                 "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
@@ -179,14 +202,11 @@ class CnmImportRestServiceTest {
         assertThat(initialized.files().get(0).state()).isEqualTo(ImportFileState.INIT);
         assertThat(stored.state()).isEqualTo(ImportState.STORED);
         assertThat(stored.files().get(0).state()).isEqualTo(ImportFileState.STORED);
-        assertThat(parsed.state()).isEqualTo(ImportState.STORED);
+        assertThat(parsed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(parsed.files().get(0).state()).isEqualTo(ImportFileState.PARSED);
         assertThat(failed.state()).isEqualTo(ImportState.FAILED);
         assertThat(failed.files().get(0).state()).isEqualTo(ImportFileState.FAILED);
         assertThat(failed.files().get(0).message()).isEqualTo("Downstream parse failed");
-        assertThat(profileRepository.saved).singleElement()
-                .extracting(CnmProfileDocument::state)
-                .isEqualTo(ImportFileState.FAILED);
     }
 
     @Test
@@ -200,7 +220,7 @@ class CnmImportRestServiceTest {
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.import.completed");
+                "cnm.file.processing.requested");
         long timestamp = java.time.Instant.parse("2026-06-24T18:24:05Z").toEpochMilli();
         documentRepository.save(new CnmImportDocument(
                 "legacy-import",
@@ -249,6 +269,18 @@ class CnmImportRestServiceTest {
             ObjectStorageService objectStorageService,
             DocumentRepositoryService<CnmImportDocument> documentRepository,
             DocumentRepositoryService<CnmProfileDocument> profileRepository) {
+        return infrastructureUtils(
+                objectStorageService,
+                documentRepository,
+                profileRepository,
+                new CapturingEventPublisher());
+    }
+
+    private static InfrastructureUtils infrastructureUtils(
+            ObjectStorageService objectStorageService,
+            DocumentRepositoryService<CnmImportDocument> documentRepository,
+            DocumentRepositoryService<CnmProfileDocument> profileRepository,
+            EventPublisherService eventPublisher) {
         return new InfrastructureUtils() {
             @Override
             @SuppressWarnings("unchecked")
@@ -266,8 +298,7 @@ class CnmImportRestServiceTest {
 
             @Override
             public EventPublisherService eventPublisher() {
-                return (exchange, routingKey, payload) -> {
-                };
+                return eventPublisher;
             }
 
             @Override
@@ -311,6 +342,7 @@ class CnmImportRestServiceTest {
 
     private static class CapturingObjectStorageService implements ObjectStorageService {
         private final List<String> storedObjects = new ArrayList<>();
+        private final Map<String, byte[]> objectPayloads = new LinkedHashMap<>();
 
         @Override
         public void initializeBucket(String bucketName) {
@@ -319,12 +351,33 @@ class CnmImportRestServiceTest {
         @Override
         public synchronized void store(String bucketName, String objectName, byte[] bytes, String contentType) {
             storedObjects.add(bucketName + "/" + objectName);
+            objectPayloads.put(bucketName + "/" + objectName, bytes);
         }
 
         @Override
         public byte[] read(String bucketName, String objectName) {
-            return new byte[0];
+            return objectPayloads.get(bucketName + "/" + objectName);
         }
+    }
+
+    private static class CapturingEventPublisher implements EventPublisherService {
+        private final List<PublishedEvent> published = new ArrayList<>();
+
+        @Override
+        public void publish(String exchange, String routingKey, Object payload) {
+            published.add(new PublishedEvent(exchange, routingKey, payload));
+        }
+
+        private List<CnmFileProcessingRequested> processingEvents() {
+            return published.stream()
+                    .map(PublishedEvent::payload)
+                    .filter(CnmFileProcessingRequested.class::isInstance)
+                    .map(CnmFileProcessingRequested.class::cast)
+                    .toList();
+        }
+    }
+
+    private record PublishedEvent(String exchange, String routingKey, Object payload) {
     }
 
     private static class CapturingDocumentRepository implements DocumentRepositoryService<CnmImportDocument> {

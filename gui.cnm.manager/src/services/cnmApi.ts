@@ -1,6 +1,6 @@
 export type CnmServiceType = 'CGM' | 'CSA' | 'CC';
 export type TimeFrame = 'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD';
-export type ImportState = 'INIT' | 'STORED' | 'FAILED';
+export type ImportState = 'INIT' | 'STORED' | 'SUCCESS' | 'FAILED';
 export type ImportFileState = 'INIT' | 'STORED' | 'PARSED' | 'FAILED';
 
 export interface ImportFileStatus {

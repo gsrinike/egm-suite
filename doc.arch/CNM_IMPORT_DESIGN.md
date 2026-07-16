@@ -20,7 +20,7 @@ The application accepts RDF profile files aligned with the ENTSO-E application p
 
 ## Import Scope
 
-The first import flow does not map raw XML/RDF directly into IIDM objects. It extracts RDF metadata, classifies profile references as CGMES or NCP where possible, stores the raw payload in object storage through `com.infra`, and persists import metadata in the document store through `com.infra`.
+The first import flow does not map raw XML/RDF directly into IIDM objects. The synchronous intake path stores raw payloads in object storage through `com.infra`, persists import/file metadata in the document store through `com.infra`, and publishes RabbitMQ processing events. RDF metadata extraction, CGMES/NCP profile classification, and profile-document persistence happen asynchronously after object storage succeeds.
 
 Later semantic import stages should load RDF into a graph or intermediate model before mapping. Complex relationship resolution should use a two-pass pipeline:
 
@@ -28,6 +28,75 @@ Later semantic import stages should load RDF into a graph or intermediate model 
 2. Resolve topology and associations using lookup maps.
 
 Strategy-based mapping should be used when topology or profile metadata indicates different mapping behavior, such as bus-branch and node-breaker variants.
+
+## Planned Change: Asynchronous Metadata Processing
+
+The import flow is split into two consistency boundaries.
+
+1. Durable intake boundary:
+   - Accept chunked uploads.
+   - Assemble and validate files.
+   - Recursively expand ZIP and nested ZIP entries.
+   - Store each RDF/XML payload in object storage.
+   - Persist an import aggregate and one file row per stored object.
+   - Publish one RabbitMQ processing event per stored file.
+   - Return to the GUI after object storage and event publication, without waiting for RDF metadata extraction.
+
+2. Processing boundary:
+   - Consume file-processing events asynchronously.
+   - Read the file payload from object storage.
+   - Parse filename metadata and extract RDF metadata.
+   - Persist searchable profile metadata in Elasticsearch.
+   - Update the file row as `PARSED` or `FAILED`.
+   - Recompute and persist the aggregate import state after every file update.
+
+The aggregate import status should be extended from the current `INIT`, `STORED`, `FAILED` model to include `SUCCESS`.
+
+- `INIT`: upload was accepted and import metadata is being initialized.
+- `STORED`: all RDF/XML payloads for the import have been stored in object storage and processing events were published.
+- `SUCCESS`: every file associated with the import has completed asynchronous processing successfully.
+- `FAILED`: at least one file failed upload, object storage, event publication, or asynchronous processing.
+
+`FAILED` is terminal and wins over partial success. If one file-processing event fails, the file is marked `FAILED`, the aggregate is marked `FAILED`, and remaining file processing may continue only to collect diagnostics and profile metadata for the files that can still complete.
+
+## Implementation Plan
+
+1. Update contracts:
+   - Add `SUCCESS` to `ImportState`.
+   - Keep `ImportFileState` as `INIT`, `STORED`, `PARSED`, and `FAILED`.
+   - Add a file-processing event DTO with `importId`, `fileId`, `objectId`, `fileName`, `serviceType`, `timeFrame`, retry count, and event timestamp.
+
+2. Refactor synchronous import:
+   - Keep chunk assembly and ZIP expansion in the REST request path.
+   - Store raw RDF/XML payloads in object storage.
+   - Persist the aggregate as `STORED` once every discovered payload is stored and every corresponding event is published.
+   - Do not extract RDF metadata or persist `cnm-profiles` documents in the REST request thread.
+
+3. Add asynchronous processor:
+   - Add a RabbitMQ listener in `srv.cnm.services` or a separate worker module when deployment separation is needed.
+   - The listener reads object bytes from object storage, extracts RDF metadata, persists `cnm-profiles`, and updates the file state.
+   - Use idempotent updates keyed by `importId` and `fileId` so event redelivery is safe.
+
+4. Preserve consistency:
+   - Publish events only after the file object and file row are durable.
+   - Treat event publication failure as an import failure because processing cannot be guaranteed.
+   - Recompute aggregate state transactionally at the document boundary after each file update:
+     - any file `FAILED` -> aggregate `FAILED`
+     - all files `PARSED` -> aggregate `SUCCESS`
+     - otherwise aggregate remains `STORED` or `INIT`
+   - Store error messages on the failed file row and aggregate message.
+
+5. Update APIs and GUI:
+   - The existing list/detail APIs continue returning aggregate and file status.
+   - GUI tables display `SUCCESS` as the final successful aggregate state.
+   - The file-detail view shows individual files progressing from `STORED` to `PARSED` or `FAILED`.
+
+6. Update tests:
+   - Verify REST import returns after object storage and event publication.
+   - Verify no profile documents are written synchronously.
+   - Verify successful event processing creates profile documents and moves aggregate to `SUCCESS`.
+   - Verify one failed file-processing event moves aggregate to `FAILED`.
+   - Verify duplicate event delivery is idempotent.
 
 ## REST Surface
 
@@ -39,7 +108,15 @@ Initial endpoints:
 - `POST /api/cnm/imports/failures`: records an upload rejected by a proxy, network, or multipart boundary.
 - `GET /api/cnm/imports`: returns import status rows with optional free-text filtering.
 - `GET /api/cnm/imports/{importId}`: returns a single import status.
-- `PUT /api/cnm/imports/{importId}/files/{fileId}/status`: accepts downstream file-state updates.
+- `PUT /api/cnm/imports/{importId}/files/{fileId}/status`: accepts controlled file-state updates from trusted processors. The primary metadata-processing path is the RabbitMQ file-processing event consumer.
+
+Messaging contracts:
+
+- `cnm.file.processing.requested`: emitted once per stored RDF/XML object. The payload identifies the import, file, object-store key, service type, timeframe, and retry metadata.
+- `cnm.file.processing.completed`: optional internal event emitted by a processor after profile metadata is persisted and the file row is marked `PARSED`.
+- `cnm.file.processing.failed`: optional internal event emitted when a processor marks a file as `FAILED`.
+
+Only `cnm.file.processing.requested` is required for the first asynchronous design. Completion and failure can be represented directly through document updates when the worker lives in `srv.cnm.services`.
 
 The mock service follows the same route shape for GUI development.
 
@@ -54,13 +131,14 @@ sequenceDiagram
     participant API as "CnmImportController"
     participant Chunks as "CnmChunkUploadService"
     participant Import as "CnmImportRestService"
-    participant RDF as "RdfMetadataExtractor"
     participant Infra as "com.infra InfrastructureUtils"
     participant MinIO as "MinIO ObjectStorageService"
     participant Imports as "Elasticsearch cnm-imports"
-    participant Profiles as "Elasticsearch cnm-profiles"
     participant Events as "RabbitMQ EventPublisherService"
-    participant Downstream as "Downstream processor"
+    participant Queue as "RabbitMQ cnm.file.process"
+    participant Worker as "CNM file processor"
+    participant RDF as "RdfMetadataExtractor"
+    participant Profiles as "Elasticsearch cnm-profiles"
 
     rect rgb(245, 247, 250)
         Note over Boot,MinIO: Application initialization
@@ -98,7 +176,7 @@ sequenceDiagram
         Import->>Import: ignore metadata entries and collect RDF/XML payloads
     end
 
-    alt no RDF/XML payload was found or extraction failed
+    alt no RDF/XML payload was found
         Import->>Imports: replace import with FAILED document
         Import-->>API: FAILED ImportStatus
     else RDF/XML payloads were found
@@ -107,11 +185,11 @@ sequenceDiagram
             Import->>Import: parse filename metadata
             Note right of Import: timestamp, timeframe, TSO,<br/>profile type, version, and profile family
             Import->>MinIO: store(cnm-rdf-models, importId/path, bytes)
-            alt object storage and metadata extraction succeed
+            alt object storage succeeds
                 MinIO-->>Import: object stored
-                Import->>RDF: extract RDF profile references
-                RDF-->>Import: CGMES/NCP metadata
-                Import->>Import: create PARSED file document
+                Import->>Imports: mark file STORED with objectId
+                Import->>Events: publish CnmFileProcessingRequested
+                Events->>Queue: route processing event
             else processing fails
                 Import->>Import: capture exception as FAILED file document
             end
@@ -119,14 +197,39 @@ sequenceDiagram
 
         Import->>Import: aggregate state as STORED or FAILED
         Import->>Imports: replace aggregate import document
-        Import->>Profiles: save one searchable profile document per PARSED file
-        Import->>Events: publish cnm.import.completed with profile metadata
         Import-->>API: ImportStatus
     end
 
     API->>Chunks: discard(importId) in finally block
     API-->>GUI: completed ImportStatus
-    GUI->>GUI: show aggregate INIT, STORED, or FAILED state
+    GUI->>GUI: show aggregate INIT, STORED, or FAILED state until async processing completes
+
+    loop each processing event
+        Queue-->>Worker: CnmFileProcessingRequested
+        Worker->>Imports: load import/file state
+        alt file already PARSED or FAILED
+            Worker->>Worker: acknowledge duplicate event
+        else file is processable
+            Worker->>MinIO: read(cnm-rdf-models, objectId)
+            MinIO-->>Worker: RDF/XML payload
+            Worker->>RDF: extract RDF profile references
+            alt metadata extraction succeeds
+                RDF-->>Worker: CGMES/NCP metadata
+                Worker->>Profiles: upsert searchable profile document
+                Worker->>Imports: mark file PARSED
+            else extraction fails
+                Worker->>Imports: mark file FAILED with error message
+            end
+            Worker->>Imports: recompute aggregate state
+            alt any file FAILED
+                Imports->>Imports: aggregate FAILED
+            else all files PARSED
+                Imports->>Imports: aggregate SUCCESS
+            else files still pending
+                Imports->>Imports: aggregate STORED
+            end
+        end
+    end
 
     opt view files for an import
         User->>GUI: select the File link
@@ -151,15 +254,6 @@ sequenceDiagram
         API-->>GUI: profile search results
     end
 
-    opt downstream file processing
-        Downstream->>API: PUT file status as STORED, PARSED, or FAILED
-        API->>Import: updateFileStatus(importId, fileId, state)
-        Import->>Imports: replace file status and recompute aggregate state
-        Import->>Profiles: update matching profile state
-        Import-->>API: updated ImportStatus
-        API-->>Downstream: updated ImportStatus
-    end
-
     opt chunk, proxy, network, or completion failure
         GUI->>GUI: retain import ID and expose re-upload
         GUI->>API: POST /api/cnm/imports/failures
@@ -182,16 +276,19 @@ The GUI creates the import ID before sending the multipart request. If a proxy o
 
 The aggregate import table intentionally omits profile columns because one
 source bundle can contain multiple profiles. Its File column links to a
-dedicated detail view using the same shared table behavior. Successful imports
-finish as `STORED`; the only aggregate states are `INIT`, `STORED`, and
-`FAILED`. The optional message entered beside the RDF model selector is stored
-on `ImportStatus`.
+dedicated detail view using the same shared table behavior. Object-storage
+intake completes as `STORED`; asynchronous processing later moves the aggregate
+to `SUCCESS` when every file is `PARSED`, or to `FAILED` when any file fails.
+The aggregate states are `INIT`, `STORED`, `SUCCESS`, and `FAILED`. The optional
+message entered beside the RDF model selector is stored on `ImportStatus`.
 
 File lifecycle is intentionally separate. `ImportFileState` contains `INIT`,
-`STORED`, `PARSED`, and `FAILED`. A parsed file does not add `PARSED` to the
-aggregate lifecycle; a set of stored or parsed files yields aggregate
-`STORED`, while any failed file yields aggregate `FAILED`. Downstream event
-handlers or services use the file-status callback to persist their progress.
+`STORED`, `PARSED`, and `FAILED`. File `STORED` means the object exists in
+object storage and a processing event has been published. File `PARSED` means
+the asynchronous processor extracted metadata and persisted the profile
+document. A parsed file does not add `PARSED` to the aggregate lifecycle; all
+files parsed yields aggregate `SUCCESS`, while any failed file yields aggregate
+`FAILED`.
 
 The filename pattern
 `<Timestamp>_<Time Frame>_<TSO Name>_<Profile Type>_<Version>` populates both
@@ -207,10 +304,25 @@ business day, and business time. For example,
 `20241202T2330Z_1D_TSO-XYZ_SV_002.xml` is stored as profile `SV`, business day
 `2024-12-02`, and business time `23:30`.
 
-After successful object storage, the service stores profile metadata in the
-`cnm-profiles` Elasticsearch index and publishes a `cnm.import.completed` event
-through `com.infra`. The profile search API filters by profile type, TSO,
-business day, and business time.
+After successful object storage, the service publishes file-processing events
+through `com.infra` and returns the import as `STORED`. The asynchronous
+processor stores profile metadata in the `cnm-profiles` Elasticsearch index.
+The profile search API filters by profile type, TSO, business day, and business
+time.
+
+## Consistency Rules
+
+- Object storage is the durable source for raw RDF/XML payloads.
+- A file-processing event is published only after the object and file row are persisted.
+- Event publication failure marks the file and aggregate as `FAILED`, because the asynchronous processor cannot be guaranteed to run.
+- Event consumers are idempotent. Reprocessing an event for an already `PARSED` or `FAILED` file must acknowledge the event without duplicating profile documents.
+- Profile documents are upserted using stable identifiers derived from `importId` and `fileId`.
+- Aggregate recomputation happens after every file update:
+  - any file `FAILED` -> aggregate `FAILED`
+  - all files `PARSED` -> aggregate `SUCCESS`
+  - otherwise aggregate remains `STORED` after object intake
+- If an import has zero RDF/XML payloads, the aggregate is immediately `FAILED`.
+  This is an intake failure, not an asynchronous processing failure.
 
 ## Dependency Rules
 

@@ -15,10 +15,13 @@ Import contracts include chunk completion, filename-derived profile types,
 separate business day/time fields, searchable profile metadata, and import event
 payloads.
 
-Import status uses the aggregate lifecycle states `INIT`, `STORED`, and
-`FAILED`. Profile information remains on `ImportFileStatus`, while the parent
+Import status uses the aggregate lifecycle states `INIT`, `STORED`, `SUCCESS`,
+and `FAILED`. `STORED` means durable intake has completed and file-processing
+events were queued. `SUCCESS` means every file has been parsed successfully.
+Profile information remains on `ImportFileStatus`, while the parent
 `ImportStatus` carries the user-provided import message.
 
 `ImportFileStatus` uses the separate `ImportFileState` lifecycle: `INIT`,
-`STORED`, `PARSED`, and `FAILED`. Downstream processing can report file-state
-changes without adding file-only states to the parent import.
+`STORED`, `PARSED`, and `FAILED`. File-processing events move files from
+`STORED` to `PARSED` or `FAILED` without adding file-only states to the parent
+import.

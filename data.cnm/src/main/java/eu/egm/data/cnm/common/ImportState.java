@@ -6,5 +6,6 @@ package eu.egm.data.cnm.common;
 public enum ImportState {
     INIT,
     STORED,
+    SUCCESS,
     FAILED
 }
