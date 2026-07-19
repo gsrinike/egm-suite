@@ -52,7 +52,9 @@
         <p>Profile data</p>
         <strong>{{ profileTables?.profileType }} {{ selectedProfileFileName }}</strong>
       </div>
-      <Button :disabled="busy" @click="activeView = 'import-files'">Back to files</Button>
+      <Button :disabled="busy" @click="activeView = profileReturnView">
+        Back to {{ profileReturnView === 'profiles' ? 'profiles' : 'files' }}
+      </Button>
     </section>
 
     <p v-if="message" class="status-message">{{ message }}</p>
@@ -84,9 +86,15 @@
       id-key="fileId"
     >
       <template #cell-fileName="{ row }">
-        <Link @click="openProfileTables(String(row.fileId), String(row.fileName))">
+        <Link
+          v-if="canOpenProfileData(String(row.state))"
+          @click="openImportFileProfileTables(String(row.fileId), String(row.fileName))"
+        >
           {{ row.fileName }}
         </Link>
+        <span v-else class="disabled-profile-link" title="Profile data is available after RDF metadata is parsed">
+          {{ row.fileName }}
+        </span>
       </template>
     </DataTable>
 
@@ -104,7 +112,19 @@
       :rows="profileRows"
       :page-size="10"
       id-key="profileId"
-    />
+    >
+      <template #cell-fileName="{ row }">
+        <Link
+          v-if="canOpenProfileData(String(row.state))"
+          @click="openProfileTables(String(row.importId), String(row.fileId), String(row.fileName), 'profiles')"
+        >
+          {{ row.fileName }}
+        </Link>
+        <span v-else class="disabled-profile-link" title="Profile data is available after RDF metadata is parsed">
+          {{ row.fileName }}
+        </span>
+      </template>
+    </DataTable>
   </main>
 </template>
 
@@ -143,6 +163,7 @@ const retryImportId = ref('');
 const selectedImport = ref<ImportStatus>();
 const profileTables = ref<DynamicTableBundle>();
 const selectedProfileFileName = ref('');
+const profileReturnView = ref('import-files');
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
 const lightTheme = ref(false);
 
@@ -190,6 +211,7 @@ const fileColumns = [
 ];
 
 const profileColumns = [
+  { key: 'fileName', label: 'File' },
   { key: 'state', label: 'State' },
   { key: 'profileType', label: 'Profile type' },
   { key: 'profileFamily', label: 'Profile family' },
@@ -197,8 +219,7 @@ const profileColumns = [
   { key: 'businessDay', label: 'Business day' },
   { key: 'businessTime', label: 'Business time' },
   { key: 'timeFrame', label: 'Timeframe' },
-  { key: 'version', label: 'Version' },
-  { key: 'fileName', label: 'File' }
+  { key: 'version', label: 'Version' }
 ];
 
 const rows = computed(() => imports.value.map((item) => ({
@@ -269,22 +290,32 @@ function closeImportFiles() {
   selectedImport.value = undefined;
   profileTables.value = undefined;
   selectedProfileFileName.value = '';
+  profileReturnView.value = 'import-files';
   activeView.value = 'imports';
 }
 
-async function openProfileTables(fileId: string, fileName: string) {
+function canOpenProfileData(state: string) {
+  return state === 'PARSED';
+}
+
+async function openImportFileProfileTables(fileId: string, fileName: string) {
   if (!selectedImport.value) {
     return;
   }
+  await openProfileTables(selectedImport.value.importId, fileId, fileName, 'import-files');
+}
+
+async function openProfileTables(importId: string, fileId: string, fileName: string, returnView: string) {
   busy.value = true;
   message.value = '';
   selectedProfileFileName.value = fileName;
+  profileReturnView.value = returnView;
   try {
-    profileTables.value = await getProfileTables(selectedImport.value.importId, fileId);
+    profileTables.value = await getProfileTables(importId, fileId);
     activeView.value = 'profile-data';
   } catch (error) {
     logClientError('openProfileTables failed', error, {
-      importId: selectedImport.value.importId,
+      importId,
       fileId,
       fileName
     });

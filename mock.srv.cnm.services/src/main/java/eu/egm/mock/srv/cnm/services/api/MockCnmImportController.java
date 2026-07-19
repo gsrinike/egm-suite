@@ -120,6 +120,7 @@ public class MockCnmImportController {
                 .flatMap(status -> status.files().stream()
                         .map(file -> new CnmProfileMetadata(
                                 file.fileId(),
+                                file.fileId(),
                                 status.importId(),
                                 file.fileName(),
                                 file.objectId(),

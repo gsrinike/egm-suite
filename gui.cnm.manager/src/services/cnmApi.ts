@@ -33,6 +33,7 @@ export interface ImportStatus {
 
 export interface ProfileMetadata {
   profileId: string;
+  fileId: string;
   importId: string;
   fileName: string;
   objectId: string;

@@ -7,6 +7,7 @@ import java.time.Instant;
  */
 public record CnmProfileMetadata(
         String profileId,
+        String fileId,
         String importId,
         String fileName,
         String objectId,

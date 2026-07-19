@@ -157,6 +157,11 @@ select {
   padding: 10px 12px;
 }
 
+.disabled-profile-link {
+  color: color-mix(in srgb, var(--text-main) 62%, transparent);
+  cursor: not-allowed;
+}
+
 @media (max-width: 860px) {
   .toolbar,
   .profile-filters {

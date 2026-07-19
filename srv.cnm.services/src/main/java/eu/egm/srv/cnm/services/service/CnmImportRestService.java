@@ -1019,6 +1019,7 @@ public class CnmImportRestService extends RestServiceSupport {
         ModelFileName fileNameMetadata = parseModelFileName(document.fileName());
         return new CnmProfileMetadata(
                 document.id(),
+                document.fileId(),
                 document.importId(),
                 document.fileName(),
                 document.objectId(),

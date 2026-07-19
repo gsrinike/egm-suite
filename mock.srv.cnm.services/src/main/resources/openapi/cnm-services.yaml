@@ -294,6 +294,8 @@ components:
       properties:
         profileId:
           type: string
+        fileId:
+          type: string
         importId:
           type: string
         fileName:
