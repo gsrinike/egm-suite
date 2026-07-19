@@ -7,6 +7,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Shared helpers for profile strategies.
+ *
+ * <p>The methods in this base class build reusable topology views from RDF
+ * facts, allowing each concrete strategy to focus on the profile-specific DTO
+ * sections such as EQ equipment, SSH setpoints, SV variables, or TP nodes.</p>
+ */
 abstract class AbstractProfileExtractionStrategy implements ProfileExtractionStrategy {
     protected List<GridTopologyObject> topologyObjects(List<RdfFact> facts, String profileType) {
         return facts.stream()

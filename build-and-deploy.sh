@@ -19,8 +19,8 @@ build_docker_images() {
 }
 
 start_runtime() {
-  echo "Starting runtime without mock services, BPM services, and non-CNM srv services..."
-  "${SCRIPT_DIR}/docker/egm-compose.sh" up mock=false 'exclude=srv.*,bpm.*' include=srv-cnm-services
+  echo "Starting runtime without mock services, BPM services, and non-CNM,non-CSA srv services..."
+  "${SCRIPT_DIR}/docker/egm-compose.sh" up mock=false 'exclude=srv.*,bpm.*' include=srv-cnm-services,srv-csa-services
 }
 
 cleanup_gui_artifacts
