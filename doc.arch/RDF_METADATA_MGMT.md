@@ -130,7 +130,11 @@ Each profile DTO should store typed collections for the profile it represents. F
 
 ## Elasticsearch Document Model
 
-The file-level profile document in `cnm-profiles` should be extended with JSON profile data:
+Profile persistence is split into searchable metadata and large payload data.
+This keeps the profile list/search path small even when RDF files generate large
+typed DTO JSON.
+
+The file-level profile document in `cnm-profiles` contains metadata only:
 
 - stable ID derived from `fileId` or `importId:fileId`
 - `importId`
@@ -150,12 +154,29 @@ The file-level profile document in `cnm-profiles` should be extended with JSON p
 - `warningCount`
 - `errorCount`
 - `profileJsonType`
-- `profileJson`
 - `importedAt`
 
-`profileJson` is stored as JSON text. It should not be dynamically mapped as nested Elasticsearch fields, because CGMES/NCP profile structures can introduce conflicting object and scalar shapes across files. Search filters stay on stable metadata fields. Profile content exploration is done by loading the JSON payload and converting it back to DTOs.
+The large profile payload is stored in `cnm-profile-payloads`:
 
-Index mappings should be explicit where `com.infra` supports them. If an index already exists, startup must not recreate it. New fields should be added compatibly or handled in the service layer when older documents do not contain `profileJson`.
+- stable ID derived from `fileId`
+- `importId`
+- `fileId`
+- `profileJsonType`
+- `profileJson`
+- `profileJsonChunks`
+- `importedAt`
+
+`profileJson` is stored as JSON text, chunked into `profileJsonChunks` when the
+payload is too large for a single field. It should not be dynamically mapped as
+nested Elasticsearch fields, because CGMES/NCP profile structures can introduce
+conflicting object and scalar shapes across files. Search filters stay on stable
+metadata fields in `cnm-profiles`. Profile content exploration loads the payload
+by `fileId` from `cnm-profile-payloads` and converts it back to DTOs.
+
+Index mappings should be explicit where `com.infra` supports them. If an index
+already exists, startup must not recreate it. New fields should be added
+compatibly or handled in the service layer when older documents do not have a
+matching payload document.
 
 ## Mapping Rules
 
@@ -262,5 +283,7 @@ Expected behavior:
 
 - Whether the first implementation should use a full RDF library or namespace-aware XML extraction for the initial profile DTO population.
 - Whether profile JSON should be compressed when very large profile files generate large profile payloads.
+- Whether a migration utility should backfill `cnm-profile-payloads` from older
+  `cnm-profiles` documents that still contain inline payload fields.
 - Whether profile table APIs should support server-side paging for very large profiles in a later increment.
 - Whether profile DTOs should include profile-version-specific subclasses once ENTSO-E profile versions diverge materially.

@@ -309,13 +309,13 @@ business day, and business time. For example,
 After successful object storage, the service publishes file-processing events
 through `com.infra` and returns the import as `STORED`. The asynchronous
 processor stores profile metadata in the `cnm-profiles` Elasticsearch index.
-The profile search API filters by profile type, TSO, business day, and business
-time.
+Large typed profile JSON is stored separately in `cnm-profile-payloads` by
+`fileId`. The profile search API filters by profile type, TSO, business day,
+and business time without loading payload fields.
 
-The next metadata-management increment extends this profile document with typed
-profile DTO JSON and exposes profile-content table APIs. See
-`RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic table, and GUI logging
-design.
+Profile-content table APIs load the payload document only when a user opens a
+specific file. See `RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic
+table, and GUI logging design.
 
 ## Consistency Rules
 

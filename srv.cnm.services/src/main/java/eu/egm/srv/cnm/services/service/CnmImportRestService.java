@@ -33,6 +33,8 @@ import eu.egm.srv.cnm.services.domain.CnmImportDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument.CnmEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
 import io.micrometer.observation.ObservationRegistry;
@@ -71,10 +73,13 @@ public class CnmImportRestService extends RestServiceSupport {
                     "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9]+)_(?<version>\\d+)$",
                     Pattern.CASE_INSENSITIVE);
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
+    private static final int MAX_PROFILE_PAGE_SIZE = 50;
+    private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
 
     private final ObjectStorageService objectStorageService;
     private final DocumentRepositoryService<CnmImportDocument> documentRepository;
     private final DocumentRepositoryService<CnmProfileDocument> profileRepository;
+    private final DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository;
     private final EventPublisherService eventPublisher;
     private final JsonMappingService jsonMappingService;
     private final RdfMetadataExtractor metadataExtractor;
@@ -115,6 +120,7 @@ public class CnmImportRestService extends RestServiceSupport {
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
         this.profileRepository = infrastructureUtils.documentRepository(new CnmProfileDocumentAdapter());
+        this.profilePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.metadataExtractor = metadataExtractor;
@@ -588,6 +594,7 @@ public class CnmImportRestService extends RestServiceSupport {
                     target.objectId());
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
+            profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
         } catch (Exception exception) {
             logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
             processed = withStatus(target, ImportFileState.FAILED, message(exception));
@@ -688,8 +695,6 @@ public class CnmImportRestService extends RestServiceSupport {
                         profile.warningCount(),
                         state == ImportFileState.FAILED ? Math.max(1, number(profile.errorCount())) : number(profile.errorCount()),
                         profile.profileJsonType(),
-                        profile.profileJson(),
-                        profile.profileJsonChunks(),
                         profile.importedAt()))
                 .ifPresent(profileRepository::save);
     }
@@ -791,9 +796,15 @@ public class CnmImportRestService extends RestServiceSupport {
             filters.add(DocumentFilter.exact("businessTime", businessTime));
         }
         int safePage = Math.max(page, 0);
-        int safeSize = size <= 0 ? 25 : size;
+        int safeSize = Math.min(size <= 0 ? 25 : size, MAX_PROFILE_PAGE_SIZE);
         DocumentPage<CnmProfileDocument> result =
-                profileRepository.search(new DocumentSearchRequest(filters, List.of(), safePage, safeSize));
+                profileRepository.search(new DocumentSearchRequest(
+                        filters,
+                        List.of(),
+                        List.of(),
+                        PROFILE_LIST_EXCLUDED_FIELDS,
+                        safePage,
+                        safeSize));
         return new CnmPage<>(
                 result.content().stream().map(this::toProfileMetadata).toList(),
                 result.total(),
@@ -803,7 +814,7 @@ public class CnmImportRestService extends RestServiceSupport {
 
     public Object profilePayload(String importId, String fileId) {
         CnmProfileDocument document = findProfileDocument(importId, fileId);
-        String profileJson = profileJson(document);
+        String profileJson = profileJson(importId, fileId);
         if (profileJson == null || profileJson.isBlank()) {
             throw new IllegalArgumentException("Profile payload is not available for file: " + fileId);
         }
@@ -812,7 +823,7 @@ public class CnmImportRestService extends RestServiceSupport {
 
     public DynamicTableBundle profileTables(String importId, String fileId) {
         CnmProfileDocument document = findProfileDocument(importId, fileId);
-        String profileJson = profileJson(document);
+        String profileJson = profileJson(importId, fileId);
         if (profileJson == null || profileJson.isBlank()) {
             throw new IllegalArgumentException("Profile table data is not available for file: " + fileId);
         }
@@ -836,7 +847,6 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private CnmProfileDocument toProfileDocument(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
-        String profileJson = jsonMappingService.toJson(metadata.payload());
         return new CnmProfileDocument(
                 file.fileId(),
                 importId,
@@ -857,19 +867,40 @@ public class CnmImportRestService extends RestServiceSupport {
                 metadata.warnings().size(),
                 0,
                 metadata.profileJsonType(),
+                file.uploadedAt());
+    }
+
+    private CnmProfilePayloadDocument toProfilePayloadDocument(
+            String importId,
+            CnmImportFileDocument file,
+            RdfMetadata metadata) {
+        String profileJson = jsonMappingService.toJson(metadata.payload());
+        return new CnmProfilePayloadDocument(
+                file.fileId(),
+                importId,
+                file.fileId(),
+                metadata.profileJsonType(),
                 profileJson.length() <= PROFILE_JSON_CHUNK_SIZE ? profileJson : "",
                 chunks(profileJson),
                 file.uploadedAt());
     }
 
-    private String profileJson(CnmProfileDocument document) {
-        if (document.profileJson() != null && !document.profileJson().isBlank()) {
-            return document.profileJson();
-        }
-        if (document.profileJsonChunks() == null || document.profileJsonChunks().isEmpty()) {
+    private String profileJson(String importId, String fileId) {
+        CnmProfilePayloadDocument payload = profilePayloadRepository.findByField("id", fileId, 1)
+                .stream()
+                .filter(candidate -> candidate.importId().equals(importId))
+                .findFirst()
+                .orElse(null);
+        if (payload == null) {
             return "";
         }
-        return String.join("", document.profileJsonChunks());
+        if (payload.profileJson() != null && !payload.profileJson().isBlank()) {
+            return payload.profileJson();
+        }
+        if (payload.profileJsonChunks() == null || payload.profileJsonChunks().isEmpty()) {
+            return "";
+        }
+        return String.join("", payload.profileJsonChunks());
     }
 
     private List<String> chunks(String value) {

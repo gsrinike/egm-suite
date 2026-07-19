@@ -21,6 +21,8 @@ import eu.egm.data.cnm.common.TimeFrame;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.ByteArrayOutputStream;
@@ -44,11 +46,17 @@ class CnmImportRestServiceTest {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingProfilePayloadRepository profilePayloadRepository = new CapturingProfilePayloadRepository();
         CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        profileRepository,
+                        profilePayloadRepository,
+                        eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
@@ -111,8 +119,13 @@ class CnmImportRestServiceTest {
         assertThat(svProfile.timeFrame()).isEqualTo("1D");
         assertThat(svProfile.version()).isEqualTo("002");
         assertThat(svProfile.profileJsonType()).isEqualTo("cgmes.sv");
-        assertThat(svProfile.profileJson()).contains("\"profileType\":\"SV\"");
         assertThat(svProfile.entityCounts()).isNotEmpty();
+        assertThat(profilePayloadRepository.saved).hasSize(2);
+        assertThat(profilePayloadRepository.saved.stream()
+                .filter(payload -> payload.id().equals(svProfile.fileId()))
+                .findFirst()
+                .orElseThrow()
+                .profileJson()).contains("\"profileType\":\"SV\"");
         assertThat(service.profilePayload(status.importId(), svProfile.fileId())).isInstanceOf(Map.class);
         assertThat(service.profileTables(status.importId(), svProfile.fileId()).tables())
                 .extracting(table -> table.tableId())
@@ -128,7 +141,12 @@ class CnmImportRestServiceTest {
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        profileRepository,
+                        new NoopDocumentRepository<>(),
+                        eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
@@ -175,7 +193,12 @@ class CnmImportRestServiceTest {
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
-                infrastructureUtils(objectStorageService, documentRepository, profileRepository, eventPublisher),
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        profileRepository,
+                        new NoopDocumentRepository<>(),
+                        eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
@@ -280,6 +303,7 @@ class CnmImportRestServiceTest {
                 objectStorageService,
                 documentRepository,
                 profileRepository,
+                new NoopDocumentRepository<>(),
                 new CapturingEventPublisher());
     }
 
@@ -287,6 +311,7 @@ class CnmImportRestServiceTest {
             ObjectStorageService objectStorageService,
             DocumentRepositoryService<CnmImportDocument> documentRepository,
             DocumentRepositoryService<CnmProfileDocument> profileRepository,
+            DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository,
             EventPublisherService eventPublisher) {
         return new InfrastructureUtils() {
             @Override
@@ -294,6 +319,9 @@ class CnmImportRestServiceTest {
             public <T> DocumentRepositoryService<T> documentRepository(DocumentAdapter<T> adapter) {
                 if (adapter instanceof CnmProfileDocumentAdapter) {
                     return (DocumentRepositoryService<T>) profileRepository;
+                }
+                if (adapter instanceof CnmProfilePayloadDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) profilePayloadRepository;
                 }
                 return (DocumentRepositoryService<T>) documentRepository;
             }
@@ -458,6 +486,39 @@ class CnmImportRestServiceTest {
 
         @Override
         public DocumentPage<CnmProfileDocument> search(DocumentSearchRequest request) {
+            return new DocumentPage<>(saved, saved.size(), request.page(), request.size());
+        }
+    }
+
+    private static class CapturingProfilePayloadRepository implements DocumentRepositoryService<CnmProfilePayloadDocument> {
+        private final List<CnmProfilePayloadDocument> saved = new ArrayList<>();
+
+        @Override
+        public void save(CnmProfilePayloadDocument document) {
+            saved.removeIf(current -> current.id().equals(document.id()));
+            saved.add(document);
+        }
+
+        @Override
+        public void saveAll(List<CnmProfilePayloadDocument> documents) {
+            documents.forEach(this::save);
+        }
+
+        @Override
+        public List<CnmProfilePayloadDocument> findByField(String fieldName, Object value, int maxResults) {
+            return saved.stream()
+                    .filter(document -> "id".equals(fieldName) && document.id().equals(value))
+                    .limit(maxResults)
+                    .toList();
+        }
+
+        @Override
+        public List<CnmProfilePayloadDocument> findAll(int maxResults, DocumentSort sort) {
+            return saved.stream().limit(maxResults).toList();
+        }
+
+        @Override
+        public DocumentPage<CnmProfilePayloadDocument> search(DocumentSearchRequest request) {
             return new DocumentPage<>(saved, saved.size(), request.page(), request.size());
         }
     }

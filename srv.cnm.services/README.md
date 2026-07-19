@@ -27,7 +27,10 @@ accept 16 MB per request, leaving headroom around each chunk without buffering a
 Successful imports first persist every raw RDF/XML payload to object storage and
 then publish one `cnm.file.processing.requested` event per stored file. The
 worker consumes those events, extracts profile metadata, and persists one
-searchable document per profile in the `cnm-profiles` Elasticsearch index.
+searchable metadata document per profile in the `cnm-profiles` Elasticsearch
+index. Large typed profile JSON is stored separately in `cnm-profile-payloads`
+by `fileId`, so profile search/list screens do not load payload data into the
+service heap.
 
 The import aggregate transitions from `INIT` to `STORED` after all successful
 RDF payloads have been written to object storage and queued for metadata

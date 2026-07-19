@@ -27,12 +27,9 @@ public record CnmProfileDocument(
         Integer warningCount,
         Integer errorCount,
         String profileJsonType,
-        String profileJson,
-        List<String> profileJsonChunks,
         Object importedAt) {
     public CnmProfileDocument {
         entityCounts = entityCounts == null ? List.of() : List.copyOf(entityCounts);
-        profileJsonChunks = profileJsonChunks == null ? List.of() : List.copyOf(profileJsonChunks);
     }
 
     /**

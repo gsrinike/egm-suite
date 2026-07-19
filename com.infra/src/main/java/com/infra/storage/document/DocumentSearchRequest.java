@@ -11,11 +11,19 @@ import java.util.List;
 public record DocumentSearchRequest(
         List<DocumentFilter> filters,
         List<DocumentFilter> anyFilters,
+        List<String> includeFields,
+        List<String> excludeFields,
         int page,
         int size
 ) {
+    public DocumentSearchRequest(List<DocumentFilter> filters, List<DocumentFilter> anyFilters, int page, int size) {
+        this(filters, anyFilters, List.of(), List.of(), page, size);
+    }
+
     public DocumentSearchRequest {
         filters = filters == null ? List.of() : List.copyOf(filters);
         anyFilters = anyFilters == null ? List.of() : List.copyOf(anyFilters);
+        includeFields = includeFields == null ? List.of() : List.copyOf(includeFields);
+        excludeFields = excludeFields == null ? List.of() : List.copyOf(excludeFields);
     }
 }

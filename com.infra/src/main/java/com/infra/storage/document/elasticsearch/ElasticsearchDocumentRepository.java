@@ -16,6 +16,7 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
+import org.springframework.data.elasticsearch.core.query.FetchSourceFilterBuilder;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 
@@ -90,6 +91,7 @@ public class ElasticsearchDocumentRepository<T> implements DocumentRepositorySer
         }
         CriteriaQuery query = new CriteriaQuery(toCriteria(request));
         query.setPageable(PageRequest.of(request.page(), request.size()));
+        applySourceFilter(query, request);
         var hits = elasticsearchOperations.search(query, adapter.documentType(), indexCoordinates);
         return new DocumentPage<>(
                 hits.stream().map(SearchHit::getContent).toList(),
@@ -128,6 +130,20 @@ public class ElasticsearchDocumentRepository<T> implements DocumentRepositorySer
             }
         }
         return criteria;
+    }
+
+    private void applySourceFilter(CriteriaQuery query, DocumentSearchRequest request) {
+        if (request.includeFields().isEmpty() && request.excludeFields().isEmpty()) {
+            return;
+        }
+        FetchSourceFilterBuilder builder = new FetchSourceFilterBuilder();
+        if (!request.includeFields().isEmpty()) {
+            builder.withIncludes(request.includeFields().toArray(String[]::new));
+        }
+        if (!request.excludeFields().isEmpty()) {
+            builder.withExcludes(request.excludeFields().toArray(String[]::new));
+        }
+        query.addSourceFilter(builder.build());
     }
 
     private Criteria toCriterion(DocumentFilter filter) {
