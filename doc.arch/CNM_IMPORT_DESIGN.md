@@ -6,6 +6,8 @@ The Common Network Model (CNM) import application is the first application surfa
 
 The initial implementation focuses on import orchestration, metadata capture, and reusable module boundaries. Semantic graph validation, PowSyBl-backed IIDM transformation, CSA, and CC calculation flows are expected to build on this foundation.
 
+Profile-aware RDF metadata extraction, profile JSON persistence, dynamic profile-content tables, and browser-side error logging are detailed in `RDF_METADATA_MGMT.md`. This CNM import design owns the intake and asynchronous processing lifecycle; `RDF_METADATA_MGMT.md` owns the semantic metadata extraction and exploration increment that runs inside that lifecycle.
+
 ## Profile Sources
 
 The application accepts RDF profile files aligned with the ENTSO-E application profile library. The profile repository organizes CGMES and NCP profile definitions into dedicated folders and publishes RDFS, SHACL, and profile metadata packages. Import code should treat these profile definitions as external contracts, not as hand-written business assumptions.
@@ -309,6 +311,11 @@ through `com.infra` and returns the import as `STORED`. The asynchronous
 processor stores profile metadata in the `cnm-profiles` Elasticsearch index.
 The profile search API filters by profile type, TSO, business day, and business
 time.
+
+The next metadata-management increment extends this profile document with typed
+profile DTO JSON and exposes profile-content table APIs. See
+`RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic table, and GUI logging
+design.
 
 ## Consistency Rules
 

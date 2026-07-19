@@ -110,6 +110,13 @@ class CnmImportRestServiceTest {
         assertThat(svProfile.tsoName()).isEqualTo("TSO-XYZ");
         assertThat(svProfile.timeFrame()).isEqualTo("1D");
         assertThat(svProfile.version()).isEqualTo("002");
+        assertThat(svProfile.profileJsonType()).isEqualTo("cgmes.sv");
+        assertThat(svProfile.profileJson()).contains("\"profileType\":\"SV\"");
+        assertThat(svProfile.entityCounts()).isNotEmpty();
+        assertThat(service.profilePayload(status.importId(), svProfile.fileId())).isInstanceOf(Map.class);
+        assertThat(service.profileTables(status.importId(), svProfile.fileId()).tables())
+                .extracting(table -> table.tableId())
+                .contains("topologyObjects", "voltages");
     }
 
     @Test
@@ -312,11 +319,20 @@ class CnmImportRestServiceTest {
         return ("""
                 <?xml version="1.0" encoding="UTF-8"?>
                 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                         xmlns:cim="http://iec.ch/TC57/CIM100#"
                          xmlns:dcterms="http://purl.org/dc/terms/"
                          xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#">
                   <md:FullModel rdf:about="urn:uuid:test">
                     <dcterms:conformsTo rdf:resource="https://ap-con.cim4.eu/%s/3.0"/>
                   </md:FullModel>
+                  <cim:VoltageLevel rdf:ID="VL-1">
+                    <cim:IdentifiedObject.name>Voltage Level 1</cim:IdentifiedObject.name>
+                  </cim:VoltageLevel>
+                  <cim:SvVoltage rdf:ID="SV-1">
+                    <cim:SvVoltage.v>400.0</cim:SvVoltage.v>
+                    <cim:SvVoltage.angle>-1.2</cim:SvVoltage.angle>
+                    <cim:SvVoltage.TopologicalNode rdf:resource="#TN-1"/>
+                  </cim:SvVoltage>
                 </rdf:RDF>
                 """).formatted(profileName).getBytes();
     }

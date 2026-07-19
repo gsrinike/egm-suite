@@ -2,6 +2,8 @@ package eu.egm.srv.cnm.services;
 
 import com.infra.config.InfrastructureUtilityConfig;
 import com.utils.restservice.RestServiceConfiguration;
+import eu.egm.mapping.JacksonJsonMappingService;
+import eu.egm.mapping.JsonMappingService;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument.CnmImportFileDocument;
 import java.util.Arrays;
@@ -29,6 +31,11 @@ public class CnmServicesApplication {
             validateTimestampComponent(CnmImportDocument.class, "createdAt");
             validateTimestampComponent(CnmImportFileDocument.class, "uploadedAt");
         };
+    }
+
+    @Bean
+    JsonMappingService jsonMappingService() {
+        return new JacksonJsonMappingService();
     }
 
     private void validateTimestampComponent(Class<?> documentType, String componentName) {

@@ -4,6 +4,8 @@ import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.ChunkUploadCompleteRequest;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.DynamicTableBundle;
+import eu.egm.data.cnm.common.DynamicTableDefinition;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
 import eu.egm.data.cnm.common.ImportStatus;
@@ -106,6 +108,24 @@ public class CnmImportController {
     @GetMapping("/{importId}")
     public ImportStatus importById(@PathVariable String importId) {
         return importService.findImport(importId);
+    }
+
+    @GetMapping("/{importId}/files/{fileId}/profile/payload")
+    public Object profilePayload(@PathVariable String importId, @PathVariable String fileId) {
+        return importService.profilePayload(importId, fileId);
+    }
+
+    @GetMapping("/{importId}/files/{fileId}/profile/tables")
+    public DynamicTableBundle profileTables(@PathVariable String importId, @PathVariable String fileId) {
+        return importService.profileTables(importId, fileId);
+    }
+
+    @GetMapping("/{importId}/files/{fileId}/profile/tables/{tableId}")
+    public DynamicTableDefinition profileTable(
+            @PathVariable String importId,
+            @PathVariable String fileId,
+            @PathVariable String tableId) {
+        return importService.profileTable(importId, fileId, tableId);
     }
 
     @PutMapping(value = "/{importId}/files/{fileId}/status", consumes = MediaType.APPLICATION_JSON_VALUE)

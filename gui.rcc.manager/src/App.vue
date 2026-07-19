@@ -101,7 +101,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Button, DataTable } from '@egm/gui.common/src';
+import { Button, DataTable, logClientError } from '@egm/gui.common/src';
 import CnmManagerView from '@egm/gui.cnm.manager/src/components/CnmManagerView.vue';
 import { listCsaCases, startCsaCase, type CsaCaseStatus } from './services/csaApi';
 
@@ -219,6 +219,13 @@ async function startCase() {
     cases.value = [selectedCase.value, ...cases.value.filter((item) => item.csaCaseId !== selectedCase.value?.csaCaseId)];
     message.value = selectedCase.value.message;
   } catch (error) {
+    logClientError('startCase failed', error, {
+      caseName: caseName.value,
+      networkId: networkId.value,
+      businessDay: businessDay.value,
+      businessTime: businessTime.value,
+      timeFrame: timeFrame.value
+    });
     message.value = error instanceof Error ? error.message : 'Unable to start CSA case';
   } finally {
     busy.value = false;
@@ -231,6 +238,7 @@ async function refresh() {
   try {
     cases.value = (await listCsaCases()).items;
   } catch (error) {
+    logClientError('refresh CSA cases failed', error);
     message.value = error instanceof Error ? error.message : 'Unable to load CSA cases';
   } finally {
     busy.value = false;

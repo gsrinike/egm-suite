@@ -4,6 +4,10 @@ import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.ChunkUploadCompleteRequest;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.DynamicTableBundle;
+import eu.egm.data.cnm.common.DynamicTableColumn;
+import eu.egm.data.cnm.common.DynamicTableDefinition;
+import eu.egm.data.cnm.common.DynamicTableRow;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatus;
@@ -15,7 +19,9 @@ import eu.egm.data.cnm.common.RdfProfileReference;
 import eu.egm.data.cnm.common.TimeFrame;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -147,6 +153,48 @@ public class MockCnmImportController {
                 .orElseThrow(() -> new IllegalArgumentException("Mock import not found: " + importId));
     }
 
+    @GetMapping("/{importId}/files/{fileId}/profile/payload")
+    public Map<String, Object> profilePayload(@PathVariable String importId, @PathVariable String fileId) {
+        ImportFileStatus file = file(importId, fileId);
+        return Map.of(
+                "profileFamily", file.profileFamily(),
+                "profileType", file.profileType(),
+                "fileId", file.fileId(),
+                "objectId", file.objectId(),
+                "topologyObjects", List.of(row("mRID", "VL-1", "name", "Voltage Level 1", "objectType", "VoltageLevel")),
+                "topologyRelations", List.of(row("sourceMRID", "T-1", "targetMRID", "CN-1", "relationType", "Terminal.ConnectivityNode")),
+                "profile", Map.of(
+                        "voltages", List.of(row("mRID", "SV-1", "v", 400.0, "angle", -1.2)),
+                        "flows", List.of(row("mRID", "PF-1", "p", 120.0, "q", 18.5))));
+    }
+
+    @GetMapping("/{importId}/files/{fileId}/profile/tables")
+    public DynamicTableBundle profileTables(@PathVariable String importId, @PathVariable String fileId) {
+        ImportFileStatus file = file(importId, fileId);
+        Map<String, Object> payload = profilePayload(importId, fileId);
+        return new DynamicTableBundle(
+                importId,
+                fileId,
+                file.profileType(),
+                file.profileFamily(),
+                payload,
+                List.of(
+                        table("topologyObjects", "Topology objects", List.of(row("mRID", "VL-1", "name", "Voltage Level 1", "objectType", "VoltageLevel"))),
+                        table("voltages", "Voltages", List.of(row("mRID", "SV-1", "v", 400.0, "angle", -1.2))),
+                        table("flows", "Flows", List.of(row("mRID", "PF-1", "p", 120.0, "q", 18.5)))));
+    }
+
+    @GetMapping("/{importId}/files/{fileId}/profile/tables/{tableId}")
+    public DynamicTableDefinition profileTable(
+            @PathVariable String importId,
+            @PathVariable String fileId,
+            @PathVariable String tableId) {
+        return profileTables(importId, fileId).tables().stream()
+                .filter(table -> table.tableId().equals(tableId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Mock profile table not found: " + tableId));
+    }
+
     @PutMapping(value = "/{importId}/files/{fileId}/status", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ImportStatus updateFileStatus(
             @PathVariable String importId,
@@ -225,5 +273,34 @@ public class MockCnmImportController {
                 now);
         String statusMessage = message == null || message.isBlank() ? "Mock import ready" : message.trim();
         return new ImportStatus(id, serviceType, timeFrame, ImportState.SUCCESS, List.of(file), now, statusMessage);
+    }
+
+    private ImportFileStatus file(String importId, String fileId) {
+        return importById(importId).files().stream()
+                .filter(file -> file.fileId().equals(fileId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Mock import file not found: " + fileId));
+    }
+
+    private DynamicTableDefinition table(String tableId, String label, List<Map<String, Object>> rows) {
+        List<DynamicTableColumn> columns = rows.stream()
+                .flatMap(row -> row.keySet().stream())
+                .distinct()
+                .map(key -> new DynamicTableColumn(key, key, "string", true, true, ""))
+                .toList();
+        List<DynamicTableRow> tableRows = new ArrayList<>();
+        for (int index = 0; index < rows.size(); index++) {
+            Map<String, Object> row = rows.get(index);
+            tableRows.add(new DynamicTableRow(String.valueOf(row.getOrDefault("mRID", tableId + "-" + index)), row));
+        }
+        return new DynamicTableDefinition(tableId, label, columns, tableRows, tableRows.size(), columns.isEmpty() ? "" : columns.get(0).key());
+    }
+
+    private Map<String, Object> row(Object... values) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        for (int index = 0; index + 1 < values.length; index += 2) {
+            row.put(String.valueOf(values[index]), values[index + 1]);
+        }
+        return row;
     }
 }

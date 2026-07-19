@@ -13,6 +13,10 @@ import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.DynamicTableBundle;
+import eu.egm.data.cnm.common.DynamicTableColumn;
+import eu.egm.data.cnm.common.DynamicTableDefinition;
+import eu.egm.data.cnm.common.DynamicTableRow;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatus;
@@ -21,10 +25,13 @@ import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
+import eu.egm.mapping.JacksonJsonMappingService;
+import eu.egm.mapping.JsonMappingService;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument.CnmImportFileDocument;
 import eu.egm.srv.cnm.services.domain.CnmImportDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileDocument.CnmEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
@@ -39,8 +46,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -49,6 +58,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
@@ -60,11 +70,13 @@ public class CnmImportRestService extends RestServiceSupport {
             Pattern.compile(
                     "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9]+)_(?<version>\\d+)$",
                     Pattern.CASE_INSENSITIVE);
+    private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
 
     private final ObjectStorageService objectStorageService;
     private final DocumentRepositoryService<CnmImportDocument> documentRepository;
     private final DocumentRepositoryService<CnmProfileDocument> profileRepository;
     private final EventPublisherService eventPublisher;
+    private final JsonMappingService jsonMappingService;
     private final RdfMetadataExtractor metadataExtractor;
     private final String rawBucket;
     private final String eventExchange;
@@ -78,11 +90,33 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
             @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey) {
+        this(
+                environment,
+                observationRegistry,
+                infrastructureUtils,
+                new JacksonJsonMappingService(),
+                metadataExtractor,
+                rawBucket,
+                eventExchange,
+                fileProcessingRoutingKey);
+    }
+
+    @Autowired
+    public CnmImportRestService(
+            Environment environment,
+            ObservationRegistry observationRegistry,
+            InfrastructureUtils infrastructureUtils,
+            JsonMappingService jsonMappingService,
+            RdfMetadataExtractor metadataExtractor,
+            @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
+            @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
+            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey) {
         super(environment, observationRegistry);
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
         this.profileRepository = infrastructureUtils.documentRepository(new CnmProfileDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
+        this.jsonMappingService = jsonMappingService;
         this.metadataExtractor = metadataExtractor;
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
@@ -546,9 +580,14 @@ public class CnmImportRestService extends RestServiceSupport {
         CnmImportFileDocument processed;
         try {
             byte[] payload = objectStorageService.read(rawBucket, target.objectId());
-            RdfMetadata metadata = metadataExtractor.extract(payload);
+            RdfMetadata metadata = metadataExtractor.extract(
+                    payload,
+                    target.profileFamily(),
+                    target.profileType(),
+                    target.fileId(),
+                    target.objectId());
             processed = withParsedMetadata(target, metadata);
-            profileRepository.save(toProfileDocument(current.id(), processed));
+            profileRepository.save(toProfileDocument(current.id(), processed, metadata));
         } catch (Exception exception) {
             logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
             processed = withStatus(target, ImportFileState.FAILED, message(exception));
@@ -632,16 +671,25 @@ public class CnmImportRestService extends RestServiceSupport {
                 .map(profile -> new CnmProfileDocument(
                         profile.id(),
                         profile.importId(),
+                        profile.fileId(),
                         profile.fileName(),
                         profile.objectId(),
                         state,
                         profileFamily(profile),
                         profile.profileType(),
+                        profile.detectedProfileKind(),
+                        profile.modelId(),
                         profile.tsoName(),
                         profile.businessDay(),
                         profile.businessTime(),
                         profile.timeFrame(),
                         profile.version(),
+                        profile.entityCounts(),
+                        profile.warningCount(),
+                        state == ImportFileState.FAILED ? Math.max(1, number(profile.errorCount())) : number(profile.errorCount()),
+                        profile.profileJsonType(),
+                        profile.profileJson(),
+                        profile.profileJsonChunks(),
                         profile.importedAt()))
                 .ifPresent(profileRepository::save);
     }
@@ -753,21 +801,187 @@ public class CnmImportRestService extends RestServiceSupport {
                 result.size());
     }
 
-    private CnmProfileDocument toProfileDocument(String importId, CnmImportFileDocument file) {
+    public Object profilePayload(String importId, String fileId) {
+        CnmProfileDocument document = findProfileDocument(importId, fileId);
+        String profileJson = profileJson(document);
+        if (profileJson == null || profileJson.isBlank()) {
+            throw new IllegalArgumentException("Profile payload is not available for file: " + fileId);
+        }
+        return jsonMappingService.fromJson(profileJson, Map.class);
+    }
+
+    public DynamicTableBundle profileTables(String importId, String fileId) {
+        CnmProfileDocument document = findProfileDocument(importId, fileId);
+        String profileJson = profileJson(document);
+        if (profileJson == null || profileJson.isBlank()) {
+            throw new IllegalArgumentException("Profile table data is not available for file: " + fileId);
+        }
+        Map<String, Object> payload = jsonMappingService.fromJson(profileJson, Map.class);
+        return toDynamicTableBundle(importId, fileId, document, payload);
+    }
+
+    public DynamicTableDefinition profileTable(String importId, String fileId, String tableId) {
+        return profileTables(importId, fileId).tables().stream()
+                .filter(table -> table.tableId().equals(tableId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Profile table not found: " + tableId));
+    }
+
+    private CnmProfileDocument findProfileDocument(String importId, String fileId) {
+        return profileRepository.findByField("id", fileId, 1)
+                .stream()
+                .filter(document -> document.importId().equals(importId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Profile data not found for file: " + fileId));
+    }
+
+    private CnmProfileDocument toProfileDocument(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
+        String profileJson = jsonMappingService.toJson(metadata.payload());
         return new CnmProfileDocument(
                 file.fileId(),
                 importId,
+                file.fileId(),
                 file.fileName(),
                 file.objectId(),
                 file.state(),
                 file.profileFamily(),
-                file.profileType(),
+                valueOr(metadata.profileType(), file.profileType()),
+                metadata.detectedProfileKind(),
+                metadata.modelId(),
                 file.tsoName(),
                 file.businessDay(),
                 file.businessTime(),
                 file.modelTimeFrame(),
                 file.modelVersion(),
+                toEntityCounts(metadata.entityCounts()),
+                metadata.warnings().size(),
+                0,
+                metadata.profileJsonType(),
+                profileJson.length() <= PROFILE_JSON_CHUNK_SIZE ? profileJson : "",
+                chunks(profileJson),
                 file.uploadedAt());
+    }
+
+    private String profileJson(CnmProfileDocument document) {
+        if (document.profileJson() != null && !document.profileJson().isBlank()) {
+            return document.profileJson();
+        }
+        if (document.profileJsonChunks() == null || document.profileJsonChunks().isEmpty()) {
+            return "";
+        }
+        return String.join("", document.profileJsonChunks());
+    }
+
+    private List<String> chunks(String value) {
+        if (value == null || value.length() <= PROFILE_JSON_CHUNK_SIZE) {
+            return List.of();
+        }
+        List<String> chunks = new ArrayList<>();
+        for (int index = 0; index < value.length(); index += PROFILE_JSON_CHUNK_SIZE) {
+            chunks.add(value.substring(index, Math.min(index + PROFILE_JSON_CHUNK_SIZE, value.length())));
+        }
+        return chunks;
+    }
+
+    private List<CnmEntityCountDocument> toEntityCounts(Map<String, Long> counts) {
+        if (counts == null || counts.isEmpty()) {
+            return List.of();
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new CnmEntityCountDocument(entry.getKey(), entry.getValue() == null ? 0 : entry.getValue()))
+                .toList();
+    }
+
+    private DynamicTableBundle toDynamicTableBundle(
+            String importId,
+            String fileId,
+            CnmProfileDocument document,
+            Map<String, Object> payload) {
+        List<DynamicTableDefinition> tables = new ArrayList<>();
+        tables.add(table("topologyObjects", "Topology objects", listOfMaps(payload.get("topologyObjects"))));
+        tables.add(table("topologyRelations", "Topology relations", listOfMaps(payload.get("topologyRelations"))));
+        Object profile = payload.get("profile");
+        if (profile instanceof Map<?, ?> profileMap) {
+            profileMap.forEach((key, value) -> {
+                if (value instanceof List<?> list) {
+                    tables.add(table(String.valueOf(key), label(String.valueOf(key)), listOfMaps(list)));
+                } else if (value != null) {
+                    tables.add(table(String.valueOf(key), label(String.valueOf(key)), List.of(toMap(value))));
+                }
+            });
+        } else if (profile != null) {
+            tables.add(table("profile", "Profile", List.of(toMap(profile))));
+        }
+        return new DynamicTableBundle(
+                importId,
+                fileId,
+                document.profileType(),
+                profileFamily(document),
+                payload,
+                tables.stream().filter(table -> !table.rows().isEmpty()).toList());
+    }
+
+    private DynamicTableDefinition table(String tableId, String label, List<Map<String, Object>> sourceRows) {
+        List<String> keys = sourceRows.stream()
+                .flatMap(row -> row.keySet().stream())
+                .distinct()
+                .toList();
+        List<DynamicTableColumn> columns = keys.stream()
+                .map(key -> new DynamicTableColumn(key, label(key), type(sourceRows, key), true, true, ""))
+                .toList();
+        List<DynamicTableRow> rows = new ArrayList<>();
+        for (int index = 0; index < sourceRows.size(); index++) {
+            Map<String, Object> row = sourceRows.get(index);
+            String rowId = String.valueOf(row.getOrDefault("mRID", row.getOrDefault("rowId", tableId + "-" + index)));
+            rows.add(new DynamicTableRow(rowId, row));
+        }
+        String defaultSort = columns.isEmpty() ? "" : columns.get(0).key();
+        return new DynamicTableDefinition(tableId, label, columns, rows, rows.size(), defaultSort);
+    }
+
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream().map(this::toMap).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> toMap(Object value) {
+        if (value == null) {
+            return Map.of();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            map.forEach((key, entryValue) -> {
+                if (entryValue == null || entryValue instanceof String || entryValue instanceof Number || entryValue instanceof Boolean) {
+                    result.put(String.valueOf(key), entryValue);
+                } else if (entryValue instanceof List<?> list) {
+                    result.put(String.valueOf(key), list.size());
+                } else {
+                    result.put(String.valueOf(key), String.valueOf(entryValue));
+                }
+            });
+            return result;
+        }
+        return jsonMappingService.fromJson(jsonMappingService.toJson(value), Map.class);
+    }
+
+    private String type(List<Map<String, Object>> rows, String key) {
+        return rows.stream()
+                .map(row -> row.get(key))
+                .filter(value -> value != null)
+                .findFirst()
+                .map(value -> value instanceof Number ? "number" : value instanceof Boolean ? "boolean" : "string")
+                .orElse("string");
+    }
+
+    private String label(String key) {
+        if (key == null || key.isBlank()) {
+            return "";
+        }
+        String spaced = key.replaceAll("([a-z])([A-Z])", "$1 $2").replace('_', ' ');
+        return spaced.substring(0, 1).toUpperCase(Locale.ROOT) + spaced.substring(1);
     }
 
     private CnmProfileMetadata toProfileMetadata(CnmProfileDocument document) {
@@ -832,6 +1046,10 @@ public class CnmImportRestService extends RestServiceSupport {
 
     private String valueOr(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private int number(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private Instant instant(Object value) {

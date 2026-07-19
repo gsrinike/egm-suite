@@ -1,3 +1,5 @@
+import { HttpClientError } from '@egm/gui.common/src';
+
 export type CnmServiceType = 'CGM' | 'CSA' | 'CC';
 export type TimeFrame = 'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD';
 export type ImportState = 'INIT' | 'STORED' | 'SUCCESS' | 'FAILED';
@@ -45,6 +47,38 @@ export interface ProfileMetadata {
   importedAt: string;
 }
 
+export interface DynamicTableBundle {
+  importId: string;
+  fileId: string;
+  profileType: string;
+  profileFamily: string;
+  payload: unknown;
+  tables: DynamicTableDefinition[];
+}
+
+export interface DynamicTableColumn {
+  key: string;
+  label: string;
+  type: string;
+  sortable: boolean;
+  searchable: boolean;
+  unit: string;
+}
+
+export interface DynamicTableRow {
+  rowId: string;
+  values: Record<string, unknown>;
+}
+
+export interface DynamicTableDefinition {
+  tableId: string;
+  label: string;
+  columns: DynamicTableColumn[];
+  rows: DynamicTableRow[];
+  totalRows: number;
+  defaultSort: string;
+}
+
 export interface ImportPage {
   items: ImportStatus[];
   total: number;
@@ -57,18 +91,40 @@ const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 
 export async function listImports(): Promise<ImportPage> {
   const baseUrl = cnmBaseUrl();
-  const response = await fetch(`${baseUrl}/api/cnm/imports?page=0&size=50`);
+  const url = `${baseUrl}/api/cnm/imports?page=0&size=50`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Unable to load imports: ${response.status}`);
+    throw await HttpClientError.fromResponse('Unable to load imports', url, response);
   }
   return response.json();
 }
 
 export async function getImport(importId: string): Promise<ImportStatus> {
   const baseUrl = cnmBaseUrl();
-  const response = await fetch(`${baseUrl}/api/cnm/imports/${encodeURIComponent(importId)}`);
+  const url = `${baseUrl}/api/cnm/imports/${encodeURIComponent(importId)}`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Unable to load import files: ${response.status}`);
+    throw await HttpClientError.fromResponse('Unable to load import files', url, response);
+  }
+  return response.json();
+}
+
+export async function getProfilePayload(importId: string, fileId: string): Promise<unknown> {
+  const baseUrl = cnmBaseUrl();
+  const url = `${baseUrl}/api/cnm/imports/${encodeURIComponent(importId)}/files/${encodeURIComponent(fileId)}/profile/payload`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load profile payload', url, response);
+  }
+  return response.json();
+}
+
+export async function getProfileTables(importId: string, fileId: string): Promise<DynamicTableBundle> {
+  const baseUrl = cnmBaseUrl();
+  const url = `${baseUrl}/api/cnm/imports/${encodeURIComponent(importId)}/files/${encodeURIComponent(fileId)}/profile/tables`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load profile data', url, response);
   }
   return response.json();
 }
@@ -98,23 +154,25 @@ export async function uploadImport(
           totalChunks: String(totalChunks),
           fileSize: String(file.size)
         });
-        const chunkResponse = await fetch(`${baseUrl}/api/cnm/imports/chunks?${params}`, {
+        const url = `${baseUrl}/api/cnm/imports/chunks?${params}`;
+        const chunkResponse = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: chunk
         });
         if (!chunkResponse.ok) {
-          throw new Error(`Unable to upload ${file.name} chunk ${chunkIndex + 1}: ${chunkResponse.status}`);
+          throw await HttpClientError.fromResponse(`Unable to upload ${file.name} chunk ${chunkIndex + 1}`, url, chunkResponse);
         }
       }
     }
-    const response = await fetch(`${baseUrl}/api/cnm/imports/chunks/complete`, {
+    const url = `${baseUrl}/api/cnm/imports/chunks/complete`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ importId, serviceType, timeFrame, message })
     });
     if (!response.ok) {
-      throw new Error(`Unable to complete model import: ${response.status}`);
+      throw await HttpClientError.fromResponse('Unable to complete model import', url, response);
     }
     return response.json();
   } catch (error) {
@@ -137,9 +195,10 @@ export async function listProfiles(filters: {
       params.set(key, value);
     }
   });
-  const response = await fetch(`${baseUrl}/api/cnm/imports/profiles?${params}`);
+  const url = `${baseUrl}/api/cnm/imports/profiles?${params}`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Unable to load profiles: ${response.status}`);
+    throw await HttpClientError.fromResponse('Unable to load profiles', url, response);
   }
   return response.json();
 }

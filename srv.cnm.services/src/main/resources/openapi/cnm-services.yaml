@@ -101,6 +101,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ImportStatus'
+  /api/cnm/imports/{importId}/files/{fileId}/profile/payload:
+    get:
+      summary: Get JSON profile payload for one imported file
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Profile payload stored as JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/cnm/imports/{importId}/files/{fileId}/profile/tables:
+    get:
+      summary: Get dynamic profile tables for one imported file
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dynamic table bundle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicTableBundle'
+  /api/cnm/imports/{importId}/files/{fileId}/profile/tables/{tableId}:
+    get:
+      summary: Get one dynamic profile table
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+        - { name: tableId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Dynamic table
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DynamicTableDefinition'
   /api/cnm/imports/failures:
     post:
       summary: Record an upload failure
@@ -300,6 +340,50 @@ components:
           format: date-time
         message:
           type: string
+    DynamicTableBundle:
+      type: object
+      properties:
+        importId: { type: string }
+        fileId: { type: string }
+        profileType: { type: string }
+        profileFamily:
+          $ref: '#/components/schemas/ProfileFamily'
+        payload:
+          type: object
+        tables:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicTableDefinition'
+    DynamicTableDefinition:
+      type: object
+      properties:
+        tableId: { type: string }
+        label: { type: string }
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicTableColumn'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicTableRow'
+        totalRows: { type: integer }
+        defaultSort: { type: string }
+    DynamicTableColumn:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        type: { type: string }
+        sortable: { type: boolean }
+        searchable: { type: boolean }
+        unit: { type: string }
+    DynamicTableRow:
+      type: object
+      properties:
+        rowId: { type: string }
+        values:
+          type: object
     ImportFailureRequest:
       type: object
       required: [importId, serviceType, timeFrame, fileNames, message]

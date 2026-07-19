@@ -47,6 +47,14 @@
       <Button :disabled="busy" @click="closeImportFiles">Back to imports</Button>
     </section>
 
+    <section v-if="activeView === 'profile-data'" class="detail-heading glass-panel">
+      <div>
+        <p>Profile data</p>
+        <strong>{{ profileTables?.profileType }} {{ selectedProfileFileName }}</strong>
+      </div>
+      <Button :disabled="busy" @click="activeView = 'import-files'">Back to files</Button>
+    </section>
+
     <p v-if="message" class="status-message">{{ message }}</p>
 
     <DataTable
@@ -74,6 +82,20 @@
       :rows="fileRows"
       :page-size="10"
       id-key="fileId"
+    >
+      <template #cell-fileName="{ row }">
+        <Link @click="openProfileTables(String(row.fileId), String(row.fileName))">
+          {{ row.fileName }}
+        </Link>
+      </template>
+    </DataTable>
+
+    <DynamicTable
+      v-if="activeView === 'profile-data'"
+      :tables="profileTables?.tables ?? []"
+      :loading="busy"
+      :error="message"
+      :page-size="25"
     />
 
     <DataTable
@@ -88,14 +110,16 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Button, DataTable, Dropdown, Link, Menu } from '@egm/gui.common/src';
+import { Button, DataTable, Dropdown, DynamicTable, Link, logClientError, Menu } from '@egm/gui.common/src';
 import {
   getImport,
+  getProfileTables,
   ImportUploadError,
   listProfiles,
   listImports,
   uploadImport,
   type CnmServiceType,
+  type DynamicTableBundle,
   type ImportStatus,
   type ProfileMetadata,
   type TimeFrame
@@ -117,6 +141,8 @@ const message = ref('');
 const fileInput = ref<HTMLInputElement>();
 const retryImportId = ref('');
 const selectedImport = ref<ImportStatus>();
+const profileTables = ref<DynamicTableBundle>();
+const selectedProfileFileName = ref('');
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
 const lightTheme = ref(false);
 
@@ -232,6 +258,7 @@ async function openImportFiles(importId: string) {
     selectedImport.value = await getImport(importId);
     activeView.value = 'import-files';
   } catch (error) {
+    logClientError('openImportFiles failed', error, { importId });
     message.value = error instanceof Error ? error.message : 'Unable to load import files';
   } finally {
     busy.value = false;
@@ -240,7 +267,31 @@ async function openImportFiles(importId: string) {
 
 function closeImportFiles() {
   selectedImport.value = undefined;
+  profileTables.value = undefined;
+  selectedProfileFileName.value = '';
   activeView.value = 'imports';
+}
+
+async function openProfileTables(fileId: string, fileName: string) {
+  if (!selectedImport.value) {
+    return;
+  }
+  busy.value = true;
+  message.value = '';
+  selectedProfileFileName.value = fileName;
+  try {
+    profileTables.value = await getProfileTables(selectedImport.value.importId, fileId);
+    activeView.value = 'profile-data';
+  } catch (error) {
+    logClientError('openProfileTables failed', error, {
+      importId: selectedImport.value.importId,
+      fileId,
+      fileName
+    });
+    message.value = error instanceof Error ? error.message : 'Unable to load profile data';
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function refresh() {
@@ -249,6 +300,7 @@ async function refresh() {
   try {
     imports.value = (await listImports()).items;
   } catch (error) {
+    logClientError('refresh imports failed', error);
     message.value = error instanceof Error ? error.message : 'Unable to load imports';
   } finally {
     busy.value = false;
@@ -261,6 +313,7 @@ async function refreshProfiles() {
   try {
     profiles.value = (await listProfiles(profileFilters.value)).items;
   } catch (error) {
+    logClientError('refreshProfiles failed', error, { filters: profileFilters.value });
     message.value = error instanceof Error ? error.message : 'Unable to load profiles';
   } finally {
     busy.value = false;
@@ -287,6 +340,10 @@ async function upload(importId?: string) {
       : `Import created with ${imported.files.length} model file${imported.files.length === 1 ? '' : 's'}`;
     importMessage.value = '';
   } catch (error) {
+    logClientError('upload import failed', error, {
+      importId,
+      fileNames: selectedFiles.value.map((file) => file.name)
+    });
     const errorMessage = error instanceof Error ? error.message : 'Unable to import model';
     if (error instanceof ImportUploadError) {
       await refresh();

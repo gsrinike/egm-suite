@@ -1,3 +1,5 @@
+import { HttpClientError } from '@egm/gui.common/src';
+
 export type WorkflowStatus = 'INIT' | 'RUNNING' | 'WAITING' | 'COMPLETED' | 'FAILED';
 
 export interface NetworkCaseReference {
@@ -45,22 +47,24 @@ export interface CsaCaseStatus {
 
 export async function startCsaCase(request: CsaStartRequest): Promise<CsaCaseStatus> {
   const baseUrl = csaBaseUrl();
-  const response = await fetch(`${baseUrl}/api/csa/cases`, {
+  const url = `${baseUrl}/api/csa/cases`;
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request)
   });
   if (!response.ok) {
-    throw new Error(`Unable to start CSA case: ${response.status}`);
+    throw await HttpClientError.fromResponse('Unable to start CSA case', url, response);
   }
   return response.json();
 }
 
 export async function listCsaCases(): Promise<{ items: CsaCaseStatus[]; total: number; page: number; size: number }> {
   const baseUrl = csaBaseUrl();
-  const response = await fetch(`${baseUrl}/api/csa/cases?page=0&size=50`);
+  const url = `${baseUrl}/api/csa/cases?page=0&size=50`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Unable to load CSA cases: ${response.status}`);
+    throw await HttpClientError.fromResponse('Unable to load CSA cases', url, response);
   }
   return response.json();
 }

@@ -104,3 +104,35 @@
   position: sticky;
   top: 0;
 }
+
+.dynamic-table-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.dynamic-table-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dynamic-table-tabs button {
+  background: color-mix(in srgb, var(--bg-card, #fff) 86%, transparent);
+  border: 1px solid var(--border-color, #d8e0e8);
+  border-radius: 6px;
+  color: var(--text-main, #18222f);
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.dynamic-table-tabs button.active {
+  border-color: var(--primary, #245b78);
+  color: var(--primary, #245b78);
+}
+
+.dynamic-table-state {
+  color: var(--text-main, #18222f);
+  margin: 0;
+  opacity: 0.75;
+}
