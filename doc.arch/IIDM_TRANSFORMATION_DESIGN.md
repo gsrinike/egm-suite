@@ -128,8 +128,10 @@ updates where direct CGMES source files are available.
 
 `srv.iidm.transformer` exposes:
 
-- `GET /api/iidm/transforms?importId={importId}&page={page}&size={size}`: list
-  lightweight profile transform status rows for IIDM menu screens.
+- `GET /api/iidm/transforms?importId={importId}&search={search}&page={page}&size={size}`:
+  list lightweight profile transform status rows for IIDM menu screens. Search
+  is applied against metadata fields such as file ID, profile, state, message,
+  and network ID.
 - `GET /api/iidm/transforms/{fileId}`: read one transform status by source file.
 - `GET /api/iidm/networks?importId={importId}&page={page}&size={size}`: list
   lightweight IIDM network metadata for an import. The response excludes XIIDM
@@ -143,7 +145,8 @@ updates where direct CGMES source files are available.
   load one page of rows for the selected IIDM table.
 
 The full network document endpoint is retained for service diagnostics. GUI code
-uses the metadata and paged table endpoints.
+uses the metadata and paged table endpoints. IIDM dynamic-table search is
+server-side so a term can match rows beyond the currently displayed page.
 
 ## Consistency Rules
 

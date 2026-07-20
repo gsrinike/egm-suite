@@ -171,10 +171,10 @@ public class IidmProfileTransformService extends RestServiceSupport {
         return transformRepository.findByField("importId", importId, maxResults);
     }
 
-    public IidmPage<IidmTransformSummaryResponse> transformSummaries(String importId, int page, int size) {
+    public IidmPage<IidmTransformSummaryResponse> transformSummaries(String importId, String search, int page, int size) {
         DocumentPage<IidmProfileTransformDocument> documents = transformRepository.search(new DocumentSearchRequest(
                 filters(importId),
-                List.of(),
+                iidmTransformSearchFilters(search),
                 page,
                 size));
         return new IidmPage<>(
@@ -303,6 +303,20 @@ public class IidmProfileTransformService extends RestServiceSupport {
             return List.of();
         }
         return List.of(DocumentFilter.exact("importId", importId));
+    }
+
+    private List<DocumentFilter> iidmTransformSearchFilters(String search) {
+        if (search == null || search.isBlank()) {
+            return List.of();
+        }
+        String query = search.trim();
+        return List.of(
+                DocumentFilter.contains("fileId", query),
+                DocumentFilter.contains("profileType", query),
+                DocumentFilter.contains("profileFamily", query),
+                DocumentFilter.contains("transformState", query),
+                DocumentFilter.contains("transformMessage", query),
+                DocumentFilter.contains("iidmNetworkId", query));
     }
 
     private IidmTransformSummaryResponse toTransformSummary(IidmProfileTransformDocument document) {

@@ -260,6 +260,7 @@ export async function listProfiles(filters: {
 
 export async function listIidmTransforms(filters: {
   importId?: string;
+  search?: string;
   page?: number;
   size?: number;
 }): Promise<IidmPage<IidmTransformSummary>> {
@@ -270,6 +271,9 @@ export async function listIidmTransforms(filters: {
   });
   if (filters.importId) {
     params.set('importId', filters.importId);
+  }
+  if (filters.search) {
+    params.set('search', filters.search);
   }
   const url = `${baseUrl}/api/iidm/transforms?${params}`;
   const response = await fetch(url);

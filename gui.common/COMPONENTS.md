@@ -98,6 +98,8 @@ Props:
 - `idKey`: row identifier field. Defaults to `id`.
 - `hidePagination`: hides the built-in client-side pager. Use this only when a
   parent component owns paging, such as `DynamicTable` in server-side mode.
+- `hideSearch`: hides the built-in client-side search. Use this for server-side
+  datasets where the parent component sends search text to the backend.
 
 Slots:
 
@@ -133,8 +135,9 @@ Props:
 - `loading`: displays loading state.
 - `error`: displays an error message.
 - `pageSize`: page size passed to the active table.
-- `serverSide`: when `true`, the nested `DataTable` hides its own pagination
-  and `DynamicTable` emits page/table events.
+- `serverSide`: when `true`, the nested `DataTable` hides its own search and
+  pagination, and `DynamicTable` emits page/table events. The parent feature
+  view owns server-side search controls and passes the search term to its API.
 - `currentPage`: current server-side page index.
 
 Events:
@@ -148,10 +151,10 @@ Events:
 `DataTable` renders one known table. `DynamicTable` renders one of many
 runtime-defined tables.
 
-`DynamicTable` uses `DataTable` internally. The base table remains responsible
-for row rendering, search, sorting, and regular client-side pagination. The
-dynamic wrapper is responsible for table selection and optional server-side
-paging coordination.
+`DynamicTable` uses `DataTable` internally. In local mode the base table remains
+responsible for row rendering, search, sorting, and regular client-side
+pagination. In server-side mode the feature view owns search and paging because
+only the backend has all rows for the selected table.
 
 ## RefreshButton
 

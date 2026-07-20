@@ -57,6 +57,7 @@
           </option>
         </select>
       </label>
+      <label>Search<input v-model="iidmTransformSearch" placeholder="Profile, network, state..." @keyup.enter="refreshIidmTransforms" /></label>
       <Button :disabled="busy || !selectedIidmImportId" @click="refreshIidmTransforms">Search</Button>
     </section>
 
@@ -84,6 +85,11 @@
         <strong>{{ selectedIidmNetworkId }}</strong>
       </div>
       <Button :disabled="busy" @click="activeView = 'iidm'">Back to IIDM</Button>
+    </section>
+
+    <section v-if="activeView === 'iidm-data'" class="profile-filters iidm-table-filters glass-panel">
+      <label>Search table<input v-model="iidmTableSearch" placeholder="Search selected IIDM table" @keyup.enter="searchIidmTableRows" /></label>
+      <Button :disabled="busy || !selectedIidmTableId" @click="searchIidmTableRows">Search</Button>
     </section>
 
     <p v-if="message" class="status-message">{{ message }}</p>
@@ -239,6 +245,8 @@ const selectedIidmNetworkId = ref('');
 const selectedIidmTableId = ref('');
 const iidmTablePage = ref(0);
 const iidmTablePageSize = 100;
+const iidmTransformSearch = ref('');
+const iidmTableSearch = ref('');
 const lightTheme = ref(false);
 
 const menuItems = [
@@ -365,6 +373,7 @@ watch(selectedIidmImportId, () => {
   iidmTables.value = undefined;
   selectedIidmNetworkId.value = '';
   selectedIidmTableId.value = '';
+  iidmTableSearch.value = '';
   if (activeView.value === 'iidm' && selectedIidmImportId.value) {
     void refreshIidmTransforms();
   }
@@ -507,11 +516,15 @@ async function refreshIidmTransforms() {
   try {
     iidmTransforms.value = (await listIidmTransforms({
       importId: selectedIidmImportId.value,
+      search: iidmTransformSearch.value,
       page: 0,
       size: 100
     })).items;
   } catch (error) {
-    logClientError('refreshIidmTransforms failed', error, { importId: selectedIidmImportId.value });
+    logClientError('refreshIidmTransforms failed', error, {
+      importId: selectedIidmImportId.value,
+      search: iidmTransformSearch.value
+    });
     message.value = error instanceof Error ? error.message : 'Unable to load IIDM transforms';
   } finally {
     busy.value = false;
@@ -524,6 +537,7 @@ async function openIidmTables(networkId: string) {
   selectedIidmNetworkId.value = networkId;
   selectedIidmTableId.value = '';
   iidmTablePage.value = 0;
+  iidmTableSearch.value = '';
   try {
     iidmTables.value = await getIidmNetworkTables(networkId);
     selectedIidmTableId.value = iidmTables.value.tables[0]?.tableId ?? '';
@@ -552,18 +566,24 @@ async function loadIidmTableRows(tableId: string, page: number) {
       selectedIidmNetworkId.value,
       tableId,
       page,
-      iidmTablePageSize
+      iidmTablePageSize,
+      iidmTableSearch.value
     );
   } catch (error) {
     logClientError('loadIidmTableRows failed', error, {
       networkId: selectedIidmNetworkId.value,
       tableId,
-      page
+      page,
+      search: iidmTableSearch.value
     });
     message.value = error instanceof Error ? error.message : 'Unable to load IIDM table rows';
   } finally {
     busy.value = false;
   }
+}
+
+async function searchIidmTableRows() {
+  await loadIidmTableRows(selectedIidmTableId.value, 0);
 }
 
 async function upload(importId?: string) {

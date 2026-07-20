@@ -21,6 +21,7 @@
       :page-size="pageSize"
       id-key="rowId"
       :hide-pagination="serverSide"
+      :hide-search="serverSide"
     />
     <div v-if="serverSide && activeTable" class="common-pagination">
       <button type="button" :disabled="currentPage <= 0 || loading" @click="emitPage(currentPage - 1)">

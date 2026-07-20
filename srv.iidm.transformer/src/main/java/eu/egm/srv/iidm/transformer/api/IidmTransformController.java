@@ -21,9 +21,10 @@ public class IidmTransformController {
     @GetMapping("/transforms")
     public IidmPage<IidmTransformSummaryResponse> transforms(
             @RequestParam(required = false) String importId,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return transformService.transformSummaries(importId, Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        return transformService.transformSummaries(importId, search, Math.max(page, 0), Math.min(Math.max(size, 1), 100));
     }
 
     @GetMapping("/transforms/{fileId}")

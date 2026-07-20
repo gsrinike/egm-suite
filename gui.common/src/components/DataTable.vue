@@ -1,7 +1,7 @@
 <template>
   <section class="common-table-shell">
     <div class="common-table-toolbar">
-      <input v-model="search" type="search" placeholder="Search" />
+      <input v-if="!hideSearch" v-model="search" type="search" placeholder="Search" />
       <span>{{ filteredRows.length }} rows</span>
     </div>
     <div class="common-table-scroll">
@@ -47,10 +47,12 @@ const props = withDefaults(defineProps<{
   pageSize?: number;
   idKey?: string;
   hidePagination?: boolean;
+  hideSearch?: boolean;
 }>(), {
   pageSize: 10,
   idKey: 'id',
-  hidePagination: false
+  hidePagination: false,
+  hideSearch: false
 });
 
 const search = ref('');
