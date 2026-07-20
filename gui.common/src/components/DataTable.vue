@@ -28,7 +28,7 @@
         </tbody>
       </table>
     </div>
-    <div class="common-pagination">
+    <div v-if="!hidePagination" class="common-pagination">
       <button type="button" :disabled="page === 0" @click="page--">Previous</button>
       <span>Page {{ page + 1 }} / {{ totalPages }}</span>
       <button type="button" :disabled="page >= totalPages - 1" @click="page++">Next</button>
@@ -46,9 +46,11 @@ const props = withDefaults(defineProps<{
   rows: Row[];
   pageSize?: number;
   idKey?: string;
+  hidePagination?: boolean;
 }>(), {
   pageSize: 10,
-  idKey: 'id'
+  idKey: 'id',
+  hidePagination: false
 });
 
 const search = ref('');
