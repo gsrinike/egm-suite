@@ -11,6 +11,7 @@
 - `RCC_CSA_DESIGN.md`: RCC CSA workflow module boundaries, common LF/SA and RAO service split, BPM interaction, and GUI workflow monitoring.
 - `LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`: local deployment workflow, Docker/Maven behavior, and environment resolution rules.
 - `MODULE_CLASSIFICATION.md`: classification rules for current modules with links to module README files.
+- `../gui.common/COMPONENTS.md`: reusable GUI component responsibilities and usage rules for shared Vue components.
 - `codegen/codex`: repository-specific Codex rules, workflow guidance, and applied architecture decisions used for future changes.
 - `egm-module-archetype`: standalone Maven archetype for generating a new EGM Java module skeleton.
 
