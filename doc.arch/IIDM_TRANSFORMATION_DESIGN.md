@@ -57,8 +57,11 @@ caller requests a concrete network.
 
 The `IIDM` menu in `gui.cnm.manager` is profile-scoped and lazy-loaded:
 
-- The initial view calls the transform list API and receives transform/network
-  metadata only. It does not receive `networkXiidm` or `networkXiidmChunks`.
+- The initial view first requires selecting a successful CNM import. The import
+  selector contains only imports whose aggregate state is `SUCCESS`.
+- After selection, the view calls the transform list API with `importId` and
+  receives transform/network metadata only. It does not receive `networkXiidm`
+  or `networkXiidmChunks`.
 - Rows are clickable only when the transform state is `DONE` and a network ID is
   available.
 - Selecting one transformed profile opens an IIDM detail view for that network.

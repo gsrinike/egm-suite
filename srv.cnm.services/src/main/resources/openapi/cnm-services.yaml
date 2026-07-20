@@ -195,6 +195,7 @@ paths:
     get:
       summary: Search imported profile metadata
       parameters:
+        - { name: importId, in: query, schema: { type: string } }
         - { name: profileType, in: query, schema: { type: string } }
         - { name: tso, in: query, schema: { type: string } }
         - { name: businessDay, in: query, schema: { type: string, format: date } }

@@ -73,6 +73,12 @@ select {
   padding: 18px;
 }
 
+.header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
 .app-header p,
 .detail-heading p {
   color: var(--text-muted);
@@ -111,7 +117,7 @@ select {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   padding: 14px;
 }
 
@@ -127,7 +133,8 @@ select {
 
 .file-picker input,
 .message-input input,
-.profile-filters input {
+.profile-filters input,
+.profile-filters select {
   background: color-mix(in srgb, var(--bg-card) 86%, transparent);
   border: 1px solid var(--border-color);
   border-radius: 6px;

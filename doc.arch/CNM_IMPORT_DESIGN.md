@@ -321,12 +321,19 @@ Profile-content table APIs load the payload document only when a user opens a
 specific file. See `RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic
 table, and GUI logging design.
 
+The GUI `Profiles` and `IIDM` menus first present a successful-import selector.
+The selector contains only aggregate imports in `SUCCESS` state and labels each
+option as `<created date>_<service>_<timeframe>(<import id>)`. After the user
+selects an import, the Profiles menu searches profile metadata scoped by that
+`importId`.
+
 The GUI `IIDM` menu is downstream of profile parsing. It lists lightweight IIDM
-transform metadata from `srv.iidm.transformer`; it does not load XIIDM payloads
-or all network details. When the user selects one completed transformed
-profile/file, the GUI loads IIDM table metadata first and then requests rows for
-only the selected table/page. See `IIDM_TRANSFORMATION_DESIGN.md` for the
-document ownership and lazy table endpoints.
+transform metadata from `srv.iidm.transformer` scoped by the selected successful
+import; it does not load XIIDM payloads or all network details. When the user
+selects one completed transformed profile/file, the GUI loads IIDM table
+metadata first and then requests rows for only the selected table/page. See
+`IIDM_TRANSFORMATION_DESIGN.md` for the document ownership and lazy table
+endpoints.
 
 ## Consistency Rules
 

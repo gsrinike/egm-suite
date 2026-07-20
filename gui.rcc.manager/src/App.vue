@@ -38,6 +38,7 @@
           <h1>{{ activeTitle }}</h1>
         </div>
         <div class="hero-actions">
+          <RefreshButton />
           <button class="theme-toggle" type="button" @click="toggleTheme">
             {{ lightTheme ? 'Dark' : 'Light' }}
           </button>
@@ -101,7 +102,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Button, DataTable, logClientError } from '@egm/gui.common/src';
+import { Button, DataTable, logClientError, RefreshButton } from '@egm/gui.common/src';
 import CnmManagerView from '@egm/gui.cnm.manager/src/components/CnmManagerView.vue';
 import { listCsaCases, startCsaCase, type CsaCaseStatus } from './services/csaApi';
 

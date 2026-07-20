@@ -809,6 +809,7 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     public CnmPage<CnmProfileMetadata> searchProfiles(
+            String importId,
             String profileType,
             String tsoName,
             String businessDay,
@@ -816,6 +817,9 @@ public class CnmImportRestService extends RestServiceSupport {
             int page,
             int size) {
         List<DocumentFilter> filters = new ArrayList<>();
+        if (importId != null && !importId.isBlank()) {
+            filters.add(DocumentFilter.exact("importId", importId.trim()));
+        }
         if (profileType != null && !profileType.isBlank()) {
             filters.add(DocumentFilter.exact("profileType", profileType.trim().toUpperCase(Locale.ROOT)));
         }

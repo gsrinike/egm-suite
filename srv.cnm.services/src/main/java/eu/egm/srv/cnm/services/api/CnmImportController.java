@@ -89,13 +89,14 @@ public class CnmImportController {
 
     @GetMapping("/profiles")
     public CnmPage<CnmProfileMetadata> profiles(
+            @RequestParam(required = false) String importId,
             @RequestParam(required = false) String profileType,
             @RequestParam(required = false) String tso,
             @RequestParam(required = false) String businessDay,
             @RequestParam(required = false) String businessTime,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
-        return importService.searchProfiles(profileType, tso, businessDay, businessTime, page, size);
+        return importService.searchProfiles(importId, profileType, tso, businessDay, businessTime, page, size);
     }
 
     @GetMapping

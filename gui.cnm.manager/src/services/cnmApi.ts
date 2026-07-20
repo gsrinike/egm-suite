@@ -237,6 +237,7 @@ export async function uploadImport(
 }
 
 export async function listProfiles(filters: {
+  importId?: string;
   profileType?: string;
   tso?: string;
   businessDay?: string;

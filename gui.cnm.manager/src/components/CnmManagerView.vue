@@ -5,9 +5,12 @@
         <p>CNM Manager</p>
         <h1>Model Imports</h1>
       </div>
-      <button class="theme-toggle" type="button" @click="toggleTheme">
-        {{ lightTheme ? 'Dark' : 'Light' }}
-      </button>
+      <div class="header-actions">
+        <RefreshButton />
+        <button class="theme-toggle" type="button" @click="toggleTheme">
+          {{ lightTheme ? 'Dark' : 'Light' }}
+        </button>
+      </div>
     </div>
 
     <Menu :items="menuItems" :active-id="activeView" @select="activeView = $event" />
@@ -32,17 +35,29 @@
     </section>
 
     <section v-if="activeView === 'profiles'" class="profile-filters glass-panel">
+      <label>Successful import
+        <select v-model="selectedProfileImportId">
+          <option v-for="option in successfulImportOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
       <label>Profile type<input v-model="profileFilters.profileType" placeholder="EQ, SV, SSH..." /></label>
       <label>TSO<input v-model="profileFilters.tso" placeholder="TSO-XYZ" /></label>
       <label>Business day<input v-model="profileFilters.businessDay" type="date" /></label>
       <label>Business time<input v-model="profileFilters.businessTime" type="time" /></label>
-      <Button :disabled="busy" @click="refreshProfiles">Search</Button>
+      <Button :disabled="busy || !selectedProfileImportId" @click="refreshProfiles">Search</Button>
     </section>
 
     <section v-if="activeView === 'iidm'" class="profile-filters glass-panel">
-      <label>Import ID<input v-model="iidmFilters.importId" placeholder="Filter by import ID" /></label>
-      <Button :disabled="busy" @click="refreshIidmTransforms">Search</Button>
-      <Button :disabled="busy" @click="clearIidmFilter">Clear</Button>
+      <label>Successful import
+        <select v-model="selectedIidmImportId">
+          <option v-for="option in successfulImportOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+      <Button :disabled="busy || !selectedIidmImportId" @click="refreshIidmTransforms">Search</Button>
     </section>
 
     <section v-if="activeView === 'import-files'" class="detail-heading glass-panel">
@@ -176,7 +191,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Button, DataTable, Dropdown, DynamicTable, Link, logClientError, Menu } from '@egm/gui.common/src';
+import { Button, DataTable, Dropdown, DynamicTable, Link, logClientError, Menu, RefreshButton } from '@egm/gui.common/src';
 import {
   getImport,
   getIidmNetworkTables,
@@ -217,7 +232,8 @@ const profileTables = ref<DynamicTableBundle>();
 const selectedProfileFileName = ref('');
 const profileReturnView = ref('import-files');
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
-const iidmFilters = ref({ importId: '' });
+const selectedProfileImportId = ref('');
+const selectedIidmImportId = ref('');
 const iidmTables = ref<IidmTableBundle>();
 const selectedIidmNetworkId = ref('');
 const selectedIidmTableId = ref('');
@@ -315,6 +331,17 @@ const iidmRows = computed(() => iidmTransforms.value.map((transform) => ({
   completedAt: formatDateTime(transform.completedAt),
   failedAt: formatDateTime(transform.failedAt)
 })));
+const successfulImports = computed(() => imports.value.filter((item) => item.state === 'SUCCESS'));
+const successfulImportOptions = computed(() => [
+  {
+    label: successfulImports.value.length === 0 ? 'No successful imports available' : 'Select successful import',
+    value: ''
+  },
+  ...successfulImports.value.map((item) => ({
+    label: importOptionLabel(item),
+    value: item.importId
+  }))
+]);
 
 onMounted(refresh);
 watch(activeView, (view) => {
@@ -322,6 +349,23 @@ watch(activeView, (view) => {
     void refreshProfiles();
   }
   if (view === 'iidm') {
+    void refreshIidmTransforms();
+  }
+});
+watch(selectedProfileImportId, () => {
+  profiles.value = [];
+  profileTables.value = undefined;
+  selectedProfileFileName.value = '';
+  if (activeView.value === 'profiles' && selectedProfileImportId.value) {
+    void refreshProfiles();
+  }
+});
+watch(selectedIidmImportId, () => {
+  iidmTransforms.value = [];
+  iidmTables.value = undefined;
+  selectedIidmNetworkId.value = '';
+  selectedIidmTableId.value = '';
+  if (activeView.value === 'iidm' && selectedIidmImportId.value) {
     void refreshIidmTransforms();
   }
 });
@@ -415,6 +459,7 @@ async function refresh() {
   message.value = '';
   try {
     imports.value = (await listImports()).items;
+    alignSelectedSuccessfulImports();
   } catch (error) {
     logClientError('refresh imports failed', error);
     message.value = error instanceof Error ? error.message : 'Unable to load imports';
@@ -424,34 +469,49 @@ async function refresh() {
 }
 
 async function refreshProfiles() {
+  if (!selectedProfileImportId.value) {
+    profiles.value = [];
+    message.value = successfulImports.value.length === 0
+      ? 'No successful imports available'
+      : 'Select a successful import';
+    return;
+  }
   busy.value = true;
   message.value = '';
   try {
-    profiles.value = (await listProfiles(profileFilters.value)).items;
+    profiles.value = (await listProfiles({
+      importId: selectedProfileImportId.value,
+      ...profileFilters.value
+    })).items;
   } catch (error) {
-    logClientError('refreshProfiles failed', error, { filters: profileFilters.value });
+    logClientError('refreshProfiles failed', error, {
+      importId: selectedProfileImportId.value,
+      filters: profileFilters.value
+    });
     message.value = error instanceof Error ? error.message : 'Unable to load profiles';
   } finally {
     busy.value = false;
   }
 }
 
-function clearIidmFilter() {
-  iidmFilters.value.importId = '';
-  void refreshIidmTransforms();
-}
-
 async function refreshIidmTransforms() {
+  if (!selectedIidmImportId.value) {
+    iidmTransforms.value = [];
+    message.value = successfulImports.value.length === 0
+      ? 'No successful imports available'
+      : 'Select a successful import';
+    return;
+  }
   busy.value = true;
   message.value = '';
   try {
     iidmTransforms.value = (await listIidmTransforms({
-      importId: iidmFilters.value.importId,
+      importId: selectedIidmImportId.value,
       page: 0,
       size: 100
     })).items;
   } catch (error) {
-    logClientError('refreshIidmTransforms failed', error, { filters: iidmFilters.value });
+    logClientError('refreshIidmTransforms failed', error, { importId: selectedIidmImportId.value });
     message.value = error instanceof Error ? error.message : 'Unable to load IIDM transforms';
   } finally {
     busy.value = false;
@@ -521,6 +581,7 @@ async function upload(importId?: string) {
       importId
     );
     imports.value = [imported, ...imports.value.filter((item) => item.importId !== imported.importId)];
+    alignSelectedSuccessfulImports();
     message.value = imported.state === 'FAILED'
       ? imported.message
       : `Import created with ${imported.files.length} model file${imported.files.length === 1 ? '' : 's'}`;
@@ -549,6 +610,21 @@ function displayTimeFrame(value: TimeFrame) {
     return 'DAY-2';
   }
   return 'INTRA-DAY';
+}
+
+function importOptionLabel(item: ImportStatus) {
+  return `${formatDateTime(item.createdAt)}_${item.serviceType}_${displayTimeFrame(item.timeFrame)}(${item.importId})`;
+}
+
+function alignSelectedSuccessfulImports() {
+  if (selectedProfileImportId.value && !successfulImports.value.some((item) => item.importId === selectedProfileImportId.value)) {
+    selectedProfileImportId.value = '';
+    profiles.value = [];
+  }
+  if (selectedIidmImportId.value && !successfulImports.value.some((item) => item.importId === selectedIidmImportId.value)) {
+    selectedIidmImportId.value = '';
+    iidmTransforms.value = [];
+  }
 }
 
 function displayModelTimeFrame(value: string) {
