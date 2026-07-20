@@ -38,7 +38,12 @@
           <h1>{{ activeTitle }}</h1>
         </div>
         <div class="hero-actions">
-          <RefreshButton />
+          <AutoRefreshControl
+            storage-key="egm.rcc.header.refresh.interval"
+            :disabled="activeView !== 'cgm-import' || cnmActiveView !== 'imports'"
+            @interval-change="configureHeaderAutoRefresh"
+            @refresh="refreshActiveView"
+          />
           <button class="theme-toggle" type="button" @click="toggleTheme">
             {{ lightTheme ? 'Dark' : 'Light' }}
           </button>
@@ -47,7 +52,7 @@
       </header>
 
       <section v-if="activeView === 'cgm-import'" class="cnm-embed">
-        <CnmManagerView embedded />
+        <CnmManagerView ref="cnmManager" embedded @view-change="cnmActiveView = $event" />
       </section>
 
       <section v-if="activeView === 'csa'" class="panel">
@@ -101,8 +106,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { Button, DataTable, logClientError, RefreshButton } from '@egm/gui.common/src';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { applyThemePreference, AutoRefreshControl, Button, DataTable, logClientError, toggleThemePreference } from '@egm/gui.common/src';
 import CnmManagerView from '@egm/gui.cnm.manager/src/components/CnmManagerView.vue';
 import { listCsaCases, startCsaCase, type CsaCaseStatus } from './services/csaApi';
 
@@ -112,6 +117,10 @@ const message = ref('');
 const cases = ref<CsaCaseStatus[]>([]);
 const selectedCase = ref<CsaCaseStatus>();
 const lightTheme = ref(false);
+const cnmManager = ref<CnmManagerHandle>();
+const cnmActiveView = ref('imports');
+const headerRefreshInterval = ref<number | null>(null);
+let headerRefreshTimer: number | undefined;
 const caseName = ref('Day-ahead CSA');
 const networkId = ref('sample-network');
 const businessDay = ref(new Date().toISOString().slice(0, 10));
@@ -183,7 +192,17 @@ const actionColumns = [
   { key: 'validationStatus', label: 'Validation' }
 ];
 
-onMounted(refresh);
+onMounted(() => {
+  lightTheme.value = applyThemePreference();
+  void refresh();
+});
+onUnmounted(() => {
+  clearHeaderRefreshTimer();
+  cnmManager.value?.configureImportAutoRefresh(null);
+});
+watch(activeView, () => {
+  void applyHeaderAutoRefresh();
+});
 
 interface NavigationItem {
   id: string;
@@ -192,13 +211,50 @@ interface NavigationItem {
   children?: NavigationItem[];
 }
 
+interface CnmManagerHandle {
+  configureImportAutoRefresh: (intervalMs: number | null) => void;
+  refresh: () => Promise<void>;
+}
+
 function selectView(view: string) {
   activeView.value = view;
 }
 
 function toggleTheme() {
-  lightTheme.value = !lightTheme.value;
-  document.body.classList.toggle('light-theme', lightTheme.value);
+  lightTheme.value = toggleThemePreference(lightTheme.value);
+}
+
+async function configureHeaderAutoRefresh(intervalMs: number | null) {
+  headerRefreshInterval.value = intervalMs;
+  await applyHeaderAutoRefresh();
+}
+
+async function applyHeaderAutoRefresh() {
+  clearHeaderRefreshTimer();
+  await nextTick();
+  if (activeView.value === 'cgm-import') {
+    cnmManager.value?.configureImportAutoRefresh(headerRefreshInterval.value);
+    return;
+  }
+  cnmManager.value?.configureImportAutoRefresh(null);
+  if (headerRefreshInterval.value !== null) {
+    headerRefreshTimer = window.setInterval(refresh, headerRefreshInterval.value);
+  }
+}
+
+function clearHeaderRefreshTimer() {
+  if (headerRefreshTimer !== undefined) {
+    window.clearInterval(headerRefreshTimer);
+    headerRefreshTimer = undefined;
+  }
+}
+
+async function refreshActiveView() {
+  if (activeView.value === 'cgm-import') {
+    await cnmManager.value?.refresh();
+    return;
+  }
+  await refresh();
 }
 
 async function startCase() {

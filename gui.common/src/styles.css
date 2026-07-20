@@ -28,6 +28,42 @@
   padding: 0;
 }
 
+.common-auto-refresh-control {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.common-auto-refresh-control__gear {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-card, #fff) 80%, transparent);
+  border: 1px solid var(--border-color, #bac7d5);
+  border-radius: 6px;
+  color: var(--text-main, #18222f);
+  display: inline-flex;
+  font-size: 16px;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 36px;
+}
+
+.common-auto-refresh-control select {
+  background: color-mix(in srgb, var(--bg-card, #fff) 86%, transparent);
+  border: 1px solid var(--border-color, #bac7d5);
+  border-radius: 6px;
+  color: var(--text-main, #18222f);
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.common-auto-refresh-control--disabled {
+  opacity: 0.5;
+}
+
+.common-auto-refresh-control--disabled select {
+  cursor: not-allowed;
+}
+
 .common-button:disabled,
 .common-pagination button:disabled {
   cursor: not-allowed;

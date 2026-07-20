@@ -12,7 +12,7 @@ All public components and utilities are exported from `src/index.ts`.
 Consuming modules should import from the package entry point:
 
 ```ts
-import { Button, DataTable, DynamicTable, RefreshButton } from '@egm/gui.common/src';
+import { AutoRefreshControl, Button, DataTable, DynamicTable, RefreshButton } from '@egm/gui.common/src';
 ```
 
 Avoid importing component files directly from another GUI module. Keeping the
@@ -174,6 +174,38 @@ Props:
 Events:
 
 - `refresh`: emitted before the optional reload.
+
+## AutoRefreshControl
+
+`AutoRefreshControl` is a shared refresh interval selector. It renders a compact
+refresh-options control with fixed interval choices and a manual mode.
+
+Use it when a feature view needs user-controlled polling without hiding a
+hardcoded timer in the page logic. The feature module owns the actual refresh
+function and decides whether refresh is silent, full-page, or scoped to the
+active data view.
+
+Options:
+
+- `5 seconds`
+- `10 seconds`
+- `30 seconds`
+- `Manual`
+
+Props:
+
+- `storageKey`: browser storage key used to remember the selected option.
+  Defaults to `egm.auto-refresh.interval`.
+- `defaultInterval`: default interval in milliseconds. Use `null` for manual.
+- `disabled`: disables the selector, hides the manual refresh icon, and emits
+  `null` so the owning feature view can stop any active timer.
+
+Events:
+
+- `intervalChange(intervalMs)`: emits `5000`, `10000`, `30000`, or `null` for
+  manual mode.
+- `refresh`: emitted from the visible manual refresh icon when `Manual` is
+  selected.
 
 ## Browser Error Logging
 

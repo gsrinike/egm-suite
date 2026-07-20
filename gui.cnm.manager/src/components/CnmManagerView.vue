@@ -6,14 +6,19 @@
         <h1>Model Imports</h1>
       </div>
       <div class="header-actions">
-        <RefreshButton />
+        <AutoRefreshControl
+          storage-key="egm.cnm.import.refresh.interval"
+          :disabled="activeView !== 'imports'"
+          @interval-change="configureImportAutoRefresh"
+          @refresh="refresh"
+        />
         <button class="theme-toggle" type="button" @click="toggleTheme">
           {{ lightTheme ? 'Dark' : 'Light' }}
         </button>
       </div>
     </div>
 
-    <Menu :items="menuItems" :active-id="activeView" @select="activeView = $event" />
+    <Menu :items="menuItems" :active-id="activeView" @select="selectActiveView" />
 
     <section v-if="activeView === 'imports'" class="toolbar glass-panel">
       <Dropdown v-model="serviceType" label="Service" :options="serviceOptions" />
@@ -28,9 +33,6 @@
       </label>
       <Button :disabled="selectedFiles.length === 0 || busy" @click="upload()">
         Import
-      </Button>
-      <Button :disabled="busy" @click="refresh">
-        Refresh
       </Button>
     </section>
 
@@ -57,8 +59,6 @@
           </option>
         </select>
       </label>
-      <label>Search<input v-model="iidmTransformSearch" placeholder="Profile, network, state..." @keyup.enter="refreshIidmTransforms" /></label>
-      <Button :disabled="busy || !selectedIidmImportId" @click="refreshIidmTransforms">Search</Button>
     </section>
 
     <section v-if="activeView === 'import-files'" class="detail-heading glass-panel">
@@ -88,8 +88,11 @@
     </section>
 
     <section v-if="activeView === 'iidm-data'" class="profile-filters iidm-table-filters glass-panel">
-      <label>Search table<input v-model="iidmTableSearch" placeholder="Search selected IIDM table" @keyup.enter="searchIidmTableRows" /></label>
+      <label>Search table
+        <input v-model="iidmTableSearch" placeholder="Search selected IIDM table" @keyup.enter="searchIidmTableRows" />
+      </label>
       <Button :disabled="busy || !selectedIidmTableId" @click="searchIidmTableRows">Search</Button>
+      <Button :disabled="busy || !iidmTableSearch" @click="clearIidmTableSearch">Clear</Button>
     </section>
 
     <p v-if="message" class="status-message">{{ message }}</p>
@@ -196,8 +199,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { Button, DataTable, Dropdown, DynamicTable, Link, logClientError, Menu, RefreshButton } from '@egm/gui.common/src';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import {
+  applyThemePreference,
+  AutoRefreshControl,
+  Button,
+  DataTable,
+  Dropdown,
+  DynamicTable,
+  Link,
+  logClientError,
+  Menu,
+  toggleThemePreference
+} from '@egm/gui.common/src';
 import {
   getImport,
   getIidmNetworkTables,
@@ -220,6 +234,10 @@ import {
 withDefaults(defineProps<{ embedded?: boolean }>(), {
   embedded: false
 });
+
+const emit = defineEmits<{
+  viewChange: [view: string];
+}>();
 
 const activeView = ref('imports');
 const imports = ref<ImportStatus[]>([]);
@@ -245,9 +263,11 @@ const selectedIidmNetworkId = ref('');
 const selectedIidmTableId = ref('');
 const iidmTablePage = ref(0);
 const iidmTablePageSize = 100;
-const iidmTransformSearch = ref('');
 const iidmTableSearch = ref('');
 const lightTheme = ref(false);
+let importRefreshTimer: number | undefined;
+let importRefreshInFlight = false;
+let requestedImportRefreshInterval: number | null = null;
 
 const menuItems = [
   { id: 'imports', label: 'Imports' },
@@ -351,8 +371,19 @@ const successfulImportOptions = computed(() => [
   }))
 ]);
 
-onMounted(refresh);
+onMounted(() => {
+  lightTheme.value = applyThemePreference();
+  emit('viewChange', activeView.value);
+  void refresh();
+});
+onUnmounted(() => {
+  if (importRefreshTimer !== undefined) {
+    window.clearInterval(importRefreshTimer);
+  }
+});
 watch(activeView, (view) => {
+  emit('viewChange', view);
+  applyImportAutoRefresh();
   if (view === 'profiles') {
     void refreshProfiles();
   }
@@ -380,8 +411,11 @@ watch(selectedIidmImportId, () => {
 });
 
 function toggleTheme() {
-  lightTheme.value = !lightTheme.value;
-  document.body.classList.toggle('light-theme', lightTheme.value);
+  lightTheme.value = toggleThemePreference(lightTheme.value);
+}
+
+function selectActiveView(view: string) {
+  activeView.value = view;
 }
 
 function selectFiles(event: Event) {
@@ -467,14 +501,53 @@ async function refresh() {
   busy.value = true;
   message.value = '';
   try {
-    imports.value = (await listImports()).items;
-    alignSelectedSuccessfulImports();
+    applyImportSnapshot((await listImports()).items);
   } catch (error) {
     logClientError('refresh imports failed', error);
     message.value = error instanceof Error ? error.message : 'Unable to load imports';
   } finally {
     busy.value = false;
   }
+}
+
+async function refreshImportsSilently() {
+  if (busy.value || importRefreshInFlight) {
+    return;
+  }
+  importRefreshInFlight = true;
+  try {
+    applyImportSnapshot((await listImports()).items);
+  } catch (error) {
+    logClientError('silent import refresh failed', error);
+  } finally {
+    importRefreshInFlight = false;
+  }
+}
+
+function configureImportAutoRefresh(intervalMs: number | null) {
+  requestedImportRefreshInterval = intervalMs;
+  applyImportAutoRefresh();
+}
+
+function applyImportAutoRefresh() {
+  if (importRefreshTimer !== undefined) {
+    window.clearInterval(importRefreshTimer);
+    importRefreshTimer = undefined;
+  }
+  if (activeView.value === 'imports' && requestedImportRefreshInterval !== null) {
+    importRefreshTimer = window.setInterval(refreshImportsSilently, requestedImportRefreshInterval);
+  }
+}
+
+function applyImportSnapshot(nextImports: ImportStatus[]) {
+  imports.value = nextImports;
+  if (selectedImport.value) {
+    const updatedImport = nextImports.find((item) => item.importId === selectedImport.value?.importId);
+    if (updatedImport) {
+      selectedImport.value = updatedImport;
+    }
+  }
+  alignSelectedSuccessfulImports();
 }
 
 async function refreshProfiles() {
@@ -516,15 +589,11 @@ async function refreshIidmTransforms() {
   try {
     iidmTransforms.value = (await listIidmTransforms({
       importId: selectedIidmImportId.value,
-      search: iidmTransformSearch.value,
       page: 0,
       size: 100
     })).items;
   } catch (error) {
-    logClientError('refreshIidmTransforms failed', error, {
-      importId: selectedIidmImportId.value,
-      search: iidmTransformSearch.value
-    });
+    logClientError('refreshIidmTransforms failed', error, { importId: selectedIidmImportId.value });
     message.value = error instanceof Error ? error.message : 'Unable to load IIDM transforms';
   } finally {
     busy.value = false;
@@ -586,6 +655,14 @@ async function searchIidmTableRows() {
   await loadIidmTableRows(selectedIidmTableId.value, 0);
 }
 
+async function clearIidmTableSearch() {
+  if (!iidmTableSearch.value) {
+    return;
+  }
+  iidmTableSearch.value = '';
+  await loadIidmTableRows(selectedIidmTableId.value, 0);
+}
+
 async function upload(importId?: string) {
   if (selectedFiles.value.length === 0) {
     return;
@@ -600,8 +677,7 @@ async function upload(importId?: string) {
       importMessage.value,
       importId
     );
-    imports.value = [imported, ...imports.value.filter((item) => item.importId !== imported.importId)];
-    alignSelectedSuccessfulImports();
+    applyImportSnapshot([imported, ...imports.value.filter((item) => item.importId !== imported.importId)]);
     message.value = imported.state === 'FAILED'
       ? imported.message
       : `Import created with ${imported.files.length} model file${imported.files.length === 1 ? '' : 's'}`;
@@ -660,4 +736,9 @@ function formatDateTime(value: string) {
     timeStyle: 'short'
   }).format(new Date(value));
 }
+
+defineExpose({
+  configureImportAutoRefresh,
+  refresh
+});
 </script>
