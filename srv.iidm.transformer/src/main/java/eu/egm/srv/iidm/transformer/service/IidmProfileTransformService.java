@@ -604,9 +604,19 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private Map<String, Object> map(Object... values) {
         Map<String, Object> row = new LinkedHashMap<>();
         for (int index = 0; index < values.length; index += 2) {
-            row.put(String.valueOf(values[index]), values[index + 1]);
+            row.put(String.valueOf(values[index]), displayValue(values[index + 1]));
         }
         return row;
+    }
+
+    private Object displayValue(Object value) {
+        if (value instanceof Double number && !Double.isFinite(number)) {
+            return "";
+        }
+        if (value instanceof Float number && !Float.isFinite(number)) {
+            return "";
+        }
+        return value;
     }
 
     private Map<String, Object> row(String field, Object value) {
