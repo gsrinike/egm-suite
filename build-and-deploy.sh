@@ -15,12 +15,12 @@ build_maven_modules() {
 
 build_docker_images() {
   echo "Building selected Docker images without cache..."
-  "${SCRIPT_DIR}/docker/egm-compose.sh" build --no-cache srv-cnm-services gui-rcc-manager gui-cnm-manager
+  "${SCRIPT_DIR}/docker/egm-compose.sh" build --no-cache srv-cnm-services srv-iidm-transformer gui-rcc-manager gui-cnm-manager
 }
 
 start_runtime() {
-  echo "Starting runtime without mock services, BPM services, and non-CNM,non-CSA srv services..."
-  "${SCRIPT_DIR}/docker/egm-compose.sh" up mock=false 'exclude=srv.*,bpm.*' include=srv-cnm-services,srv-csa-services
+  echo "Starting runtime without mock services, BPM services, and non-CNM/non-CSA/non-IIDM srv services..."
+  "${SCRIPT_DIR}/docker/egm-compose.sh" up mock=false 'exclude=srv.*,bpm.*' include=srv-cnm-services,srv-iidm-transformer,srv-csa-services
 }
 
 cleanup_gui_artifacts

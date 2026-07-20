@@ -2,6 +2,7 @@
   "environment": "base",
   "apis": {
     "csaBaseUrl": "",
-    "cnmBaseUrl": ""
+    "cnmBaseUrl": "",
+    "iidmBaseUrl": ""
   }
 }

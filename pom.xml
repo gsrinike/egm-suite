@@ -21,12 +21,15 @@
         <module>egm-dependencies</module>
         <module>com.utils</module>
         <module>data.cnm</module>
+        <module>data.iidm</module>
         <module>data.common</module>
         <module>com.mapping</module>
+        <module>map.cnm.iidm</module>
         <module>com.infra</module>
         <module>com.auth</module>
         <module>com.vault</module>
         <module>srv.cnm.services</module>
+        <module>srv.iidm.transformer</module>
         <module>srv.common.lfsa</module>
         <module>mock.srv.common.lfsa</module>
         <module>srv.common.rao</module>

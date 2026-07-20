@@ -26,8 +26,11 @@ Rules:
 
 Current modules:
 
-- `data.cnm`: data transfer objects shared between CNM GUI, service, and mock modules. Packages are separated by `common`, `cgmes`, `ncp`, and `iidm`. See [README](../data.cnm/README.md).
+- `data.cnm`: data transfer objects shared between CNM GUI, service, and mock modules. Packages are separated by `common`, `cgmes`, and `ncp`. See [README](../data.cnm/README.md).
+- `data.iidm`: PowSyBl-based IIDM network wrappers, summaries, XIIDM helpers, and IIDM transform event contracts. See [README](../data.iidm/README.md).
+- `map.cnm.iidm`: CNM profile DTO to PowSyBl IIDM `Network` mapping with no Spring or infrastructure dependency. See [README](../map.cnm.iidm/README.md).
 - `srv.cnm.services`: Spring Boot REST service that accepts RDF profile files, classifies CGMES/NCP profile references, stores raw files through `com.infra`, and persists import metadata. See [README](../srv.cnm.services/README.md).
+- `srv.iidm.transformer`: Spring Boot worker/API service that consumes IIDM transform events, reads CNM profile payloads, and persists `iidm-profile-transforms` plus XIIDM network exports in `iidm-networks`. See [README](../srv.iidm.transformer/README.md).
 - `mock.srv.cnm.services`: mock REST service compatible with the CNM OpenAPI shape for GUI development without infrastructure. See [README](../mock.srv.cnm.services/README.md).
 - `gui.common`: Vue shared component library for standard table, button, link, menu, and dropdown behavior. See [README](../gui.common/README.md).
 - `gui.cnm.manager`: Vue CNM manager application for RDF upload and import status viewing. See [README](../gui.cnm.manager/README.md).
@@ -35,6 +38,8 @@ Current modules:
 Rules:
 
 - `srv.cnm.services` invokes infrastructure through `com.infra`.
+- `srv.cnm.services` emits IIDM transform requests after profile parsing; it does not depend on `map.cnm.iidm` or `srv.iidm.transformer`.
+- `srv.iidm.transformer` owns IIDM document persistence and uses `map.cnm.iidm` for DTO projection.
 - `gui.cnm.manager` consumes shared UI from `gui.common`.
 - `mock.srv.cnm.services` follows the REST contract and must not own production infrastructure behavior.
 - `data.cnm` remains transport-focused and does not depend on Spring, PowSyBl, Elasticsearch, MinIO, or RabbitMQ.

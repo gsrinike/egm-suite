@@ -39,6 +39,12 @@
       <Button :disabled="busy" @click="refreshProfiles">Search</Button>
     </section>
 
+    <section v-if="activeView === 'iidm'" class="profile-filters glass-panel">
+      <label>Import ID<input v-model="iidmFilters.importId" placeholder="Filter by import ID" /></label>
+      <Button :disabled="busy" @click="refreshIidmTransforms">Search</Button>
+      <Button :disabled="busy" @click="clearIidmFilter">Clear</Button>
+    </section>
+
     <section v-if="activeView === 'import-files'" class="detail-heading glass-panel">
       <div>
         <p>Import files</p>
@@ -55,6 +61,14 @@
       <Button :disabled="busy" @click="activeView = profileReturnView">
         Back to {{ profileReturnView === 'profiles' ? 'profiles' : 'files' }}
       </Button>
+    </section>
+
+    <section v-if="activeView === 'iidm-data'" class="detail-heading glass-panel">
+      <div>
+        <p>IIDM data</p>
+        <strong>{{ selectedIidmNetworkId }}</strong>
+      </div>
+      <Button :disabled="busy" @click="activeView = 'iidm'">Back to IIDM</Button>
     </section>
 
     <p v-if="message" class="status-message">{{ message }}</p>
@@ -125,6 +139,38 @@
         </span>
       </template>
     </DataTable>
+
+    <DataTable
+      v-if="activeView === 'iidm'"
+      :columns="iidmColumns"
+      :rows="iidmRows"
+      :page-size="10"
+      id-key="transformId"
+    >
+      <template #cell-networkId="{ row }">
+        <Link
+          v-if="canOpenIidmData(String(row.transformState), String(row.networkId))"
+          @click="openIidmTables(String(row.networkId))"
+        >
+          {{ row.networkId }}
+        </Link>
+        <span v-else class="disabled-profile-link" title="IIDM data is available after transformation completes">
+          {{ row.networkId }}
+        </span>
+      </template>
+    </DataTable>
+
+    <DynamicTable
+      v-if="activeView === 'iidm-data'"
+      :tables="iidmTables?.tables ?? []"
+      :loading="busy"
+      :error="message"
+      :page-size="iidmTablePageSize"
+      :current-page="iidmTablePage"
+      server-side
+      @table-selected="loadIidmTableRows($event, 0)"
+      @page-change="loadIidmTableRows(selectedIidmTableId, $event)"
+    />
   </main>
 </template>
 
@@ -133,13 +179,18 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Button, DataTable, Dropdown, DynamicTable, Link, logClientError, Menu } from '@egm/gui.common/src';
 import {
   getImport,
+  getIidmNetworkTables,
+  getIidmNetworkTableRows,
   getProfileTables,
   ImportUploadError,
+  listIidmTransforms,
   listProfiles,
   listImports,
   uploadImport,
   type CnmServiceType,
   type DynamicTableBundle,
+  type IidmTableBundle,
+  type IidmTransformSummary,
   type ImportStatus,
   type ProfileMetadata,
   type TimeFrame
@@ -152,6 +203,7 @@ withDefaults(defineProps<{ embedded?: boolean }>(), {
 const activeView = ref('imports');
 const imports = ref<ImportStatus[]>([]);
 const profiles = ref<ProfileMetadata[]>([]);
+const iidmTransforms = ref<IidmTransformSummary[]>([]);
 const selectedFiles = ref<File[]>([]);
 const serviceType = ref<CnmServiceType>('CGM');
 const timeFrame = ref<TimeFrame>('DAY_AHEAD');
@@ -165,6 +217,12 @@ const profileTables = ref<DynamicTableBundle>();
 const selectedProfileFileName = ref('');
 const profileReturnView = ref('import-files');
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
+const iidmFilters = ref({ importId: '' });
+const iidmTables = ref<IidmTableBundle>();
+const selectedIidmNetworkId = ref('');
+const selectedIidmTableId = ref('');
+const iidmTablePage = ref(0);
+const iidmTablePageSize = 100;
 const lightTheme = ref(false);
 
 const menuItems = [
@@ -222,6 +280,20 @@ const profileColumns = [
   { key: 'version', label: 'Version' }
 ];
 
+const iidmColumns = [
+  { key: 'importId', label: 'Import ID' },
+  { key: 'fileId', label: 'File ID' },
+  { key: 'profileType', label: 'Profile type' },
+  { key: 'profileFamily', label: 'Profile family' },
+  { key: 'transformState', label: 'State' },
+  { key: 'networkId', label: 'Network' },
+  { key: 'diagnosticCount', label: 'Diagnostics' },
+  { key: 'startedAt', label: 'Started' },
+  { key: 'completedAt', label: 'Completed' },
+  { key: 'failedAt', label: 'Failed' },
+  { key: 'transformMessage', label: 'Message' }
+];
+
 const rows = computed(() => imports.value.map((item) => ({
   importId: item.importId,
   serviceType: item.serviceType,
@@ -237,11 +309,20 @@ const fileRows = computed(() => (selectedImport.value?.files ?? []).map((file) =
   uploadedAt: formatDateTime(file.uploadedAt)
 })));
 const profileRows = computed(() => profiles.value.map((profile) => ({ ...profile })));
+const iidmRows = computed(() => iidmTransforms.value.map((transform) => ({
+  ...transform,
+  startedAt: formatDateTime(transform.startedAt),
+  completedAt: formatDateTime(transform.completedAt),
+  failedAt: formatDateTime(transform.failedAt)
+})));
 
 onMounted(refresh);
 watch(activeView, (view) => {
   if (view === 'profiles') {
     void refreshProfiles();
+  }
+  if (view === 'iidm') {
+    void refreshIidmTransforms();
   }
 });
 
@@ -298,6 +379,10 @@ function canOpenProfileData(state: string) {
   return state === 'PARSED';
 }
 
+function canOpenIidmData(state: string, networkId: string) {
+  return state === 'DONE' && Boolean(networkId);
+}
+
 async function openImportFileProfileTables(fileId: string, fileName: string) {
   if (!selectedImport.value) {
     return;
@@ -346,6 +431,76 @@ async function refreshProfiles() {
   } catch (error) {
     logClientError('refreshProfiles failed', error, { filters: profileFilters.value });
     message.value = error instanceof Error ? error.message : 'Unable to load profiles';
+  } finally {
+    busy.value = false;
+  }
+}
+
+function clearIidmFilter() {
+  iidmFilters.value.importId = '';
+  void refreshIidmTransforms();
+}
+
+async function refreshIidmTransforms() {
+  busy.value = true;
+  message.value = '';
+  try {
+    iidmTransforms.value = (await listIidmTransforms({
+      importId: iidmFilters.value.importId,
+      page: 0,
+      size: 100
+    })).items;
+  } catch (error) {
+    logClientError('refreshIidmTransforms failed', error, { filters: iidmFilters.value });
+    message.value = error instanceof Error ? error.message : 'Unable to load IIDM transforms';
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function openIidmTables(networkId: string) {
+  busy.value = true;
+  message.value = '';
+  selectedIidmNetworkId.value = networkId;
+  selectedIidmTableId.value = '';
+  iidmTablePage.value = 0;
+  try {
+    iidmTables.value = await getIidmNetworkTables(networkId);
+    selectedIidmTableId.value = iidmTables.value.tables[0]?.tableId ?? '';
+    activeView.value = 'iidm-data';
+    if (selectedIidmTableId.value) {
+      await loadIidmTableRows(selectedIidmTableId.value, 0);
+    }
+  } catch (error) {
+    logClientError('openIidmTables failed', error, { networkId });
+    message.value = error instanceof Error ? error.message : 'Unable to load IIDM data';
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadIidmTableRows(tableId: string, page: number) {
+  if (!selectedIidmNetworkId.value || !tableId) {
+    return;
+  }
+  busy.value = true;
+  message.value = '';
+  selectedIidmTableId.value = tableId;
+  iidmTablePage.value = page;
+  try {
+    iidmTables.value = await getIidmNetworkTableRows(
+      selectedIidmNetworkId.value,
+      tableId,
+      page,
+      iidmTablePageSize
+    );
+  } catch (error) {
+    logClientError('loadIidmTableRows failed', error, {
+      networkId: selectedIidmNetworkId.value,
+      tableId,
+      page
+    });
+    message.value = error instanceof Error ? error.message : 'Unable to load IIDM table rows';
   } finally {
     busy.value = false;
   }

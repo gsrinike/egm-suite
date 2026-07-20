@@ -7,7 +7,9 @@
 - `eu.egm.data.cnm.common`: import status, service type, timeframe, profile references, and paged responses.
 - `eu.egm.data.cnm.cgmes`: CGMES metadata and profile vocabulary.
 - `eu.egm.data.cnm.ncp`: NCP metadata and profile vocabulary.
-- `eu.egm.data.cnm.iidm`: lightweight IIDM projections inspired by PowSyBl network concepts.
+
+IIDM projections and IIDM transform events live in the separate `data.iidm`
+module so CNM profile DTOs stay focused on RDF metadata and common topology.
 
 The DTOs are intentionally storage-neutral and do not depend on Spring MVC, MinIO, Elasticsearch, RabbitMQ, or frontend code.
 

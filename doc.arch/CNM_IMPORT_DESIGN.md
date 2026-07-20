@@ -6,7 +6,7 @@ The Common Network Model (CNM) import application is the first application surfa
 
 The initial implementation focuses on import orchestration, metadata capture, and reusable module boundaries. Semantic graph validation, PowSyBl-backed IIDM transformation, CSA, and CC calculation flows are expected to build on this foundation.
 
-Profile-aware RDF metadata extraction, profile JSON persistence, dynamic profile-content tables, and browser-side error logging are detailed in `RDF_METADATA_MGMT.md`. This CNM import design owns the intake and asynchronous processing lifecycle; `RDF_METADATA_MGMT.md` owns the semantic metadata extraction and exploration increment that runs inside that lifecycle.
+Profile-aware RDF metadata extraction, profile JSON persistence, dynamic profile-content tables, and browser-side error logging are detailed in `RDF_METADATA_MGMT.md`. Event-driven IIDM transformation after profile parsing is detailed in `IIDM_TRANSFORMATION_DESIGN.md`. This CNM import design owns the intake and asynchronous processing lifecycle; `RDF_METADATA_MGMT.md` owns semantic metadata extraction and exploration; `IIDM_TRANSFORMATION_DESIGN.md` owns the downstream IIDM DTO projection and its document stores.
 
 ## Profile Sources
 
@@ -14,8 +14,11 @@ The application accepts RDF profile files aligned with the ENTSO-E application p
 
 ## Modules
 
-- `data.cnm`: transport DTOs shared by GUI, service, and mock modules. Packages are separated into `common`, `cgmes`, `ncp`, and `iidm`.
+- `data.cnm`: transport DTOs shared by GUI, service, and mock modules. Packages are separated into `common`, `cgmes`, and `ncp`.
+- `data.iidm`: PowSyBl-based IIDM network wrappers, summaries, XIIDM helpers, and IIDM transform event contracts.
+- `map.cnm.iidm`: CNM profile DTO to PowSyBl IIDM `Network` mapping.
 - `srv.cnm.services`: Spring Boot REST service exposing CNM import APIs and OpenAPI documentation.
+- `srv.iidm.transformer`: Spring Boot worker/API service that consumes IIDM transform requests and persists `iidm-profile-transforms` and `iidm-networks`.
 - `mock.srv.cnm.services`: Spring Boot mock service with in-memory import data for GUI development.
 - `gui.common`: Vue shared components for buttons, links, menus, dropdowns, and searchable/sortable/paginated tables.
 - `gui.cnm.manager`: Vue application for RDF upload and import status visualization.
@@ -218,6 +221,7 @@ sequenceDiagram
             alt metadata extraction succeeds
                 RDF-->>Worker: CGMES/NCP metadata
                 Worker->>Profiles: upsert searchable profile document
+                Worker->>Events: publish IidmProfileTransformRequested
                 Worker->>Imports: mark file PARSED
             else extraction fails
                 Worker->>Imports: mark file FAILED with error message
@@ -316,6 +320,13 @@ and business time without loading payload fields.
 Profile-content table APIs load the payload document only when a user opens a
 specific file. See `RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic
 table, and GUI logging design.
+
+The GUI `IIDM` menu is downstream of profile parsing. It lists lightweight IIDM
+transform metadata from `srv.iidm.transformer`; it does not load XIIDM payloads
+or all network details. When the user selects one completed transformed
+profile/file, the GUI loads IIDM table metadata first and then requests rows for
+only the selected table/page. See `IIDM_TRANSFORMATION_DESIGN.md` for the
+document ownership and lazy table endpoints.
 
 ## Consistency Rules
 

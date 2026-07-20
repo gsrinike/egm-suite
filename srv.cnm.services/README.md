@@ -32,6 +32,11 @@ index. Large typed profile JSON is stored separately in `cnm-profile-payloads`
 by `fileId`, so profile search/list screens do not load payload data into the
 service heap.
 
+After profile payload persistence, CNM also publishes IIDM transform requests to
+`iidm.events`. The service declares `iidm.events` through
+`utility.messaging.topic-exchange.additional-names` so RabbitMQ accepts the
+publish even when the IIDM transformer worker starts later.
+
 The import aggregate transitions from `INIT` to `STORED` after all successful
 RDF payloads have been written to object storage and queued for metadata
 processing. Once every file is parsed, the aggregate becomes `SUCCESS`. Any file

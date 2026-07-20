@@ -18,6 +18,12 @@ The import toolbar accepts an optional message beside the RDF model selector.
 That message is persisted in `ImportStatus`. The Profiles view filters
 Elasticsearch metadata by profile type, TSO, business day, and business time.
 
+The IIDM view lists transformed profile status from `srv.iidm.transformer`
+without loading XIIDM payloads. Selecting a completed transform opens a dynamic
+table view for that one network. Table metadata is loaded first, and rows are
+requested per selected table/page so large IIDM networks are not loaded into the
+browser at once.
+
 ## Local Development
 
 Run the mock service and then:
@@ -33,4 +39,6 @@ Runtime API URLs are loaded before the Vue app mounts. Defaults live in
 live in `public/config/<env>/gui.cnm.manager-application.json`, where `<env>`
 defaults to `local` and can be changed through `VITE_APP_ENV`.
 
-The Vite dev server proxies `/api` to `http://localhost:8084` by default.
+The config supports `cnmBaseUrl` and `iidmBaseUrl`. In Docker/Nginx,
+`/api/cnm` is routed to `srv-cnm-services` and `/api/iidm` is routed to
+`srv-iidm-transformer`.

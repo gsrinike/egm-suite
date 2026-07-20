@@ -60,7 +60,9 @@ class CnmImportRestServiceTest {
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.file.processing.requested");
+                "cnm.file.processing.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
         byte[] innerZip = zip("20241202T2330Z_1D_TSO-XYZ_SV_002.xml", rdf("StateVariables"));
         byte[] outerZip = zip(
                 new ZipItem("models/CGM/20241202T2330Z_1D_TSO-XYZ_SV_002.zip", innerZip),
@@ -105,6 +107,9 @@ class CnmImportRestServiceTest {
             processed = service.processFile(event);
         }
 
+        assertThat(eventPublisher.published)
+                .extracting(event -> event.routingKey)
+                .contains("iidm.profile.transform.requested", "iidm.profile.transform.requested");
         assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(processed.message()).isEqualTo("All CNM files processed successfully");
         assertThat(processed.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
@@ -150,7 +155,9 @@ class CnmImportRestServiceTest {
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.file.processing.requested");
+                "cnm.file.processing.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
         String importId = "client-import-id";
 
         ImportStatus failed = service.reportFailure(new ImportFailureRequest(
@@ -202,7 +209,9 @@ class CnmImportRestServiceTest {
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.file.processing.requested");
+                "cnm.file.processing.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
                 "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
@@ -250,7 +259,9 @@ class CnmImportRestServiceTest {
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
-                "cnm.file.processing.requested");
+                "cnm.file.processing.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
         long timestamp = java.time.Instant.parse("2026-06-24T18:24:05Z").toEpochMilli();
         documentRepository.save(new CnmImportDocument(
                 "legacy-import",

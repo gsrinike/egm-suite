@@ -7,12 +7,15 @@ The active Maven reactor contains only these modules:
 - `egm-dependencies`
 - `com.utils`
 - `data.cnm`
+- `data.iidm`
 - `data.common`
 - `com.mapping`
+- `map.cnm.iidm`
 - `com.infra`
 - `com.auth`
 - `com.vault`
 - `srv.cnm.services`
+- `srv.iidm.transformer`
 - `srv.common.lfsa`
 - `mock.srv.common.lfsa`
 - `srv.common.rao`
@@ -47,8 +50,11 @@ Keep application-specific workflow logic out of shared modules unless the capabi
 
 CNM modules own Common Network Model application behavior:
 
-- `data.cnm`: transport DTOs for CGMES, NCP, IIDM, import status, service type, and timeframe data.
+- `data.cnm`: transport DTOs for CGMES, NCP, common topology, import status, service type, and timeframe data.
+- `data.iidm`: PowSyBl-based IIDM network wrappers, summaries, XIIDM helpers, and IIDM transform event contracts.
+- `map.cnm.iidm`: CNM profile DTO to PowSyBl IIDM `Network` mapping with no Spring or infrastructure dependency.
 - `srv.cnm.services`: Spring Boot REST service for RDF import, profile detection, raw object storage, and import metadata.
+- `srv.iidm.transformer`: Spring Boot worker/API service that consumes IIDM transform events and owns `iidm-profile-transforms` and `iidm-networks`.
 - `mock.srv.cnm.services`: mock REST service aligned with the CNM OpenAPI contract.
 - `gui.common`: reusable Vue components and styling.
 - `gui.cnm.manager`: Vue CNM manager application.
@@ -73,12 +79,16 @@ RCC and common analysis modules own CSA workflow behavior and reusable analysis 
 - `com.infra` owns technology-specific dependencies such as Elasticsearch, MinIO, RabbitMQ, and Camunda.
 - Service modules added in the future should depend on shared contracts and call external process runtimes over interfaces or HTTP, not by importing BPM process modules.
 - `srv.cnm.services` depends on `data.cnm`, `com.utils`, and `com.infra`; it should not import GUI or mock modules.
+- `srv.cnm.services` may depend on `data.iidm` for transform event contracts, but must not depend on `map.cnm.iidm` or `srv.iidm.transformer`.
+- `srv.iidm.transformer` depends on `data.cnm`, `data.iidm`, `map.cnm.iidm`, and shared `com.*` utilities; it owns IIDM document persistence.
+- `map.cnm.iidm` depends on `data.cnm`, `data.iidm`, and `com.mapping`; it should not depend on Spring, Elasticsearch, MinIO, RabbitMQ, or service modules.
 - `srv.csa.services` depends on `data.common`, `com.utils`, and `com.infra`; it should not import GUI, mock, or BPM process modules.
 - `srv.common.lfsa` and `srv.common.rao` depend on `data.common` and shared `com.*` utilities, not on CSA-specific modules.
 - `bpm.csa.service` may depend on `com.infra` BPM adapters and `data.common`; service modules invoke it remotely or through `com.infra.bpm` interfaces.
 - `gui.cnm.manager` depends on `gui.common` and calls CNM REST APIs through HTTP.
 - `gui.rcc.manager` depends on `gui.common` and calls CSA REST APIs through HTTP.
 - `data.cnm` should not depend on Spring, PowSyBl, Elasticsearch, MinIO, or RabbitMQ.
+- `data.iidm` is the explicit PowSyBl IIDM boundary and may depend on `com.powsybl.*`; it should not depend on Spring, Elasticsearch, MinIO, RabbitMQ, or service modules.
 - `data.common` should not depend on Spring, Camunda, Elasticsearch, MinIO, RabbitMQ, or grid-engine implementations.
 - Do not add dependencies to `egm-dependencies/pom.xml` unless at least one active module directly needs them.
 
@@ -134,6 +144,15 @@ When resolving placeholders:
 Use `InfrastructureUtils` as the application-facing factory.
 
 Object-storage buckets should be initialized during application startup or adapter initialization, not during every concurrent object upload. Concurrent upload paths must store objects without racing on bucket creation.
+
+Object storage is optional for modules that import `com.infra`. Only modules
+that actually store or read objects should configure `utility.object-storage.*`;
+other services may rely on the disabled fail-fast object-storage adapter.
+
+RabbitMQ topic exchanges should be declared by every service that publishes to
+them. Use `utility.messaging.topic-exchange.name` for the module's primary
+exchange and `utility.messaging.topic-exchange.additional-names` for exchanges
+owned by downstream consumers.
 
 Remote BPM paths and tests should remain process-neutral in `com.infra`; concrete process routes belong in the process module that owns them.
 

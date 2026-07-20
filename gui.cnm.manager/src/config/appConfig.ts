@@ -3,6 +3,7 @@ export interface GuiAppConfig {
   apis?: {
     cnmBaseUrl?: string;
     csaBaseUrl?: string;
+    iidmBaseUrl?: string;
   };
 }
 
@@ -15,7 +16,8 @@ declare global {
 const DEFAULT_CONFIG: GuiAppConfig = {
   environment: 'local',
   apis: {
-    cnmBaseUrl: import.meta.env.VITE_CNM_API_BASE_URL ?? ''
+    cnmBaseUrl: import.meta.env.VITE_CNM_API_BASE_URL ?? '',
+    iidmBaseUrl: import.meta.env.VITE_IIDM_API_BASE_URL ?? ''
   }
 };
 

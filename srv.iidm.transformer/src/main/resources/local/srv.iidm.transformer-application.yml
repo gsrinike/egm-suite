@@ -1,0 +1,2 @@
+server:
+  port: ${IIDM_TRANSFORMER_PORT:8098}

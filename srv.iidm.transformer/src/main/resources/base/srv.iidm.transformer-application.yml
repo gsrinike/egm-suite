@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: srv.iidm.transformer
+server:
+  port: ${IIDM_TRANSFORMER_PORT:8098}
+iidm:
+  transform:
+    event:
+      exchange: iidm.events
+      requested-routing-key: iidm.profile.transform.requested
+      requested-queue: iidm.profile.transform
+      completed-routing-key: iidm.profile.transform.completed
+      failed-routing-key: iidm.profile.transform.failed
+springdoc:
+  swagger-ui:
+    url: /openapi/iidm-transformer.yaml

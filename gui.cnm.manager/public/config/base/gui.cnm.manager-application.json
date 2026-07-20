@@ -1,6 +1,7 @@
 {
   "environment": "base",
   "apis": {
-    "cnmBaseUrl": ""
+    "cnmBaseUrl": "",
+    "iidmBaseUrl": ""
   }
 }

@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: IIDM Transformer API
+  version: 0.1.0
+paths:
+  /api/iidm/transforms:
+    get:
+      summary: List IIDM profile transforms
+      parameters:
+        - { name: importId, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Transform list
+  /api/iidm/transforms/{fileId}:
+    get:
+      summary: Get IIDM transform by file ID
+      parameters:
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Transform document
+  /api/iidm/networks:
+    get:
+      summary: List PowSyBl IIDM network metadata
+      parameters:
+        - { name: importId, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Network metadata list without XIIDM payload fields
+  /api/iidm/networks/{networkId}:
+    get:
+      summary: Get PowSyBl IIDM network XIIDM document
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: IIDM network document with XIIDM payload or chunks
+  /api/iidm/imports/{importId}/files/{fileId}/tables:
+    get:
+      summary: Get IIDM table metadata for a transformed source file
+      parameters:
+        - { name: importId, in: path, required: true, schema: { type: string } }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: IIDM table metadata
+  /api/iidm/networks/{networkId}/tables:
+    get:
+      summary: Get IIDM table metadata for one transformed network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: IIDM table metadata without row payloads
+  /api/iidm/networks/{networkId}/tables/{tableId}:
+    get:
+      summary: Get one paged IIDM table for a selected network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+        - { name: tableId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+        - { name: search, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: IIDM table bundle with rows only for the requested table/page

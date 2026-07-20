@@ -10,3 +10,4 @@ utility:
   messaging:
     topic-exchange:
       name: cnm.events
+      additional-names: iidm.events

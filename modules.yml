@@ -4,12 +4,15 @@ modules:
   - egm-dependencies
   - com.utils
   - data.cnm
+  - data.iidm
   - data.common
   - com.mapping
+  - map.cnm.iidm
   - com.infra
   - com.auth
   - com.vault
   - srv.cnm.services
+  - srv.iidm.transformer
   - srv.common.lfsa
   - mock.srv.common.lfsa
   - srv.common.rao

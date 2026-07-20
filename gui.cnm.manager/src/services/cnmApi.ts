@@ -57,6 +57,52 @@ export interface DynamicTableBundle {
   tables: DynamicTableDefinition[];
 }
 
+export type IidmTransformState = 'STARTED' | 'DONE' | 'FAILED';
+
+export interface IidmTransformSummary {
+  transformId: string;
+  importId: string;
+  fileId: string;
+  profileType: string;
+  profileFamily: string;
+  transformState: IidmTransformState;
+  transformMessage: string;
+  diagnosticCount: number;
+  networkId: string;
+  startedAt: string;
+  completedAt: string;
+  failedAt: string;
+}
+
+export interface IidmElementCount {
+  elementType: string;
+  count: number;
+}
+
+export interface IidmNetworkSummary {
+  networkId: string;
+  importId: string;
+  sourceFileIds: string[];
+  businessDay: string;
+  businessTime: string;
+  timeFrame: string;
+  tsoName: string;
+  networkFormat: string;
+  elementCounts: IidmElementCount[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IidmTableBundle {
+  importId: string;
+  networkId: string;
+  sourceFileId: string;
+  tableId: string;
+  page: number;
+  size: number;
+  tables: DynamicTableDefinition[];
+}
+
 export interface DynamicTableColumn {
   key: string;
   label: string;
@@ -82,6 +128,13 @@ export interface DynamicTableDefinition {
 
 export interface ImportPage {
   items: ImportStatus[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface IidmPage<T> {
+  items: T[];
   total: number;
   page: number;
   size: number;
@@ -204,6 +257,78 @@ export async function listProfiles(filters: {
   return response.json();
 }
 
+export async function listIidmTransforms(filters: {
+  importId?: string;
+  page?: number;
+  size?: number;
+}): Promise<IidmPage<IidmTransformSummary>> {
+  const baseUrl = iidmBaseUrl();
+  const params = new URLSearchParams({
+    page: String(filters.page ?? 0),
+    size: String(filters.size ?? 100)
+  });
+  if (filters.importId) {
+    params.set('importId', filters.importId);
+  }
+  const url = `${baseUrl}/api/iidm/transforms?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load IIDM transforms', url, response);
+  }
+  return response.json();
+}
+
+export async function listIidmNetworks(filters: {
+  importId?: string;
+  page?: number;
+  size?: number;
+}): Promise<IidmPage<IidmNetworkSummary>> {
+  const baseUrl = iidmBaseUrl();
+  const params = new URLSearchParams({
+    page: String(filters.page ?? 0),
+    size: String(filters.size ?? 100)
+  });
+  if (filters.importId) {
+    params.set('importId', filters.importId);
+  }
+  const url = `${baseUrl}/api/iidm/networks?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load IIDM networks', url, response);
+  }
+  return response.json();
+}
+
+export async function getIidmNetworkTables(networkId: string): Promise<IidmTableBundle> {
+  const baseUrl = iidmBaseUrl();
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/tables`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load IIDM table metadata', url, response);
+  }
+  return response.json();
+}
+
+export async function getIidmNetworkTableRows(
+  networkId: string,
+  tableId: string,
+  page: number,
+  size: number,
+  search = ''
+): Promise<IidmTableBundle> {
+  const baseUrl = iidmBaseUrl();
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (search) {
+    params.set('search', search);
+  }
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/tables/${encodeURIComponent(tableId)}?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load IIDM table rows', url, response);
+  }
+  return response.json();
+}
+
 export async function reportImportFailure(
   importId: string,
   files: File[],
@@ -238,4 +363,8 @@ export class ImportUploadError extends Error {
 
 function cnmBaseUrl() {
   return window.EGM_CONFIG?.apis?.cnmBaseUrl ?? import.meta.env.VITE_CNM_API_BASE_URL ?? '';
+}
+
+function iidmBaseUrl() {
+  return window.EGM_CONFIG?.apis?.iidmBaseUrl ?? import.meta.env.VITE_IIDM_API_BASE_URL ?? '';
 }

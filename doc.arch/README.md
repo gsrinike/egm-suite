@@ -7,6 +7,7 @@
 - `DESIGN_PRINCIPLES.md`: design principles adopted by the project and how they are applied in the current modules.
 - `CNM_IMPORT_DESIGN.md`: Common Network Model import application module boundaries and import sequence.
 - `RDF_METADATA_MGMT.md`: profile-aware RDF metadata extraction, profile DTO JSON persistence, dynamic profile-content tables, and shared browser-side logging.
+- `IIDM_TRANSFORMATION_DESIGN.md`: event-driven CNM profile to IIDM DTO transformation, separated document ownership, and IIDM transformer service boundaries.
 - `RCC_CSA_DESIGN.md`: RCC CSA workflow module boundaries, common LF/SA and RAO service split, BPM interaction, and GUI workflow monitoring.
 - `LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`: local deployment workflow, Docker/Maven behavior, and environment resolution rules.
 - `MODULE_CLASSIFICATION.md`: classification rules for current modules with links to module README files.

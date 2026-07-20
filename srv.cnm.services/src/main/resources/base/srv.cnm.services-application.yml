@@ -16,6 +16,8 @@ cnm:
       exchange: cnm.events
       file-processing-routing-key: cnm.file.processing.requested
       file-processing-queue: cnm.file.process
+      iidm-transform-exchange: iidm.events
+      iidm-transform-routing-key: iidm.profile.transform.requested
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

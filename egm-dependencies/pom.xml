@@ -28,6 +28,7 @@
         <version.camunda>7.22.0</version.camunda>
         <version.minio>8.5.12</version.minio>
         <version.springdoc-openapi>2.6.0</version.springdoc-openapi>
+        <version.powsybl>2026.1.0</version.powsybl>
 
         <maven.compiler.release>${version.java}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -63,6 +64,11 @@
                 <groupId>org.camunda.bpm.springboot</groupId>
                 <artifactId>camunda-bpm-spring-boot-starter</artifactId>
                 <version>${version.camunda}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.powsybl</groupId>
+                <artifactId>powsybl-starter</artifactId>
+                <version>${version.powsybl}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

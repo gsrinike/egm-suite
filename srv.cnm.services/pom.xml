@@ -24,6 +24,11 @@
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
+            <artifactId>data.iidm</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>eu.egm</groupId>
             <artifactId>com.utils</artifactId>
             <version>${project.version}</version>
         </dependency>

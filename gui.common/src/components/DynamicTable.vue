@@ -6,7 +6,7 @@
         :key="table.tableId"
         type="button"
         :class="{ active: selectedTableId === table.tableId }"
-        @click="selectedTableId = table.tableId"
+        @click="selectTable(table.tableId)"
       >
         {{ table.label }} ({{ table.totalRows }})
       </button>
@@ -21,6 +21,15 @@
       :page-size="pageSize"
       id-key="rowId"
     />
+    <div v-if="serverSide && activeTable" class="common-pagination">
+      <button type="button" :disabled="currentPage <= 0 || loading" @click="emitPage(currentPage - 1)">
+        Previous
+      </button>
+      <span>Page {{ currentPage + 1 }} / {{ serverTotalPages }}</span>
+      <button type="button" :disabled="currentPage >= serverTotalPages - 1 || loading" @click="emitPage(currentPage + 1)">
+        Next
+      </button>
+    </div>
   </section>
 </template>
 
@@ -56,17 +65,38 @@ const props = withDefaults(defineProps<{
   loading?: boolean;
   error?: string;
   pageSize?: number;
+  serverSide?: boolean;
+  currentPage?: number;
 }>(), {
   loading: false,
   error: '',
-  pageSize: 25
+  pageSize: 25,
+  serverSide: false,
+  currentPage: 0
 });
+
+const emit = defineEmits<{
+  tableSelected: [tableId: string];
+  pageChange: [page: number];
+}>();
 
 const selectedTableId = ref('');
 const activeTable = computed(() => props.tables.find((table) => table.tableId === selectedTableId.value) ?? props.tables[0]);
 const rows = computed(() => (activeTable.value?.rows ?? []).map((row) => ({ rowId: row.rowId, ...row.values })));
+const currentPage = computed(() => Math.max(props.currentPage, 0));
+const serverTotalPages = computed(() => Math.max(1, Math.ceil((activeTable.value?.totalRows ?? 0) / props.pageSize)));
 
 watch(() => props.tables, (tables) => {
-  selectedTableId.value = tables[0]?.tableId ?? '';
+  const nextTableId = tables.find((table) => table.tableId === selectedTableId.value)?.tableId ?? tables[0]?.tableId ?? '';
+  selectedTableId.value = nextTableId;
 }, { immediate: true });
+
+function selectTable(tableId: string) {
+  selectedTableId.value = tableId;
+  emit('tableSelected', tableId);
+}
+
+function emitPage(page: number) {
+  emit('pageChange', page);
+}
 </script>

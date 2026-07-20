@@ -1,0 +1,7 @@
+spring:
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+utility:
+  messaging:
+    topic-exchange:
+      name: iidm.events

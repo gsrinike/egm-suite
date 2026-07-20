@@ -19,6 +19,7 @@ The implementation must not map raw RDF/XML directly to IIDM. Each RDF/XML paylo
 ## Module Ownership
 
 - `data.cnm`: owns RDF profile DTOs and common topology DTOs. It remains technology-neutral and has no Spring, Elasticsearch, MinIO, RabbitMQ, Vue, or PowSyBl dependency.
+- `data.iidm`: owns PowSyBl IIDM network wrappers and IIDM transformation event contracts. It is populated by the downstream IIDM transformer, not directly by raw RDF/XML parsing.
 - `com.mapping`: owns generic DTO/JSON conversion contracts and implementations.
 - `srv.cnm.services`: owns asynchronous RDF metadata extraction, profile document persistence, REST APIs, and OpenAPI contract updates.
 - `mock.srv.cnm.services`: mirrors the profile-content API shape with in-memory profile table examples.
@@ -87,7 +88,7 @@ Profile-specific packages should remain under the existing `data.cnm` domain pac
 
 - `data.cnm.cgmes`: `CgmesEquipmentProfile`, `CgmesSteadyStateHypothesisProfile`, `CgmesStateVariablesProfile`, `CgmesTopologyProfile`, and shared CGMES profile entities.
 - `data.cnm.ncp`: NCP profile DTOs aligned with detected NCP profile kinds.
-- `data.cnm.iidm`: remains for future IIDM summary DTOs and should not be populated directly from raw RDF/XML.
+- `data.iidm`: remains the dedicated PowSyBl IIDM module and should not be populated directly from raw RDF/XML.
 
 Each profile DTO should store typed collections for the profile it represents. For example:
 
@@ -187,7 +188,7 @@ matching payload document.
 
 The implementation can use Jackson internally, but service modules should depend on the `com.mapping` contract rather than using Jackson directly. This keeps DTO/JSON conversion aligned with the existing mapping module ownership.
 
-`srv.cnm.services` uses this mapper when persisting a parsed profile and when serving profile-content APIs.
+`srv.cnm.services` uses this mapper when persisting a parsed profile and when serving profile-content APIs. `srv.iidm.transformer` uses the same mapper when reading `cnm-profile-payloads` and writes PowSyBl XIIDM network exports to `iidm-networks`.
 
 ## REST API Additions
 

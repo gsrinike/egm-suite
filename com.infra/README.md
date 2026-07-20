@@ -23,6 +23,7 @@ Service modules depend on this module for persistence, object storage, event pub
 - `storage.document.elasticsearch.ElasticsearchDocumentRepository<T>`: Spring Data Elasticsearch implementation of `DocumentRepositoryService<T>`.
 - `storage.object.ObjectStorageService`: object-storage abstraction for storing and reading binary objects.
 - `storage.object.minio.MinioObjectStorageService`: MinIO implementation of `ObjectStorageService`.
+- `storage.object.DisabledObjectStorageService`: fail-fast object-storage adapter used when a module does not configure object storage.
 - `event.EventPublisherService`: event-publishing abstraction.
 - `event.rabbitmq.RabbitMqEventPublisher`: RabbitMQ implementation of `EventPublisherService`.
 - `bpm.BusinessProcessService`: BPM abstraction for starting, canceling, correlating messages with, and monitoring business process instances.
@@ -35,9 +36,10 @@ Service modules depend on this module for persistence, object storage, event pub
 
 - `InfrastructureUtilityConfig`: registers infrastructure beans, including:
   - optional RabbitMQ topic exchange from `utility.messaging.topic-exchange.name`
+  - optional additional RabbitMQ topic exchanges from `utility.messaging.topic-exchange.additional-names`
   - RabbitMQ JSON message converter
-  - MinIO client
-  - object storage adapter
+  - optional MinIO client from `utility.object-storage.endpoint`
+  - object storage adapter, or a disabled fail-fast adapter when object storage is not configured
   - event publisher adapter
   - BPM adapter when embedded Camunda engine services are present
   - remote BPM adapter from `utility.bpm.remote.base-url` when a process module runs separately
@@ -66,6 +68,17 @@ This keeps service modules isolated from Elasticsearch classes while still allow
 Paged filters are executed inside Elasticsearch. This matters for large imports because callers should not load the first N records and then filter in memory.
 
 The same boundary is used for BPM. Modules call `InfrastructureUtils.businessProcessService()` and depend only on `BusinessProcessService`. Camunda-specific engine classes remain inside `com.infra.bpm.camunda`.
+
+RabbitMQ exchanges are declared at application startup by Spring AMQP. If a
+service publishes to an exchange owned by another worker, list that exchange in
+`utility.messaging.topic-exchange.additional-names` so publication does not
+depend on consumer startup order.
+
+Object storage is optional per consuming service. Modules that upload or read
+objects must provide `utility.object-storage.endpoint`, credentials, and any
+startup buckets. Modules that only use document storage or messaging can omit
+the object-storage block; `InfrastructureUtils.objectStorageService()` will then
+return a disabled adapter that fails only if object storage is invoked.
 
 When a service must not depend on a BPM module, configure:
 

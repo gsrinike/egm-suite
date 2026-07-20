@@ -10,11 +10,14 @@ import com.infra.event.rabbitmq.RabbitMqEventPublisher;
 import com.infra.storage.document.DocumentAdapter;
 import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.elasticsearch.ElasticsearchDocumentRepository;
+import com.infra.storage.object.DisabledObjectStorageService;
 import com.infra.storage.object.ObjectStorageService;
 import com.infra.storage.object.minio.MinioObjectStorageService;
 import io.minio.MinioClient;
 import java.net.http.HttpClient;
+import java.util.List;
 import java.util.Arrays;
+import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
@@ -22,6 +25,7 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.amqp.RabbitTemplateCustomizer;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -43,6 +47,17 @@ public class InfrastructureUtilityConfig {
     }
 
     @Bean
+    Declarables utilityAdditionalTopicExchanges(
+            @Value("${utility.messaging.topic-exchange.additional-names:}") String exchangeNames) {
+        List<TopicExchange> exchanges = Arrays.stream(exchangeNames.split(","))
+                .map(String::trim)
+                .filter(exchangeName -> !exchangeName.isBlank())
+                .map(exchangeName -> new TopicExchange(exchangeName, true, false))
+                .toList();
+        return new Declarables(exchanges);
+    }
+
+    @Bean
     MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
@@ -53,6 +68,7 @@ public class InfrastructureUtilityConfig {
     }
 
     @Bean
+    @ConditionalOnProperty("utility.object-storage.endpoint")
     MinioClient minioClient(
             @Value("${utility.object-storage.endpoint}") String endpoint,
             @Value("${utility.object-storage.access-key}") String accessKey,
@@ -64,8 +80,15 @@ public class InfrastructureUtilityConfig {
     }
 
     @Bean
+    @ConditionalOnBean(MinioClient.class)
     ObjectStorageService objectStorageService(MinioClient minioClient) {
         return new MinioObjectStorageService(minioClient);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ObjectStorageService.class)
+    ObjectStorageService disabledObjectStorageService() {
+        return new DisabledObjectStorageService();
     }
 
     @Bean

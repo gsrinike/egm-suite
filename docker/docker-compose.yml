@@ -93,6 +93,26 @@ services:
       otel-collector:
         condition: service_started
 
+  srv-iidm-transformer:
+    build:
+      context: ..
+      dockerfile: srv.iidm.transformer/Dockerfile
+    environment:
+      ENV: local
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_RABBITMQ_HOST: rabbitmq
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      IIDM_TRANSFORMER_PORT: 8098
+    ports:
+      - "8098:8098"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
   mock-srv-cnm-services:
     build:
       context: ..
@@ -203,6 +223,8 @@ services:
     depends_on:
       srv-cnm-services:
         condition: service_started
+      srv-iidm-transformer:
+        condition: service_started
 
   gui-rcc-manager:
     build:
@@ -212,6 +234,8 @@ services:
       - "5174:80"
     depends_on:
       srv-cnm-services:
+        condition: service_started
+      srv-iidm-transformer:
         condition: service_started
       srv-csa-services:
         condition: service_started

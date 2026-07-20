@@ -25,6 +25,7 @@ import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
+import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.mapping.JacksonJsonMappingService;
 import eu.egm.mapping.JsonMappingService;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
@@ -86,6 +87,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String rawBucket;
     private final String eventExchange;
     private final String fileProcessingRoutingKey;
+    private final String iidmTransformExchange;
+    private final String iidmTransformRoutingKey;
 
     public CnmImportRestService(
             Environment environment,
@@ -94,7 +97,9 @@ public class CnmImportRestService extends RestServiceSupport {
             RdfMetadataExtractor metadataExtractor,
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
-            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey) {
+            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
+            @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
+            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
         this(
                 environment,
                 observationRegistry,
@@ -103,7 +108,9 @@ public class CnmImportRestService extends RestServiceSupport {
                 metadataExtractor,
                 rawBucket,
                 eventExchange,
-                fileProcessingRoutingKey);
+                fileProcessingRoutingKey,
+                iidmTransformExchange,
+                iidmTransformRoutingKey);
     }
 
     @Autowired
@@ -115,7 +122,9 @@ public class CnmImportRestService extends RestServiceSupport {
             RdfMetadataExtractor metadataExtractor,
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
-            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey) {
+            @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
+            @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
+            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
         super(environment, observationRegistry);
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
@@ -127,6 +136,8 @@ public class CnmImportRestService extends RestServiceSupport {
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
         this.fileProcessingRoutingKey = fileProcessingRoutingKey;
+        this.iidmTransformExchange = iidmTransformExchange;
+        this.iidmTransformRoutingKey = iidmTransformRoutingKey;
     }
 
     public ImportStatus importModels(Collection<MultipartFile> uploads, CnmServiceType serviceType, TimeFrame timeFrame)
@@ -595,6 +606,7 @@ public class CnmImportRestService extends RestServiceSupport {
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
             profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
+            publishIidmTransformRequested(current.id(), processed, metadata);
         } catch (Exception exception) {
             logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
             processed = withStatus(target, ImportFileState.FAILED, message(exception));
@@ -617,6 +629,27 @@ public class CnmImportRestService extends RestServiceSupport {
             updateProfileStatus(processed.fileId(), ImportFileState.FAILED);
         }
         return toStatus(updated);
+    }
+
+    private void publishIidmTransformRequested(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
+        try {
+            eventPublisher.publish(
+                    iidmTransformExchange,
+                    iidmTransformRoutingKey,
+                    new IidmProfileTransformRequested(
+                            importId,
+                            file.fileId(),
+                            file.fileId(),
+                            valueOr(metadata.profileType(), file.profileType()),
+                            file.profileFamily(),
+                            file.objectId(),
+                            file.businessDay(),
+                            file.businessTime(),
+                            file.tsoName(),
+                            file.modelTimeFrame()));
+        } catch (Exception exception) {
+            logger.warn("Unable to publish IIDM transform event for {}", file.fileId(), exception);
+        }
     }
 
     public CnmPage<ImportStatus> listImports(int page, int size) {
