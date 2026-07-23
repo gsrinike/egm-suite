@@ -37,9 +37,9 @@
     </section>
 
     <section v-if="activeView === 'profiles'" class="profile-filters glass-panel">
-      <label>Successful import
+      <label>Profile import
         <select v-model="selectedProfileImportId">
-          <option v-for="option in successfulImportOptions" :key="option.value" :value="option.value">
+          <option v-for="option in profileImportOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
@@ -54,7 +54,7 @@
     <section v-if="activeView === 'iidm'" class="profile-filters glass-panel">
       <label>Successful import
         <select v-model="selectedIidmImportId">
-          <option v-for="option in successfulImportOptions" :key="option.value" :value="option.value">
+          <option v-for="option in iidmImportOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>
@@ -125,7 +125,7 @@
     >
       <template #cell-fileName="{ row }">
         <Link
-          v-if="canOpenProfileData(String(row.state))"
+          v-if="canOpenProfileData(String(row.state), String(row.message ?? ''))"
           @click="openImportFileProfileTables(String(row.fileId), String(row.fileName))"
         >
           {{ row.fileName }}
@@ -135,6 +135,14 @@
         </span>
       </template>
     </DataTable>
+
+    <DataTable
+      v-if="activeView === 'import-files' && selectedImportSnapshots.length > 0"
+      :columns="snapshotColumns"
+      :rows="snapshotRows"
+      :page-size="5"
+      id-key="snapshotId"
+    />
 
     <DynamicTable
       v-if="activeView === 'profile-data'"
@@ -153,7 +161,7 @@
     >
       <template #cell-fileName="{ row }">
         <Link
-          v-if="canOpenProfileData(String(row.state))"
+          v-if="canOpenProfileData(String(row.state), String(row.message ?? ''))"
           @click="openProfileTables(String(row.importId), String(row.fileId), String(row.fileName), 'profiles')"
         >
           {{ row.fileName }}
@@ -219,10 +227,12 @@ import {
   getProfileTables,
   ImportUploadError,
   listIidmTransforms,
+  listSnapshots,
   listProfiles,
   listImports,
   uploadImport,
   type CnmServiceType,
+  type CnmSnapshotMetadata,
   type DynamicTableBundle,
   type IidmTableBundle,
   type IidmTransformSummary,
@@ -243,6 +253,8 @@ const activeView = ref('imports');
 const imports = ref<ImportStatus[]>([]);
 const profiles = ref<ProfileMetadata[]>([]);
 const iidmTransforms = ref<IidmTransformSummary[]>([]);
+const snapshots = ref<CnmSnapshotMetadata[]>([]);
+const selectedImportSnapshots = ref<CnmSnapshotMetadata[]>([]);
 const selectedFiles = ref<File[]>([]);
 const serviceType = ref<CnmServiceType>('CGM');
 const timeFrame = ref<TimeFrame>('DAY_AHEAD');
@@ -338,6 +350,20 @@ const iidmColumns = [
   { key: 'transformMessage', label: 'Message' }
 ];
 
+const snapshotColumns = [
+  { key: 'snapshotId', label: 'Snapshot' },
+  { key: 'state', label: 'State' },
+  { key: 'tsoName', label: 'TSO' },
+  { key: 'businessDay', label: 'Business day' },
+  { key: 'businessTime', label: 'Business time' },
+  { key: 'timeFrame', label: 'Timeframe' },
+  { key: 'staticObjectCount', label: 'Objects' },
+  { key: 'stateValueCount', label: 'State values' },
+  { key: 'payloadSectionCount', label: 'Payload sections' },
+  { key: 'assembledAt', label: 'Assembled' },
+  { key: 'message', label: 'Message' }
+];
+
 const rows = computed(() => imports.value.map((item) => ({
   importId: item.importId,
   serviceType: item.serviceType,
@@ -359,13 +385,31 @@ const iidmRows = computed(() => iidmTransforms.value.map((transform) => ({
   completedAt: formatDateTime(transform.completedAt),
   failedAt: formatDateTime(transform.failedAt)
 })));
-const successfulImports = computed(() => imports.value.filter((item) => item.state === 'SUCCESS'));
-const successfulImportOptions = computed(() => [
+const snapshotRows = computed(() => selectedImportSnapshots.value.map((snapshot) => ({
+  ...snapshot,
+  timeFrame: displayModelTimeFrame(snapshot.timeFrame),
+  assembledAt: formatDateTime(snapshot.assembledAt)
+})));
+const profileCapableImports = computed(() => imports.value.filter((item) =>
+  (item.files ?? []).some((file) => canOpenProfileData(file.state, file.message))
+));
+const profileImportOptions = computed(() => [
   {
-    label: successfulImports.value.length === 0 ? 'No successful imports available' : 'Select successful import',
+    label: profileCapableImports.value.length === 0 ? 'No parsed profile imports available' : 'Select profile import',
     value: ''
   },
-  ...successfulImports.value.map((item) => ({
+  ...profileCapableImports.value.map((item) => ({
+    label: importOptionLabel(item),
+    value: item.importId
+  }))
+]);
+const iidmReadyImports = computed(() => profileCapableImports.value.filter((item) => item.state === 'SUCCESS'));
+const iidmImportOptions = computed(() => [
+  {
+    label: iidmReadyImports.value.length === 0 ? 'No successful imports available' : 'Select successful import',
+    value: ''
+  },
+  ...iidmReadyImports.value.map((item) => ({
     label: importOptionLabel(item),
     value: item.importId
   }))
@@ -388,6 +432,7 @@ watch(activeView, (view) => {
     void refreshProfiles();
   }
   if (view === 'iidm') {
+    alignSelectedMetadataSelections();
     void refreshIidmTransforms();
   }
 });
@@ -445,6 +490,7 @@ async function openImportFiles(importId: string) {
   message.value = '';
   try {
     selectedImport.value = await getImport(importId);
+    selectedImportSnapshots.value = (await listSnapshots({ importId, page: 0, size: 50 })).items;
     activeView.value = 'import-files';
   } catch (error) {
     logClientError('openImportFiles failed', error, { importId });
@@ -456,14 +502,16 @@ async function openImportFiles(importId: string) {
 
 function closeImportFiles() {
   selectedImport.value = undefined;
+  selectedImportSnapshots.value = [];
   profileTables.value = undefined;
   selectedProfileFileName.value = '';
   profileReturnView.value = 'import-files';
   activeView.value = 'imports';
 }
 
-function canOpenProfileData(state: string) {
-  return state === 'PARSED';
+function canOpenProfileData(state: string, messageText = '') {
+  return state === 'PARSED'
+    || (state === 'FAILED' && messageText.includes('Unable to assemble CGM network snapshot'));
 }
 
 function canOpenIidmData(state: string, networkId: string) {
@@ -547,15 +595,15 @@ function applyImportSnapshot(nextImports: ImportStatus[]) {
       selectedImport.value = updatedImport;
     }
   }
-  alignSelectedSuccessfulImports();
+  alignSelectedMetadataSelections();
 }
 
 async function refreshProfiles() {
   if (!selectedProfileImportId.value) {
     profiles.value = [];
-    message.value = successfulImports.value.length === 0
-      ? 'No successful imports available'
-      : 'Select a successful import';
+    message.value = profileCapableImports.value.length === 0
+      ? 'No parsed profile imports available'
+      : 'Select a profile import';
     return;
   }
   busy.value = true;
@@ -579,7 +627,7 @@ async function refreshProfiles() {
 async function refreshIidmTransforms() {
   if (!selectedIidmImportId.value) {
     iidmTransforms.value = [];
-    message.value = successfulImports.value.length === 0
+    message.value = iidmReadyImports.value.length === 0
       ? 'No successful imports available'
       : 'Select a successful import';
     return;
@@ -593,7 +641,9 @@ async function refreshIidmTransforms() {
       size: 100
     })).items;
   } catch (error) {
-    logClientError('refreshIidmTransforms failed', error, { importId: selectedIidmImportId.value });
+    logClientError('refreshIidmTransforms failed', error, {
+      importId: selectedIidmImportId.value
+    });
     message.value = error instanceof Error ? error.message : 'Unable to load IIDM transforms';
   } finally {
     busy.value = false;
@@ -712,14 +762,17 @@ function importOptionLabel(item: ImportStatus) {
   return `${formatDateTime(item.createdAt)}_${item.serviceType}_${displayTimeFrame(item.timeFrame)}(${item.importId})`;
 }
 
-function alignSelectedSuccessfulImports() {
-  if (selectedProfileImportId.value && !successfulImports.value.some((item) => item.importId === selectedProfileImportId.value)) {
+function alignSelectedMetadataSelections() {
+  if (selectedProfileImportId.value && !profileCapableImports.value.some((item) => item.importId === selectedProfileImportId.value)) {
     selectedProfileImportId.value = '';
     profiles.value = [];
   }
-  if (selectedIidmImportId.value && !successfulImports.value.some((item) => item.importId === selectedIidmImportId.value)) {
+  if (selectedIidmImportId.value && !iidmReadyImports.value.some((item) => item.importId === selectedIidmImportId.value)) {
     selectedIidmImportId.value = '';
     iidmTransforms.value = [];
+  }
+  if (!selectedIidmImportId.value && iidmReadyImports.value.length === 1) {
+    selectedIidmImportId.value = iidmReadyImports.value[0].importId;
   }
 }
 

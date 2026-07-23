@@ -4,6 +4,7 @@ export type CnmServiceType = 'CGM' | 'CSA' | 'CC';
 export type TimeFrame = 'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD';
 export type ImportState = 'INIT' | 'STORED' | 'SUCCESS' | 'FAILED';
 export type ImportFileState = 'INIT' | 'STORED' | 'PARSED' | 'FAILED';
+export type CnmSnapshotState = 'STARTED' | 'DONE' | 'FAILED';
 
 export interface ImportFileStatus {
   fileId: string;
@@ -46,6 +47,25 @@ export interface ProfileMetadata {
   timeFrame: string;
   version: string;
   importedAt: string;
+}
+
+export interface CnmSnapshotMetadata {
+  snapshotId: string;
+  importId: string;
+  serviceType: CnmServiceType;
+  tsoName: string;
+  businessDay: string;
+  businessTime: string;
+  timeFrame: string;
+  sourceFileIds: string[];
+  staticObjectCount: number;
+  relationCount: number;
+  stateValueCount: number;
+  diagnosticCount: number;
+  payloadSectionCount: number;
+  state: CnmSnapshotState;
+  message: string;
+  assembledAt: string;
 }
 
 export interface DynamicTableBundle {
@@ -254,6 +274,31 @@ export async function listProfiles(filters: {
   const response = await fetch(url);
   if (!response.ok) {
     throw await HttpClientError.fromResponse('Unable to load profiles', url, response);
+  }
+  return response.json();
+}
+
+export async function listSnapshots(filters: {
+  importId?: string;
+  state?: CnmSnapshotState;
+  page?: number;
+  size?: number;
+}): Promise<{ items: CnmSnapshotMetadata[]; total: number; page: number; size: number }> {
+  const baseUrl = cnmBaseUrl();
+  const params = new URLSearchParams({
+    page: String(filters.page ?? 0),
+    size: String(filters.size ?? 100)
+  });
+  if (filters.importId) {
+    params.set('importId', filters.importId);
+  }
+  if (filters.state) {
+    params.set('state', filters.state);
+  }
+  const url = `${baseUrl}/api/cnm/imports/snapshots?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load CNM snapshots', url, response);
   }
   return response.json();
 }

@@ -221,6 +221,21 @@ paths:
                     type: integer
                   size:
                     type: integer
+  /api/cnm/imports/snapshots:
+    get:
+      summary: Search assembled CGM network snapshot metadata
+      parameters:
+        - { name: importId, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/CnmSnapshotState' } }
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        '200':
+          description: Matching snapshot metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CnmSnapshotMetadataPage'
 components:
   schemas:
     CnmServiceType:
@@ -238,6 +253,9 @@ components:
     ProfileFamily:
       type: string
       enum: [NCP, CGMES, Unknown]
+    CnmSnapshotState:
+      type: string
+      enum: [STARTED, DONE, FAILED]
     RdfProfileReference:
       type: object
       properties:
@@ -321,6 +339,45 @@ components:
         version:
           type: string
         importedAt:
+          type: string
+          format: date-time
+    CnmSnapshotMetadata:
+      type: object
+      properties:
+        snapshotId:
+          type: string
+        importId:
+          type: string
+        serviceType:
+          $ref: '#/components/schemas/CnmServiceType'
+        tsoName:
+          type: string
+        businessDay:
+          type: string
+          format: date
+        businessTime:
+          type: string
+        timeFrame:
+          type: string
+        sourceFileIds:
+          type: array
+          items:
+            type: string
+        staticObjectCount:
+          type: integer
+        relationCount:
+          type: integer
+        stateValueCount:
+          type: integer
+        diagnosticCount:
+          type: integer
+        payloadSectionCount:
+          type: integer
+        state:
+          $ref: '#/components/schemas/CnmSnapshotState'
+        message:
+          type: string
+        assembledAt:
           type: string
           format: date-time
     ImportStatus:
@@ -422,6 +479,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ImportStatus'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        size:
+          type: integer
+    CnmSnapshotMetadataPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CnmSnapshotMetadata'
         total:
           type: integer
           format: int64

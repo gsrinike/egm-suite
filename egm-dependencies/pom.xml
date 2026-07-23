@@ -29,6 +29,7 @@
         <version.minio>8.5.12</version.minio>
         <version.springdoc-openapi>2.6.0</version.springdoc-openapi>
         <version.powsybl>2026.1.0</version.powsybl>
+        <version.rdf4j>5.3.2</version.rdf4j>
 
         <maven.compiler.release>${version.java}</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -69,6 +70,13 @@
                 <groupId>com.powsybl</groupId>
                 <artifactId>powsybl-starter</artifactId>
                 <version>${version.powsybl}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.rdf4j</groupId>
+                <artifactId>rdf4j-bom</artifactId>
+                <version>${version.rdf4j}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

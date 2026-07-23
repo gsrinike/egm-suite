@@ -13,7 +13,10 @@ import com.powsybl.iidm.network.TopologyKind;
 import com.powsybl.iidm.network.VoltageLevel;
 import eu.egm.data.cnm.common.GridTopologyObject;
 import eu.egm.data.cnm.common.GridTopologyRelation;
+import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.ProfilePayload;
+import eu.egm.data.cnm.snapshot.CgmNetworkSnapshot;
+import eu.egm.data.cnm.state.StateVariablePoint;
 import eu.egm.data.iidm.common.IidmDiagnostic;
 import eu.egm.data.iidm.network.IidmNetworkModel;
 import eu.egm.mapping.MappingConfiguration;
@@ -102,6 +105,88 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
                 tsoName,
                 network,
                 diagnostics);
+    }
+
+    /**
+     * Transforms a stitched CGM snapshot into a PowSyBl IIDM network.
+     */
+    public IidmNetworkModel transform(CgmNetworkSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("CGM network snapshot is required");
+        }
+        List<GridTopologyObject> topologyObjects = new ArrayList<>();
+        if (snapshot.staticTopology() != null) {
+            topologyObjects.addAll(snapshot.staticTopology().objects());
+        }
+        topologyObjects.addAll(stateTopologyObjects(snapshot));
+
+        List<GridTopologyRelation> topologyRelations = new ArrayList<>();
+        if (snapshot.staticTopology() != null) {
+            topologyRelations.addAll(snapshot.staticTopology().relations());
+        }
+        topologyRelations.addAll(stateTopologyRelations(snapshot));
+
+        ProfilePayload<CgmNetworkSnapshot> payload = new ProfilePayload<>(
+                ProfileFamily.CGMES,
+                "SNAPSHOT",
+                snapshot.snapshotId(),
+                snapshot.snapshotId(),
+                topologyObjects,
+                topologyRelations,
+                snapshot.diagnostics(),
+                snapshot);
+        IidmNetworkModel model = transform(
+                payload,
+                snapshot.importId(),
+                snapshot.businessDay(),
+                snapshot.businessTime(),
+                snapshot.timeFrame(),
+                snapshot.tsoName());
+        return new IidmNetworkModel(
+                model.id(),
+                snapshot.importId(),
+                snapshot.sourceFileIds(),
+                snapshot.businessDay(),
+                snapshot.businessTime(),
+                snapshot.timeFrame(),
+                snapshot.tsoName(),
+                model.network(),
+                model.diagnostics());
+    }
+
+    private List<GridTopologyObject> stateTopologyObjects(CgmNetworkSnapshot snapshot) {
+        if (snapshot.stateSnapshot() == null) {
+            return List.of();
+        }
+        List<GridTopologyObject> objects = new ArrayList<>();
+        for (StateVariablePoint point : snapshot.stateSnapshot().values()) {
+            String name = stringValue(point.values().get("name"));
+            objects.add(new GridTopologyObject(
+                    point.mRID(),
+                    name.isBlank() ? point.mRID() : name,
+                    point.cimType(),
+                    point.profileType(),
+                    point.values()));
+        }
+        return objects;
+    }
+
+    private List<GridTopologyRelation> stateTopologyRelations(CgmNetworkSnapshot snapshot) {
+        if (snapshot.stateSnapshot() == null) {
+            return List.of();
+        }
+        List<GridTopologyRelation> relations = new ArrayList<>();
+        for (StateVariablePoint point : snapshot.stateSnapshot().values()) {
+            for (Map.Entry<String, String> reference : point.references().entrySet()) {
+                relations.add(new GridTopologyRelation(
+                        point.mRID() + ":" + reference.getKey(),
+                        point.mRID(),
+                        reference.getValue(),
+                        reference.getKey(),
+                        Map.of("profileType", point.profileType())));
+            }
+        }
+        return relations;
     }
 
     private Map<String, Substation> createSubstations(Network network, ProfilePayload<?> payload, String tsoName) {

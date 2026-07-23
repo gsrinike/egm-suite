@@ -23,7 +23,14 @@ import com.powsybl.iidm.network.VoltageLevel;
 import eu.egm.data.cnm.common.DynamicTableColumn;
 import eu.egm.data.cnm.common.DynamicTableDefinition;
 import eu.egm.data.cnm.common.DynamicTableRow;
+import eu.egm.data.cnm.common.CnmSnapshotState;
+import eu.egm.data.cnm.common.GridTopologyObject;
+import eu.egm.data.cnm.common.GridTopologyRelation;
 import eu.egm.data.cnm.common.ProfilePayload;
+import eu.egm.data.cnm.snapshot.CgmNetworkSnapshot;
+import eu.egm.data.cnm.state.StateSnapshot;
+import eu.egm.data.cnm.state.StateVariablePoint;
+import eu.egm.data.cnm.topology.StaticTopologyModel;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
@@ -37,6 +44,10 @@ import eu.egm.mapping.JsonMappingService;
 import eu.egm.mapping.ReflectionMappingService;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocument;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocumentAdapter;
+import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotReadDocument;
+import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotReadDocumentAdapter;
+import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotPayloadReadDocument;
+import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotPayloadReadDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocument.IidmElementCountDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocumentAdapter;
@@ -65,6 +76,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private static final int NETWORK_XIIDM_CHUNK_SIZE = 1_000_000;
 
     private final DocumentRepositoryService<CnmProfilePayloadReadDocument> sourcePayloadRepository;
+    private final DocumentRepositoryService<CnmNetworkSnapshotReadDocument> sourceSnapshotRepository;
+    private final DocumentRepositoryService<CnmNetworkSnapshotPayloadReadDocument> sourceSnapshotPayloadRepository;
     private final DocumentRepositoryService<IidmProfileTransformDocument> transformRepository;
     private final DocumentRepositoryService<IidmNetworkDocument> networkRepository;
     private final EventPublisherService eventPublisher;
@@ -84,6 +97,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
             @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey) {
         super(environment, observationRegistry);
         this.sourcePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadReadDocumentAdapter());
+        this.sourceSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotReadDocumentAdapter());
+        this.sourceSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadReadDocumentAdapter());
         this.transformRepository = infrastructureUtils.documentRepository(new IidmProfileTransformDocumentAdapter());
         this.networkRepository = infrastructureUtils.documentRepository(new IidmNetworkDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
@@ -128,15 +143,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 null,
                 null));
         try {
-            CnmProfilePayloadReadDocument sourcePayload = sourcePayload(request.sourceProfilePayloadId(), request.importId());
-            ProfilePayload<?> profilePayload = jsonMappingService.fromJson(profileJson(sourcePayload), ProfilePayload.class);
-            IidmNetworkModel network = transformer.transform(
-                    profilePayload,
-                    request.importId(),
-                    request.businessDay(),
-                    request.businessTime(),
-                    request.timeFrame(),
-                    request.tsoName());
+            IidmNetworkModel network = request.sourceSnapshotId() == null || request.sourceSnapshotId().isBlank()
+                    ? transformProfilePayload(request)
+                    : transformSnapshot(request);
             networkRepository.save(toNetworkDocument(network));
             long completedAt = Instant.now().toEpochMilli();
             transformRepository.save(new IidmProfileTransformDocument(
@@ -175,6 +184,27 @@ public class IidmProfileTransformService extends RestServiceSupport {
             eventPublisher.publish(eventExchange, failedRoutingKey,
                     new IidmProfileTransformFailed(request.importId(), request.fileId(), message));
         }
+    }
+
+    private IidmNetworkModel transformProfilePayload(IidmProfileTransformRequested request) {
+        CnmProfilePayloadReadDocument sourcePayload = sourcePayload(request.sourceProfilePayloadId(), request.importId());
+        ProfilePayload<?> profilePayload = jsonMappingService.fromJson(profileJson(sourcePayload), ProfilePayload.class);
+        return transformer.transform(
+                profilePayload,
+                request.importId(),
+                request.businessDay(),
+                request.businessTime(),
+                request.timeFrame(),
+                request.tsoName());
+    }
+
+    private IidmNetworkModel transformSnapshot(IidmProfileTransformRequested request) {
+        CnmNetworkSnapshotReadDocument sourceSnapshot = sourceSnapshot(request.sourceSnapshotId(), request.importId());
+        if (sourceSnapshot.state() != CnmSnapshotState.DONE) {
+            throw new IllegalStateException("CNM network snapshot is not ready: " + sourceSnapshot.id());
+        }
+        CgmNetworkSnapshot snapshot = reconstructSnapshot(sourceSnapshot);
+        return transformer.transform(snapshot);
     }
 
     public List<IidmProfileTransformDocument> transforms(String importId, int maxResults) {
@@ -263,6 +293,68 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 .orElseThrow(() -> new IllegalArgumentException("CNM profile payload not found: " + payloadId));
     }
 
+    private CnmNetworkSnapshotReadDocument sourceSnapshot(String snapshotId, String importId) {
+        return sourceSnapshotRepository.findByField("id", snapshotId, 1)
+                .stream()
+                .filter(snapshot -> snapshot.importId().equals(importId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("CNM network snapshot not found: " + snapshotId));
+    }
+
+    private CgmNetworkSnapshot reconstructSnapshot(CnmNetworkSnapshotReadDocument sourceSnapshot) {
+        int expectedPayloadSections = number(sourceSnapshot.payloadSectionCount());
+        List<CnmNetworkSnapshotPayloadReadDocument> payloads = sourceSnapshotPayloadRepository
+                .findByField("snapshotId", sourceSnapshot.id(), Math.max(50_000, expectedPayloadSections + 10))
+                .stream()
+                .filter(payload -> payload.importId().equals(sourceSnapshot.importId()))
+                .sorted((left, right) -> {
+                    int section = left.section().compareTo(right.section());
+                    return section != 0 ? section : Integer.compare(number(left.sequence()), number(right.sequence()));
+                })
+                .toList();
+        if (payloads.isEmpty()) {
+            throw new IllegalArgumentException("CNM network snapshot payload not found: " + sourceSnapshot.id());
+        }
+        if (expectedPayloadSections > 0 && payloads.size() < expectedPayloadSections) {
+            throw new IllegalStateException("CNM network snapshot payload is incomplete: expected "
+                    + expectedPayloadSections + " sections but found " + payloads.size());
+        }
+        List<GridTopologyObject> topologyObjects = sectionValues(payloads, "TOPOLOGY_OBJECTS", GridTopologyObject[].class);
+        List<GridTopologyRelation> topologyRelations = sectionValues(payloads, "TOPOLOGY_RELATIONS", GridTopologyRelation[].class);
+        List<StateVariablePoint> stateValues = sectionValues(payloads, "STATE_VALUES", StateVariablePoint[].class);
+        List<String> unresolvedReferences = sectionValues(payloads, "UNRESOLVED_REFERENCES", String[].class);
+        List<String> diagnostics = sectionValues(payloads, "DIAGNOSTICS", String[].class);
+        return new CgmNetworkSnapshot(
+                sourceSnapshot.id(),
+                sourceSnapshot.importId(),
+                sourceSnapshot.serviceType(),
+                sourceSnapshot.tsoName(),
+                sourceSnapshot.businessDay(),
+                sourceSnapshot.businessTime(),
+                sourceSnapshot.timeFrame(),
+                new StaticTopologyModel(topologyObjects, topologyRelations, unresolvedReferences),
+                new StateSnapshot(
+                        sourceSnapshot.id(),
+                        sourceSnapshot.businessDay(),
+                        sourceSnapshot.businessTime(),
+                        sourceSnapshot.timeFrame(),
+                        stateValues),
+                sourceSnapshot.sourceFileIds(),
+                diagnostics,
+                List.of());
+    }
+
+    private <T> List<T> sectionValues(
+            List<CnmNetworkSnapshotPayloadReadDocument> payloads,
+            String section,
+            Class<T[]> targetType) {
+        List<T> values = new ArrayList<>();
+        payloads.stream()
+                .filter(payload -> section.equals(payload.section()))
+                .forEach(payload -> values.addAll(List.of(jsonMappingService.fromJson(payload.payloadJson(), targetType))));
+        return values;
+    }
+
     private IidmNetworkDocument toNetworkDocument(IidmNetworkModel network) {
         String networkXiidm = IidmNetworkXiidm.write(network.network());
         IidmNetworkSummary summary = network.summary();
@@ -311,6 +403,10 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private String networkId(String importId, String fileId) {
         return importId + ":" + fileId;
+    }
+
+    private int number(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private List<DocumentFilter> filters(String importId) {

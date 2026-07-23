@@ -7,6 +7,7 @@
 - Accept RDF/XML model files for CGM, CSA, and CC use cases.
 - Support ID, 1D, and 2D timeframes.
 - Extract RDF profile metadata such as `dcterms:conformsTo` asynchronously after object storage succeeds.
+- Stream RDF/XML through RDF4J Rio into compact RDF facts before mapping those facts to profile DTOs.
 - Classify imported payloads as CGMES, NCP, or unknown.
 - Resolve profile kinds through `CgmesProfileKind` and `NCProfileKind`; `ProfileFamily` remains only `CGMES`, `NCP`, or `Unknown`.
 - Store raw RDF payloads through `com.infra.storage.object`.
@@ -23,7 +24,8 @@ Required local infrastructure is Elasticsearch and MinIO. The default MinIO secr
 
 The GUI supports files up to 1 GB by sending 8 MB binary chunks. Nginx and Spring
 accept 16 MB per request, leaving headroom around each chunk without buffering a
-1 GB HTTP body.
+1 GB HTTP body. `.rdf`, `.xml`, and `.idm` entries are accepted from direct
+uploads or nested ZIP bundles.
 
 Successful imports first persist every raw RDF/XML payload to object storage and
 then publish one `cnm.file.processing.requested` event per stored file. The
@@ -32,6 +34,20 @@ searchable metadata document per profile in the `cnm-profiles` Elasticsearch
 index. Large typed profile JSON is stored separately in `cnm-profile-payloads`
 by `fileId`, so profile search/list screens do not load payload data into the
 service heap.
+
+The worker also stores a compact `ProfileFragment` JSON document in
+`cnm-profile-fragments` and mRID lookup rows in `cnm-mrid-index`. Once every
+file in the same import, TSO, business day, business time, and timeframe group
+is parsed, file processing publishes one `IidmProfileTransformRequested` for
+each parsed `ProfileProcessingContext`, then publishes
+`CnmSnapshotAssemblyRequested` and returns. A separate snapshot listener stitches
+those fragments into a `CgmNetworkSnapshot` using a two-pass mRID resolution
+pipeline. Snapshot metadata is stored in `cnm-network-snapshots`; the large
+sectioned JSON payload is stored in `cnm-network-snapshot-payloads`. Only after
+those payload sections are stored is the snapshot marked `DONE` and an
+additional IIDM transform request published with the snapshot ID. If payload
+persistence fails, the snapshot is marked failed while the parsed import and
+profile payload remain available for diagnostics.
 
 File-processing events are serialized per import, TSO, business day, business
 time, and timeframe inside the service. This keeps cross-referenced EQ, TP, SSH,
@@ -46,7 +62,7 @@ Profile extraction defaults are loaded from cached YAML resources under
 `src/main/resources/config/profile/nc`. The extractor adds diagnostics when a
 processed profile kind is outside the configured supported-kind list.
 
-After profile payload persistence, CNM also publishes IIDM transform requests to
+After profile payload and snapshot persistence, CNM also publishes IIDM transform requests to
 `iidm.events`. The service declares `iidm.events` through
 `utility.messaging.topic-exchange.additional-names` so RabbitMQ accepts the
 publish even when the IIDM transformer worker starts later.

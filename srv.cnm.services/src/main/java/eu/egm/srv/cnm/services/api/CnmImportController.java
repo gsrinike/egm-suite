@@ -4,6 +4,8 @@ import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.ChunkUploadCompleteRequest;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.CnmSnapshotMetadata;
+import eu.egm.data.cnm.common.CnmSnapshotState;
 import eu.egm.data.cnm.common.DynamicTableBundle;
 import eu.egm.data.cnm.common.DynamicTableDefinition;
 import eu.egm.data.cnm.common.ImportFailureRequest;
@@ -99,6 +101,15 @@ public class CnmImportController {
         return importService.searchProfiles(importId, profileType, tso, businessDay, businessTime, page, size);
     }
 
+    @GetMapping("/snapshots")
+    public CnmPage<CnmSnapshotMetadata> snapshots(
+            @RequestParam(required = false) String importId,
+            @RequestParam(required = false) CnmSnapshotState state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return importService.searchSnapshots(importId, state, page, size);
+    }
+
     @GetMapping
     public CnmPage<ImportStatus> imports(
             @RequestParam(defaultValue = "0") int page,
@@ -109,6 +120,15 @@ public class CnmImportController {
     @GetMapping("/{importId}")
     public ImportStatus importById(@PathVariable String importId) {
         return importService.findImport(importId);
+    }
+
+    @GetMapping("/{importId}/snapshots")
+    public CnmPage<CnmSnapshotMetadata> importSnapshots(
+            @PathVariable String importId,
+            @RequestParam(required = false) CnmSnapshotState state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return importService.searchSnapshots(importId, state, page, size);
     }
 
     @GetMapping("/{importId}/files/{fileId}/profile/payload")

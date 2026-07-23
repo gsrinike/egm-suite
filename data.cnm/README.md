@@ -7,6 +7,10 @@
 - `eu.egm.data.cnm.common`: import status, service type, timeframe, profile references, and paged responses.
 - `eu.egm.data.cnm.cgmes`: CGMES metadata, profile vocabulary, and profile-specific DTOs.
 - `eu.egm.data.cnm.nc`: Network Code profile metadata and profile vocabulary.
+- `eu.egm.data.cnm.rdf`: neutral RDF profile facts, profile fragments, and mRID index contracts.
+- `eu.egm.data.cnm.topology`: assembled static topology model wrappers.
+- `eu.egm.data.cnm.state`: dynamic SSH/SV operating-state snapshot DTOs.
+- `eu.egm.data.cnm.snapshot`: stitched CGM snapshot and incremental update contracts.
 
 `ProfileFamily` deliberately contains only top-level families: `CGMES`, `NCP`,
 and `Unknown`. Profile-specific values such as `EQ`, `SSH`, `SV`, `TP`, `DL`,
@@ -19,7 +23,17 @@ The DTOs are intentionally storage-neutral and do not depend on Spring MVC, MinI
 
 Import contracts include chunk completion, filename-derived profile types,
 separate business day/time fields, searchable profile metadata, and import event
-payloads.
+payloads. `CnmFileProcessingRequested` is used for RDF/profile extraction;
+`CnmSnapshotAssemblyRequested` is used for the heavier stitched snapshot build
+after every file in a model group is parsed.
+
+`ProfileFragment` captures one parsed RDF/XML or `.idm` file without binding it
+to storage or PowSyBl. `CgmNetworkSnapshot` stitches related profile fragments
+for a TSO/business day/business time/timeframe into static topology plus dynamic
+state so downstream IIDM conversion can work on a complete model view.
+`CnmSnapshotMetadata` describes the stored snapshot without embedding large
+payloads; large snapshot sections remain an implementation detail of the
+service-owned document store.
 
 Import status uses the aggregate lifecycle states `INIT`, `STORED`, `SUCCESS`,
 and `FAILED`. `STORED` means durable intake has completed and file-processing

@@ -2,12 +2,13 @@
 
 ## Purpose
 
-IIDM transformation starts after CNM RDF metadata extraction has produced a typed
-`ProfilePayload` JSON document. The transformation does not parse raw RDF/XML and
-maps persisted CNM profile DTOs into PowSyBl IIDM `Network` objects. The
-PowSyBl dependency is intentionally owned by `data.iidm` and `map.cnm.iidm` so
-load-flow, security-analysis, and RAO services can consume real IIDM networks
-without reinterpreting CGMES payloads.
+IIDM transformation starts after CNM RDF metadata extraction has produced typed
+CNM JSON documents. The preferred source is a stitched `CgmNetworkSnapshot`
+assembled after all files in a TSO/business day/business time/timeframe group
+are parsed. The transformation does not parse raw RDF/XML and maps persisted CNM
+DTOs into PowSyBl IIDM `Network` objects. The PowSyBl dependency is intentionally
+owned by `data.iidm` and `map.cnm.iidm` so load-flow, security-analysis, and RAO
+services can consume real IIDM networks without reinterpreting CGMES payloads.
 
 ## Module Ownership
 
@@ -19,8 +20,11 @@ without reinterpreting CGMES payloads.
 - `srv.iidm.transformer`: owns RabbitMQ event consumption, CNM profile payload
   reads, IIDM transform status persistence, IIDM network persistence, and IIDM
   REST exploration APIs.
-- `srv.cnm.services`: owns CNM import and RDF metadata extraction only. After a
-  file is parsed, it publishes an IIDM transform request event.
+- `srv.cnm.services`: owns CNM import, RDF metadata extraction, and asynchronous
+  snapshot assembly. After every file in a model group is parsed, it publishes
+  profile-level IIDM transform request events for each `ProfileProcessingContext`.
+  After a model-group snapshot is assembled and marked `DONE`, it also publishes
+  a snapshot-level IIDM transform request event.
 - `com.infra`: owns document storage and messaging adapters.
 - `com.mapping`: owns DTO-to-JSON and JSON-to-DTO conversion contracts.
 
@@ -29,8 +33,9 @@ The hand-off between CNM and IIDM is an event using `data.iidm` contracts. GUI
 modules and `data.cnm` remain free of PowSyBl dependencies.
 
 The CNM service declares the IIDM event exchange as an additional messaging
-exchange because it publishes `IidmProfileTransformRequested` before or
-independently of the IIDM transformer consumer startup.
+exchange because the snapshot worker publishes
+`IidmProfileTransformRequested` independently of the IIDM transformer consumer
+startup.
 
 ## Document Ownership
 
@@ -39,6 +44,13 @@ CNM document indices:
 - `cnm-imports`: import aggregate and file processing status.
 - `cnm-profiles`: searchable profile metadata only.
 - `cnm-profile-payloads`: large profile DTO JSON payloads keyed by `fileId`.
+- `cnm-profile-fragments`: compact per-file RDF fact JSON.
+- `cnm-mrid-index`: cross-profile mRID index rows.
+- `cnm-network-snapshots`: stitched model snapshot metadata by
+  import/TSO/business day/business time/timeframe.
+- `cnm-network-snapshot-payloads`: sectioned stitched model JSON payloads keyed
+  by snapshot ID. IIDM transformation reconstructs a snapshot from these
+  sections only when snapshot metadata is `DONE`.
 
 IIDM document indices:
 
@@ -55,13 +67,15 @@ caller requests a concrete network.
 
 ## GUI Visualization
 
-The `IIDM` menu in `gui.cnm.manager` is profile-scoped and lazy-loaded:
+The `IIDM` menu in `gui.cnm.manager` is completed-snapshot scoped and
+lazy-loaded:
 
-- The initial view first requires selecting a successful CNM import. The import
-  selector contains only imports whose aggregate state is `SUCCESS`.
-- After selection, the view calls the transform list API with `importId` and
-  receives transform/network metadata only. It does not receive `networkXiidm`
-  or `networkXiidmChunks`.
+- The initial view first requires selecting a completed CNM snapshot. The
+  selector contains only `cnm-network-snapshots` rows whose state is `DONE`.
+- After selection, the view calls the transform list API with the snapshot
+  import ID and keeps rows linked to the selected snapshot ID. It receives
+  transform/network metadata only. It does not receive `networkXiidm` or
+  `networkXiidmChunks`.
 - Rows are clickable only when the transform state is `DONE` and a network ID is
   available.
 - Selecting one transformed profile opens an IIDM detail view for that network.
@@ -80,20 +94,22 @@ network objects merely to show the list or table selector.
 sequenceDiagram
     autonumber
     participant CNM as "srv.cnm.services"
-    participant CnmPayloads as "cnm-profile-payloads"
+    participant CnmPayloads as "cnm-profile-payloads / snapshot payloads"
     participant Events as "RabbitMQ iidm.events"
     participant IIDM as "srv.iidm.transformer"
     participant Mapping as "map.cnm.iidm"
     participant TransformIndex as "iidm-profile-transforms"
     participant NetworkIndex as "iidm-networks"
 
-    CNM->>CnmPayloads: save ProfilePayload JSON after RDF metadata extraction
-    CNM->>Events: publish IidmProfileTransformRequested
+    CNM->>CnmPayloads: save ProfilePayload JSON after file parsing
+    CNM->>Events: publish IidmProfileTransformRequested for each parsed profile context after group completion
+    CNM->>CnmPayloads: save snapshot metadata and sectioned JSON after model group completion
+    CNM->>Events: publish IidmProfileTransformRequested(sourceSnapshotId)
     Events-->>IIDM: consume transform request
     IIDM->>TransformIndex: upsert STARTED transform document
-    IIDM->>CnmPayloads: read ProfilePayload JSON by fileId
-    IIDM->>IIDM: deserialize JSON through com.mapping
-    IIDM->>Mapping: transform ProfilePayload to PowSyBl Network
+    IIDM->>CnmPayloads: read DONE snapshot metadata and payload sections
+    IIDM->>IIDM: reconstruct snapshot DTO through com.mapping
+    IIDM->>Mapping: transform CgmNetworkSnapshot to PowSyBl Network
     Mapping-->>IIDM: IidmNetworkModel with PowSyBl Network and diagnostics
     IIDM->>IIDM: export Network as XIIDM
     IIDM->>NetworkIndex: save XIIDM payload and stable counts
@@ -124,11 +140,12 @@ configuration under `srv.iidm.transformer/src/main/resources/config/profile/iidm
 These values must not be hard-coded in service logic, so parallel transform
 workers use the same immutable in-memory configuration snapshot.
 
-Future increments should extend this from profile-level networks to grouped
-CGMES model assembly. EQ should establish the base network, SSH/SV/TP should
-update the same PowSyBl network variant or a derived variant, following
-PowSyBl's `Network.read(...)` and `network.update(...)` style for profile
-updates where direct CGMES source files are available.
+The transformer still supports the older profile-payload event path when
+`sourceSnapshotId` is empty, which keeps diagnostic and compatibility flows
+working. Snapshot events are the primary path because EQ/TP/SSH/SV data are
+cross-referenced and should be mapped as one model rather than isolated files.
+Future increments can enrich the snapshot mapper with more PowSyBl-specific
+profile semantics while preserving the same event and document boundary.
 
 ## REST Surface
 
@@ -165,3 +182,5 @@ server-side so a term can match rows beyond the currently displayed page.
   mapping, PowSyBl network creation, XIIDM export, or network persistence fails.
 - Transform event handling is idempotent by `fileId`: reprocessing replaces the
   transform document and network document for the same source file.
+- Snapshot transform events are idempotent by `sourceSnapshotId`; the produced
+  network ID is derived from the import ID and snapshot ID.

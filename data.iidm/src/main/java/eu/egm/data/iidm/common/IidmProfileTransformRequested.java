@@ -9,6 +9,7 @@ public record IidmProfileTransformRequested(
         String importId,
         String fileId,
         String sourceProfilePayloadId,
+        String sourceSnapshotId,
         String profileType,
         ProfileFamily profileFamily,
         String objectId,

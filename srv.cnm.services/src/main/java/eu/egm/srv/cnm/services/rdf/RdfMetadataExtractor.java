@@ -6,6 +6,8 @@ import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.ProfilePayload;
 import eu.egm.data.cnm.cgmes.CgmesProfileKind;
 import eu.egm.data.cnm.nc.NCProfileKind;
+import eu.egm.data.cnm.rdf.CimProfileFact;
+import eu.egm.data.cnm.rdf.ProfileFragment;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -124,7 +126,38 @@ public class RdfMetadataExtractor {
                 model.profiles(),
                 entityCounts,
                 warnings,
+                fragment(detectedContext, model, entityCounts, warnings),
                 profilePayload);
+    }
+
+    private ProfileFragment fragment(
+            ProfileProcessingContext context,
+            ParsedRdfModel model,
+            Map<String, Long> entityCounts,
+            List<String> warnings) {
+        return new ProfileFragment(
+                context.importId(),
+                context.fileId(),
+                context.objectId(),
+                model.modelId(),
+                context.profileFamily(),
+                context.profileType(),
+                context.tsoName(),
+                context.businessDay(),
+                context.businessTime(),
+                context.timeFrame(),
+                "",
+                model.profiles(),
+                model.facts().stream()
+                        .map(fact -> new CimProfileFact(
+                                fact.mRID(),
+                                fact.type(),
+                                context.profileType(),
+                                fact.attributes(),
+                                fact.references()))
+                        .toList(),
+                entityCounts,
+                warnings);
     }
 
     private ProfileDefaults profileDefaults(ProfileFamily family) {

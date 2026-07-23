@@ -13,6 +13,9 @@ import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.CnmSnapshotAssemblyRequested;
+import eu.egm.data.cnm.common.CnmSnapshotMetadata;
+import eu.egm.data.cnm.common.CnmSnapshotState;
 import eu.egm.data.cnm.common.DynamicTableBundle;
 import eu.egm.data.cnm.common.DynamicTableColumn;
 import eu.egm.data.cnm.common.DynamicTableDefinition;
@@ -31,14 +34,25 @@ import eu.egm.mapping.JsonMappingService;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument.CnmImportFileDocument;
 import eu.egm.srv.cnm.services.domain.CnmImportDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmMridIndexDocument;
+import eu.egm.srv.cnm.services.domain.CnmMridIndexDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocument;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocument;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument.CnmEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
+import eu.egm.srv.cnm.services.rdf.CgmSnapshotAssembler;
 import eu.egm.srv.cnm.services.rdf.ProfileProcessingContext;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
+import eu.egm.data.cnm.rdf.ProfileFragment;
+import eu.egm.data.cnm.snapshot.CgmNetworkSnapshot;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -77,6 +91,7 @@ public class CnmImportRestService extends RestServiceSupport {
                     "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9_-]+)_(?<version>\\d+)$",
                     Pattern.CASE_INSENSITIVE);
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
+    private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
     private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
 
@@ -84,15 +99,22 @@ public class CnmImportRestService extends RestServiceSupport {
     private final DocumentRepositoryService<CnmImportDocument> documentRepository;
     private final DocumentRepositoryService<CnmProfileDocument> profileRepository;
     private final DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository;
+    private final DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository;
+    private final DocumentRepositoryService<CnmMridIndexDocument> mridIndexRepository;
+    private final DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository;
+    private final DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository;
     private final EventPublisherService eventPublisher;
     private final JsonMappingService jsonMappingService;
     private final RdfMetadataExtractor metadataExtractor;
+    private final CgmSnapshotAssembler snapshotAssembler = new CgmSnapshotAssembler();
     private final String rawBucket;
     private final String eventExchange;
     private final String fileProcessingRoutingKey;
+    private final String snapshotAssemblyRoutingKey;
     private final String iidmTransformExchange;
     private final String iidmTransformRoutingKey;
     private final ConcurrentMap<String, Object> processingLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Object> snapshotLocks = new ConcurrentHashMap<>();
 
     public CnmImportRestService(
             Environment environment,
@@ -102,6 +124,7 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
             @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
+            @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
             @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
         this(
@@ -113,6 +136,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 rawBucket,
                 eventExchange,
                 fileProcessingRoutingKey,
+                snapshotAssemblyRoutingKey,
                 iidmTransformExchange,
                 iidmTransformRoutingKey);
     }
@@ -127,6 +151,7 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${cnm.import.event.exchange:cnm.events}") String eventExchange,
             @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
+            @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
             @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
         super(environment, observationRegistry);
@@ -134,12 +159,17 @@ public class CnmImportRestService extends RestServiceSupport {
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
         this.profileRepository = infrastructureUtils.documentRepository(new CnmProfileDocumentAdapter());
         this.profilePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadDocumentAdapter());
+        this.profileFragmentRepository = infrastructureUtils.documentRepository(new CnmProfileFragmentDocumentAdapter());
+        this.mridIndexRepository = infrastructureUtils.documentRepository(new CnmMridIndexDocumentAdapter());
+        this.networkSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotDocumentAdapter());
+        this.networkSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.metadataExtractor = metadataExtractor;
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
         this.fileProcessingRoutingKey = fileProcessingRoutingKey;
+        this.snapshotAssemblyRoutingKey = snapshotAssemblyRoutingKey;
         this.iidmTransformExchange = iidmTransformExchange;
         this.iidmTransformRoutingKey = iidmTransformRoutingKey;
     }
@@ -490,6 +520,7 @@ public class CnmImportRestService extends RestServiceSupport {
         String lowerName = lower(fileName);
         return lowerName.endsWith(".xml")
                 || lowerName.endsWith(".rdf")
+                || lowerName.endsWith(".idm")
                 || lowerName.endsWith(".owl")
                 || startsWithXml(payload);
     }
@@ -530,7 +561,8 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private String contentType(String fileName) {
-        return lower(fileName).endsWith(".rdf") ? "application/rdf+xml" : "application/xml";
+        String lowerName = lower(fileName);
+        return lowerName.endsWith(".rdf") || lowerName.endsWith(".idm") ? "application/rdf+xml" : "application/xml";
     }
 
     private String baseName(String path) {
@@ -607,7 +639,10 @@ public class CnmImportRestService extends RestServiceSupport {
                 .filter(file -> file.fileId().equals(event.fileId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Import file not found: " + event.fileId()));
-        if (target.state() == ImportFileState.PARSED || target.state() == ImportFileState.FAILED) {
+        if (target.state() == ImportFileState.FAILED) {
+            return toStatus(current);
+        }
+        if (target.state() == ImportFileState.PARSED) {
             return toStatus(current);
         }
 
@@ -619,16 +654,19 @@ public class CnmImportRestService extends RestServiceSupport {
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
             profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
-            publishIidmTransformRequested(current.id(), processed, metadata);
+            profileFragmentRepository.save(toProfileFragmentDocument(current.id(), processed, metadata));
+            mridIndexRepository.saveAll(toMridIndexDocuments(current.id(), processed, metadata));
         } catch (Exception exception) {
             logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
             processed = withStatus(target, ImportFileState.FAILED, message(exception));
         }
 
+        return completeProcessedFile(current, processed);
+    }
+
+    private ImportStatus completeProcessedFile(CnmImportDocument current, CnmImportFileDocument processed) {
         CnmImportFileDocument processedFile = processed;
-        List<CnmImportFileDocument> files = current.files().stream()
-                .map(file -> file.fileId().equals(target.fileId()) ? processedFile : file)
-                .toList();
+        List<CnmImportFileDocument> files = replaceFile(current.files(), processedFile);
         CnmImportDocument updated = new CnmImportDocument(
                 current.id(),
                 current.serviceType(),
@@ -637,11 +675,24 @@ public class CnmImportRestService extends RestServiceSupport {
                 files,
                 current.createdAt(),
                 aggregateMessage(current.message(), files));
+        if (processed.state() != ImportFileState.FAILED) {
+            publishSnapshotAssemblyIfComplete(updated, processed);
+        }
         documentRepository.save(updated);
-        if (processed.state() == ImportFileState.FAILED) {
-            updateProfileStatus(processed.fileId(), ImportFileState.FAILED);
+        if (processedFile.state() == ImportFileState.FAILED && !isSnapshotAssemblyFailure(processedFile)) {
+            updateProfileStatus(processedFile.fileId(), ImportFileState.FAILED);
         }
         return toStatus(updated);
+    }
+
+    private boolean isSnapshotAssemblyFailure(CnmImportFileDocument file) {
+        return file.message() != null && file.message().contains("Unable to assemble CGM network snapshot");
+    }
+
+    private List<CnmImportFileDocument> replaceFile(List<CnmImportFileDocument> files, CnmImportFileDocument replacement) {
+        return files.stream()
+                .map(file -> file.fileId().equals(replacement.fileId()) ? replacement : file)
+                .toList();
     }
 
     private ProfileProcessingContext processingContext(String importId, CnmImportFileDocument file) {
@@ -657,24 +708,368 @@ public class CnmImportRestService extends RestServiceSupport {
                 file.profileType());
     }
 
-    private void publishIidmTransformRequested(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
+    private void publishSnapshotAssemblyIfComplete(CnmImportDocument document, CnmImportFileDocument processedFile) {
+        List<CnmImportFileDocument> groupFiles = document.files().stream()
+                .filter(file -> sameModelGroup(file, processedFile))
+                .toList();
+        if (groupFiles.isEmpty() || groupFiles.stream().anyMatch(file -> file.state() != ImportFileState.PARSED)) {
+            return;
+        }
+        publishIidmTransformRequested(document.id(), groupFiles);
+        publishSnapshotAssemblyRequested(document, processedFile);
+    }
+
+    public void assembleSnapshot(CnmSnapshotAssemblyRequested event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Snapshot assembly event is required");
+        }
+        String lockKey = snapshotQueueKey(event.importId(), event.tsoName(), event.businessDay(), event.businessTime(), event.modelTimeFrame());
+        Object lock = snapshotLocks.computeIfAbsent(lockKey, ignored -> new Object());
+        synchronized (lock) {
+            assembleSnapshotLocked(event);
+        }
+    }
+
+    private void assembleSnapshotLocked(CnmSnapshotAssemblyRequested event) {
+        if (snapshotDone(event)) {
+            return;
+        }
+        CnmImportDocument document = findImportDocument(event.importId());
+        List<CnmImportFileDocument> groupFiles = document.files().stream()
+                .filter(file -> sameModelGroup(file, event))
+                .toList();
+        if (groupFiles.isEmpty() || groupFiles.stream().anyMatch(file -> file.state() != ImportFileState.PARSED)) {
+            logger.info(
+                    "Skipping CGM snapshot assembly for {} because the model group is not fully parsed",
+                    snapshotQueueKey(event.importId(), event.tsoName(), event.businessDay(), event.businessTime(), event.modelTimeFrame()));
+            return;
+        }
+        List<ProfileFragment> fragments = groupFiles.stream()
+                .map(file -> profileFragment(document.id(), file.fileId()))
+                .flatMap(List::stream)
+                .toList();
+        if (fragments.isEmpty()) {
+            return;
+        }
+        CgmNetworkSnapshot snapshot = snapshotAssembler.assemble(document.serviceType(), fragments);
+        if (snapshotDone(snapshot.snapshotId(), snapshot.importId())) {
+            return;
+        }
+        List<CnmNetworkSnapshotPayloadDocument> payloadSections = toNetworkSnapshotPayloadDocuments(snapshot);
+        networkSnapshotRepository.save(toNetworkSnapshotDocument(
+                snapshot,
+                payloadSections.size(),
+                CnmSnapshotState.STARTED,
+                "CGM network snapshot assembly started",
+                Instant.now().toEpochMilli()));
+        try {
+            networkSnapshotPayloadRepository.saveAll(payloadSections);
+            networkSnapshotRepository.save(toNetworkSnapshotDocument(
+                    snapshot,
+                    payloadSections.size(),
+                    CnmSnapshotState.DONE,
+                    "CGM network snapshot assembly completed",
+                    Instant.now().toEpochMilli()));
+        } catch (Exception exception) {
+            networkSnapshotRepository.save(toNetworkSnapshotDocument(
+                    snapshot,
+                    payloadSections.size(),
+                    CnmSnapshotState.FAILED,
+                    message(exception),
+                    Instant.now().toEpochMilli()));
+            throw exception;
+        }
+        publishIidmSnapshotTransformRequested(document.id(), snapshot);
+    }
+
+    private boolean sameModelGroup(CnmImportFileDocument left, CnmImportFileDocument right) {
+        return valueOr(left.tsoName(), "").equals(valueOr(right.tsoName(), ""))
+                && valueOr(left.businessDay(), "").equals(valueOr(right.businessDay(), ""))
+                && valueOr(left.businessTime(), "").equals(valueOr(right.businessTime(), ""))
+                && valueOr(left.modelTimeFrame(), "").equals(valueOr(right.modelTimeFrame(), ""));
+    }
+
+    private boolean sameModelGroup(CnmImportFileDocument file, CnmSnapshotAssemblyRequested event) {
+        return valueOr(file.tsoName(), "").equals(valueOr(event.tsoName(), ""))
+                && valueOr(file.businessDay(), "").equals(valueOr(event.businessDay(), ""))
+                && valueOr(file.businessTime(), "").equals(valueOr(event.businessTime(), ""))
+                && valueOr(file.modelTimeFrame(), "").equals(valueOr(event.modelTimeFrame(), ""));
+    }
+
+    private void publishSnapshotAssemblyRequested(CnmImportDocument document, CnmImportFileDocument processedFile) {
+        try {
+            eventPublisher.publish(
+                    eventExchange,
+                    snapshotAssemblyRoutingKey,
+                    new CnmSnapshotAssemblyRequested(
+                            document.id(),
+                            processedFile.tsoName(),
+                            processedFile.businessDay(),
+                            processedFile.businessTime(),
+                            processedFile.modelTimeFrame(),
+                            document.serviceType(),
+                            document.timeFrame(),
+                            0,
+                            Instant.now()));
+        } catch (Exception exception) {
+            logger.warn(
+                    "Unable to publish CGM snapshot assembly event for import {} file {}",
+                    document.id(),
+                    processedFile.fileId(),
+                    exception);
+        }
+    }
+
+    private boolean snapshotDone(CnmSnapshotAssemblyRequested event) {
+        return snapshotDone(
+                snapshotId(event.importId(), event.tsoName(), event.businessDay(), event.businessTime(), event.modelTimeFrame()),
+                event.importId());
+    }
+
+    private boolean snapshotDone(String snapshotId, String importId) {
+        return networkSnapshotRepository.findByField("id", snapshotId, 1)
+                .stream()
+                .filter(snapshot -> snapshot.importId().equals(importId))
+                .anyMatch(snapshot -> snapshot.state() == CnmSnapshotState.STARTED || snapshot.state() == CnmSnapshotState.DONE);
+    }
+
+    private String snapshotQueueKey(
+            String importId,
+            String tsoName,
+            String businessDay,
+            String businessTime,
+            String modelTimeFrame) {
+        return String.join(":",
+                valueOr(importId, ""),
+                valueOr(tsoName, ""),
+                valueOr(businessDay, ""),
+                valueOr(businessTime, ""),
+                valueOr(modelTimeFrame, ""));
+    }
+
+    private String snapshotId(
+            String importId,
+            String tsoName,
+            String businessDay,
+            String businessTime,
+            String modelTimeFrame) {
+        return snapshotQueueKey(importId, tsoName, businessDay, businessTime, modelTimeFrame);
+    }
+
+    private List<ProfileFragment> profileFragment(String importId, String fileId) {
+        return profileFragmentRepository.findByField("id", fileId, 1)
+                .stream()
+                .filter(document -> document.importId().equals(importId))
+                .map(this::profileFragment)
+                .toList();
+    }
+
+    private ProfileFragment profileFragment(CnmProfileFragmentDocument document) {
+        String json = document.fragmentJson();
+        if ((json == null || json.isBlank()) && document.fragmentJsonChunks() != null) {
+            json = String.join("", document.fragmentJsonChunks());
+        }
+        return jsonMappingService.fromJson(json, ProfileFragment.class);
+    }
+
+    private CnmProfileFragmentDocument toProfileFragmentDocument(
+            String importId,
+            CnmImportFileDocument file,
+            RdfMetadata metadata) {
+        ProfileFragment fragment = metadata.fragment();
+        String fragmentJson = jsonMappingService.toJson(fragment);
+        return new CnmProfileFragmentDocument(
+                file.fileId(),
+                importId,
+                file.fileId(),
+                file.objectId(),
+                metadata.modelId(),
+                metadata.family(),
+                metadata.profileType(),
+                file.tsoName(),
+                file.businessDay(),
+                file.businessTime(),
+                file.modelTimeFrame(),
+                file.modelVersion(),
+                metadata.entityCounts(),
+                fragment.facts().size(),
+                metadata.warnings(),
+                fragmentJson.length() <= PROFILE_JSON_CHUNK_SIZE ? fragmentJson : "",
+                chunks(fragmentJson),
+                file.uploadedAt());
+    }
+
+    private List<CnmMridIndexDocument> toMridIndexDocuments(
+            String importId,
+            CnmImportFileDocument file,
+            RdfMetadata metadata) {
+        long indexedAt = Instant.now().toEpochMilli();
+        return metadata.fragment().facts().stream()
+                .map(fact -> new CnmMridIndexDocument(
+                        importId + ":" + file.fileId() + ":" + fact.mRID(),
+                        importId,
+                        fact.mRID(),
+                        fact.cimType(),
+                        fact.profileType(),
+                        file.fileId(),
+                        fact.references().values().stream().filter(value -> value != null && !value.isBlank()).toList(),
+                        indexedAt))
+                .toList();
+    }
+
+    private CnmNetworkSnapshotDocument toNetworkSnapshotDocument(
+            CgmNetworkSnapshot snapshot,
+            int payloadSectionCount,
+            CnmSnapshotState state,
+            String statusMessage,
+            Object assembledAt) {
+        return new CnmNetworkSnapshotDocument(
+                snapshot.snapshotId(),
+                snapshot.importId(),
+                snapshot.serviceType(),
+                snapshot.tsoName(),
+                snapshot.businessDay(),
+                snapshot.businessTime(),
+                snapshot.timeFrame(),
+                snapshot.sourceFileIds(),
+                snapshot.staticTopology() == null ? 0 : snapshot.staticTopology().objects().size(),
+                snapshot.staticTopology() == null ? 0 : snapshot.staticTopology().relations().size(),
+                snapshot.stateSnapshot() == null ? 0 : snapshot.stateSnapshot().values().size(),
+                snapshot.diagnostics().size(),
+                payloadSectionCount,
+                state,
+                statusMessage,
+                assembledAt == null ? Instant.now().toEpochMilli() : assembledAt);
+    }
+
+    private List<CnmNetworkSnapshotPayloadDocument> toNetworkSnapshotPayloadDocuments(CgmNetworkSnapshot snapshot) {
+        List<CnmNetworkSnapshotPayloadDocument> sections = new ArrayList<>();
+        long createdAt = Instant.now().toEpochMilli();
+        if (snapshot.staticTopology() != null) {
+            sections.addAll(payloadDocuments(
+                    snapshot,
+                    "TOPOLOGY_OBJECTS",
+                    snapshot.staticTopology().objects(),
+                    createdAt));
+            sections.addAll(payloadDocuments(
+                    snapshot,
+                    "TOPOLOGY_RELATIONS",
+                    snapshot.staticTopology().relations(),
+                    createdAt));
+            sections.addAll(payloadDocuments(
+                    snapshot,
+                    "UNRESOLVED_REFERENCES",
+                    snapshot.staticTopology().unresolvedReferences(),
+                    createdAt));
+        }
+        if (snapshot.stateSnapshot() != null) {
+            sections.addAll(payloadDocuments(snapshot, "STATE_VALUES", snapshot.stateSnapshot().values(), createdAt));
+        }
+        sections.addAll(payloadDocuments(snapshot, "DIAGNOSTICS", snapshot.diagnostics(), createdAt));
+        return sections;
+    }
+
+    private List<CnmNetworkSnapshotPayloadDocument> payloadDocuments(
+            CgmNetworkSnapshot snapshot,
+            String section,
+            List<?> values,
+            long createdAt) {
+        if (values == null || values.isEmpty()) {
+            return List.of(new CnmNetworkSnapshotPayloadDocument(
+                    snapshot.snapshotId() + ":" + section + ":0",
+                    snapshot.snapshotId(),
+                    snapshot.importId(),
+                    section,
+                    0,
+                    0,
+                    "[]",
+                    createdAt));
+        }
+        List<CnmNetworkSnapshotPayloadDocument> documents = new ArrayList<>();
+        List<String> batch = new ArrayList<>();
+        int sequence = 0;
+        int currentSize = 2;
+        for (Object value : values) {
+            String valueJson = jsonMappingService.toJson(value);
+            int projectedSize = currentSize + valueJson.length() + (batch.isEmpty() ? 0 : 1);
+            if (!batch.isEmpty() && projectedSize >= SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE) {
+                documents.add(payloadDocument(snapshot, section, sequence++, batch, createdAt));
+                batch = new ArrayList<>();
+                currentSize = 2;
+            }
+            batch.add(valueJson);
+            currentSize += valueJson.length() + (batch.size() == 1 ? 0 : 1);
+        }
+        if (!batch.isEmpty()) {
+            documents.add(payloadDocument(snapshot, section, sequence, batch, createdAt));
+        }
+        return documents;
+    }
+
+    private CnmNetworkSnapshotPayloadDocument payloadDocument(
+            CgmNetworkSnapshot snapshot,
+            String section,
+            int sequence,
+            List<String> values,
+            long createdAt) {
+        return new CnmNetworkSnapshotPayloadDocument(
+                snapshot.snapshotId() + ":" + section + ":" + sequence,
+                snapshot.snapshotId(),
+                snapshot.importId(),
+                section,
+                sequence,
+                values.size(),
+                "[" + String.join(",", values) + "]",
+                createdAt);
+    }
+
+    private void publishIidmTransformRequested(String importId, List<CnmImportFileDocument> groupFiles) {
+        groupFiles.forEach(file -> publishIidmTransformRequested(processingContext(importId, file)));
+    }
+
+    private void publishIidmTransformRequested(ProfileProcessingContext context) {
+        try {
+            eventPublisher.publish(
+                    iidmTransformExchange,
+                    iidmTransformRoutingKey,
+                    new IidmProfileTransformRequested(
+                            context.importId(),
+                            context.fileId(),
+                            context.fileId(),
+                            "",
+                            context.profileType(),
+                            context.profileFamily(),
+                            context.objectId(),
+                            context.businessDay(),
+                            context.businessTime(),
+                            context.tsoName(),
+                            context.timeFrame()));
+        } catch (Exception exception) {
+            logger.warn("Unable to publish IIDM transform event for {}", context.fileId(), exception);
+        }
+    }
+
+    private void publishIidmSnapshotTransformRequested(
+            String importId,
+            CgmNetworkSnapshot snapshot) {
         try {
             eventPublisher.publish(
                     iidmTransformExchange,
                     iidmTransformRoutingKey,
                     new IidmProfileTransformRequested(
                             importId,
-                            file.fileId(),
-                            file.fileId(),
-                            valueOr(metadata.profileType(), file.profileType()),
-                            file.profileFamily(),
-                            file.objectId(),
-                            file.businessDay(),
-                            file.businessTime(),
-                            file.tsoName(),
-                            file.modelTimeFrame()));
+                            snapshot.snapshotId(),
+                            "",
+                            snapshot.snapshotId(),
+                            "SNAPSHOT",
+                            ProfileFamily.CGMES,
+                            snapshot.snapshotId(),
+                            snapshot.businessDay(),
+                            snapshot.businessTime(),
+                            snapshot.tsoName(),
+                            snapshot.timeFrame()));
         } catch (Exception exception) {
-            logger.warn("Unable to publish IIDM transform event for {}", file.fileId(), exception);
+            logger.warn("Unable to publish IIDM snapshot transform event for {}", snapshot.snapshotId(), exception);
         }
     }
 
@@ -870,6 +1265,31 @@ public class CnmImportRestService extends RestServiceSupport {
                         safeSize));
         return new CnmPage<>(
                 result.content().stream().map(this::toProfileMetadata).toList(),
+                result.total(),
+                result.page(),
+                result.size());
+    }
+
+    public CnmPage<CnmSnapshotMetadata> searchSnapshots(String importId, CnmSnapshotState state, int page, int size) {
+        List<DocumentFilter> filters = new ArrayList<>();
+        if (importId != null && !importId.isBlank()) {
+            filters.add(DocumentFilter.exact("importId", importId.trim()));
+        }
+        if (state != null) {
+            filters.add(DocumentFilter.exact("state", state.name()));
+        }
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(size <= 0 ? 25 : size, MAX_PROFILE_PAGE_SIZE);
+        DocumentPage<CnmNetworkSnapshotDocument> result =
+                networkSnapshotRepository.search(new DocumentSearchRequest(
+                        filters,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        safePage,
+                        safeSize));
+        return new CnmPage<>(
+                result.content().stream().map(this::toSnapshotMetadata).toList(),
                 result.total(),
                 result.page(),
                 result.size());
@@ -1095,6 +1515,26 @@ public class CnmImportRestService extends RestServiceSupport {
                 valueOr(document.timeFrame(), fileNameMetadata.timeFrame()),
                 valueOr(document.version(), fileNameMetadata.version()),
                 instant(document.importedAt()));
+    }
+
+    private CnmSnapshotMetadata toSnapshotMetadata(CnmNetworkSnapshotDocument document) {
+        return new CnmSnapshotMetadata(
+                document.id(),
+                document.importId(),
+                document.serviceType(),
+                document.tsoName(),
+                document.businessDay(),
+                document.businessTime(),
+                document.timeFrame(),
+                document.sourceFileIds(),
+                number(document.staticObjectCount()),
+                number(document.relationCount()),
+                number(document.stateValueCount()),
+                number(document.diagnosticCount()),
+                number(document.payloadSectionCount()),
+                document.state(),
+                document.message(),
+                instant(document.assembledAt()));
     }
 
     private ProfileFamily profileFamily(CnmProfileDocument document) {

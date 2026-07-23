@@ -1,7 +1,10 @@
 # srv.iidm.transformer
 
 `srv.iidm.transformer` consumes profile transform events and creates PowSyBl
-IIDM networks from parsed CNM profile payloads.
+IIDM networks from parsed CNM data. The preferred event carries
+`sourceSnapshotId`, which points to a stitched `CgmNetworkSnapshot` assembled by
+`srv.cnm.services` after all cross-referenced files for a model group are
+parsed.
 
 Storage ownership:
 
@@ -9,9 +12,13 @@ Storage ownership:
 - `iidm-networks`: profile-level PowSyBl network exports in XIIDM format, plus
   searchable network counts and source metadata.
 
-The service reads CNM profile payloads from `cnm-profile-payloads` by ID but does
-not own CNM import/profile metadata. It does not use MinIO/object storage, so its
-infra configuration only needs Elasticsearch and RabbitMQ settings.
+The service reads CNM snapshot metadata from `cnm-network-snapshots` and
+reconstructs the selected model from `cnm-network-snapshot-payloads` only when
+the snapshot state is `DONE`. It can still read legacy per-file profile payloads
+from `cnm-profile-payloads` when an event does not provide `sourceSnapshotId`.
+It does not own CNM import/profile metadata and does not use MinIO/object
+storage, so its infra configuration only needs Elasticsearch and RabbitMQ
+settings.
 
 IIDM mapping defaults are loaded once and cached through `com.utils` from
 `src/main/resources/config/profile/iidm/defaults.yml`. This keeps conversion

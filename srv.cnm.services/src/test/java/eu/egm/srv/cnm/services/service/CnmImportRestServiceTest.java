@@ -11,6 +11,8 @@ import com.infra.storage.document.DocumentSort;
 import com.infra.storage.object.ObjectStorageService;
 import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.CnmSnapshotAssemblyRequested;
+import eu.egm.data.cnm.common.CnmSnapshotState;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
@@ -19,8 +21,15 @@ import eu.egm.data.cnm.common.ImportStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
+import eu.egm.srv.cnm.services.domain.CnmMridIndexDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocument;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocument;
+import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
@@ -38,6 +47,7 @@ import org.springframework.core.env.StandardEnvironment;
 import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CnmImportRestServiceTest {
 
@@ -61,6 +71,7 @@ class CnmImportRestServiceTest {
                 "cnm-rdf-models",
                 "cnm.events",
                 "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested");
         byte[] innerZip = zip("20241202T2330Z_1D_TSO-XYZ_SV_002.xml", rdf("StateVariables"));
@@ -107,6 +118,9 @@ class CnmImportRestServiceTest {
             processed = service.processFile(event);
         }
 
+        assertThat(eventPublisher.published)
+                .extracting(event -> event.routingKey)
+                .contains("cnm.snapshot.assembly.requested", "cnm.snapshot.assembly.requested");
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
                 .contains("iidm.profile.transform.requested", "iidm.profile.transform.requested");
@@ -156,6 +170,7 @@ class CnmImportRestServiceTest {
                 "cnm-rdf-models",
                 "cnm.events",
                 "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested");
         String importId = "client-import-id";
@@ -210,6 +225,7 @@ class CnmImportRestServiceTest {
                 "cnm-rdf-models",
                 "cnm.events",
                 "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested");
         MockMultipartFile upload = new MockMultipartFile(
@@ -249,6 +265,64 @@ class CnmImportRestServiceTest {
     }
 
     @Test
+    void keepsParsedImportSuccessfulWhenSnapshotPersistenceFailsAsynchronously() throws Exception {
+        CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
+        CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
+        CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingProfilePayloadRepository profilePayloadRepository = new CapturingProfilePayloadRepository();
+        CapturingProfileFragmentRepository profileFragmentRepository = new CapturingProfileFragmentRepository();
+        CapturingSnapshotRepository snapshotRepository = new CapturingSnapshotRepository();
+        FailingSnapshotPayloadRepository snapshotPayloadRepository = new FailingSnapshotPayloadRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
+        CnmImportRestService service = new CnmImportRestService(
+                new StandardEnvironment(),
+                ObservationRegistry.NOOP,
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        profileRepository,
+                        profilePayloadRepository,
+                        profileFragmentRepository,
+                        snapshotRepository,
+                        snapshotPayloadRepository,
+                        eventPublisher),
+                new RdfMetadataExtractor(),
+                "cnm-rdf-models",
+                "cnm.events",
+                "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
+        MockMultipartFile upload = new MockMultipartFile(
+                "file",
+                "20241202T2330Z_1D_TSO-XYZ_EQ_001.xml",
+                "application/xml",
+                rdf("Equipment"));
+        ImportStatus imported = service.importModels(List.of(upload), CnmServiceType.CGM, TimeFrame.DAY_AHEAD);
+
+        ImportStatus processed = service.processFile(eventPublisher.processingEvents().get(0));
+
+        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(processed.files()).singleElement().satisfies(file -> {
+            assertThat(file.state()).isEqualTo(ImportFileState.PARSED);
+            assertThat(file.message()).isEqualTo("RDF metadata parsed");
+        });
+        assertThat(documentRepository.saved.get(documentRepository.saved.size() - 1).state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(eventPublisher.snapshotEvents()).hasSize(1);
+
+        assertThatThrownBy(() -> service.assembleSnapshot(eventPublisher.snapshotEvents().getFirst()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Broken pipe");
+        assertThat(snapshotRepository.saved)
+                .extracting(CnmNetworkSnapshotDocument::state)
+                .containsExactly(CnmSnapshotState.STARTED, CnmSnapshotState.FAILED);
+        assertThat(profileRepository.saved).singleElement().satisfies(profile -> {
+            assertThat(profile.state()).isEqualTo(ImportFileState.PARSED);
+            assertThat(profile.errorCount()).isZero();
+        });
+    }
+
+    @Test
     void findImportNormalizesLegacyTimestampAndRestoresFilenameBusinessMetadata() {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
@@ -260,6 +334,7 @@ class CnmImportRestServiceTest {
                 "cnm-rdf-models",
                 "cnm.events",
                 "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested");
         long timestamp = java.time.Instant.parse("2026-06-24T18:24:05Z").toEpochMilli();
@@ -324,6 +399,44 @@ class CnmImportRestServiceTest {
             DocumentRepositoryService<CnmProfileDocument> profileRepository,
             DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository,
             EventPublisherService eventPublisher) {
+        return infrastructureUtils(
+                objectStorageService,
+                documentRepository,
+                profileRepository,
+                profilePayloadRepository,
+                new NoopDocumentRepository<>(),
+                new NoopDocumentRepository<>(),
+                eventPublisher);
+    }
+
+    private static InfrastructureUtils infrastructureUtils(
+            ObjectStorageService objectStorageService,
+            DocumentRepositoryService<CnmImportDocument> documentRepository,
+            DocumentRepositoryService<CnmProfileDocument> profileRepository,
+            DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository,
+            DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository,
+            DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository,
+            EventPublisherService eventPublisher) {
+        return infrastructureUtils(
+                objectStorageService,
+                documentRepository,
+                profileRepository,
+                profilePayloadRepository,
+                profileFragmentRepository,
+                networkSnapshotRepository,
+                new NoopDocumentRepository<>(),
+                eventPublisher);
+    }
+
+    private static InfrastructureUtils infrastructureUtils(
+            ObjectStorageService objectStorageService,
+            DocumentRepositoryService<CnmImportDocument> documentRepository,
+            DocumentRepositoryService<CnmProfileDocument> profileRepository,
+            DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository,
+            DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository,
+            DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository,
+            DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository,
+            EventPublisherService eventPublisher) {
         return new InfrastructureUtils() {
             @Override
             @SuppressWarnings("unchecked")
@@ -333,6 +446,18 @@ class CnmImportRestServiceTest {
                 }
                 if (adapter instanceof CnmProfilePayloadDocumentAdapter) {
                     return (DocumentRepositoryService<T>) profilePayloadRepository;
+                }
+                if (adapter instanceof CnmProfileFragmentDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) profileFragmentRepository;
+                }
+                if (adapter instanceof CnmNetworkSnapshotDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) networkSnapshotRepository;
+                }
+                if (adapter instanceof CnmNetworkSnapshotPayloadDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) networkSnapshotPayloadRepository;
+                }
+                if (adapter instanceof CnmMridIndexDocumentAdapter) {
+                    return new NoopDocumentRepository<>();
                 }
                 return (DocumentRepositoryService<T>) documentRepository;
             }
@@ -428,6 +553,14 @@ class CnmImportRestServiceTest {
                     .map(PublishedEvent::payload)
                     .filter(CnmFileProcessingRequested.class::isInstance)
                     .map(CnmFileProcessingRequested.class::cast)
+                    .toList();
+        }
+
+        private List<CnmSnapshotAssemblyRequested> snapshotEvents() {
+            return published.stream()
+                    .map(PublishedEvent::payload)
+                    .filter(CnmSnapshotAssemblyRequested.class::isInstance)
+                    .map(CnmSnapshotAssemblyRequested.class::cast)
                     .toList();
         }
     }
@@ -531,6 +664,96 @@ class CnmImportRestServiceTest {
         @Override
         public DocumentPage<CnmProfilePayloadDocument> search(DocumentSearchRequest request) {
             return new DocumentPage<>(saved, saved.size(), request.page(), request.size());
+        }
+    }
+
+    private static class CapturingProfileFragmentRepository implements DocumentRepositoryService<CnmProfileFragmentDocument> {
+        private final List<CnmProfileFragmentDocument> saved = new ArrayList<>();
+
+        @Override
+        public void save(CnmProfileFragmentDocument document) {
+            saved.removeIf(current -> current.id().equals(document.id()));
+            saved.add(document);
+        }
+
+        @Override
+        public void saveAll(List<CnmProfileFragmentDocument> documents) {
+            documents.forEach(this::save);
+        }
+
+        @Override
+        public List<CnmProfileFragmentDocument> findByField(String fieldName, Object value, int maxResults) {
+            return saved.stream()
+                    .filter(document -> "id".equals(fieldName) && document.id().equals(value))
+                    .limit(maxResults)
+                    .toList();
+        }
+
+        @Override
+        public List<CnmProfileFragmentDocument> findAll(int maxResults, DocumentSort sort) {
+            return saved.stream().limit(maxResults).toList();
+        }
+
+        @Override
+        public DocumentPage<CnmProfileFragmentDocument> search(DocumentSearchRequest request) {
+            return new DocumentPage<>(saved, saved.size(), request.page(), request.size());
+        }
+    }
+
+    private static class CapturingSnapshotRepository implements DocumentRepositoryService<CnmNetworkSnapshotDocument> {
+        private final List<CnmNetworkSnapshotDocument> saved = new ArrayList<>();
+
+        @Override
+        public void save(CnmNetworkSnapshotDocument document) {
+            saved.add(document);
+        }
+
+        @Override
+        public void saveAll(List<CnmNetworkSnapshotDocument> documents) {
+            saved.addAll(documents);
+        }
+
+        @Override
+        public List<CnmNetworkSnapshotDocument> findByField(String fieldName, Object value, int maxResults) {
+            return List.of();
+        }
+
+        @Override
+        public List<CnmNetworkSnapshotDocument> findAll(int maxResults, DocumentSort sort) {
+            return List.of();
+        }
+
+        @Override
+        public DocumentPage<CnmNetworkSnapshotDocument> search(DocumentSearchRequest request) {
+            return new DocumentPage<>(List.of(), 0, request.page(), request.size());
+        }
+    }
+
+    private static class FailingSnapshotPayloadRepository
+            implements DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> {
+        @Override
+        public void save(CnmNetworkSnapshotPayloadDocument document) {
+            throw new IllegalStateException("Broken pipe");
+        }
+
+        @Override
+        public void saveAll(List<CnmNetworkSnapshotPayloadDocument> documents) {
+            throw new IllegalStateException("Broken pipe");
+        }
+
+        @Override
+        public List<CnmNetworkSnapshotPayloadDocument> findByField(String fieldName, Object value, int maxResults) {
+            return List.of();
+        }
+
+        @Override
+        public List<CnmNetworkSnapshotPayloadDocument> findAll(int maxResults, DocumentSort sort) {
+            return List.of();
+        }
+
+        @Override
+        public DocumentPage<CnmNetworkSnapshotPayloadDocument> search(DocumentSearchRequest request) {
+            return new DocumentPage<>(List.of(), 0, request.page(), request.size());
         }
     }
 

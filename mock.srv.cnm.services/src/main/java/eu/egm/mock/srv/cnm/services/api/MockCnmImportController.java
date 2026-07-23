@@ -4,6 +4,8 @@ import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.ChunkUploadCompleteRequest;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.CnmSnapshotMetadata;
+import eu.egm.data.cnm.common.CnmSnapshotState;
 import eu.egm.data.cnm.common.DynamicTableBundle;
 import eu.egm.data.cnm.common.DynamicTableColumn;
 import eu.egm.data.cnm.common.DynamicTableDefinition;
@@ -137,6 +139,22 @@ public class MockCnmImportController {
         return new CnmPage<>(profiles, profiles.size(), 0, profiles.size());
     }
 
+    @GetMapping("/snapshots")
+    public CnmPage<CnmSnapshotMetadata> snapshots(
+            @RequestParam(required = false) String importId,
+            @RequestParam(required = false) CnmSnapshotState state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        List<CnmSnapshotMetadata> snapshots = imports.stream()
+                .filter(status -> importId == null || importId.isBlank() || status.importId().equals(importId))
+                .map(this::snapshot)
+                .filter(snapshot -> state == null || snapshot.state() == state)
+                .toList();
+        int from = Math.min(page * size, snapshots.size());
+        int to = Math.min(from + size, snapshots.size());
+        return new CnmPage<>(snapshots.subList(from, to), snapshots.size(), page, size);
+    }
+
     @GetMapping
     public CnmPage<ImportStatus> imports(
             @RequestParam(defaultValue = "0") int page,
@@ -152,6 +170,15 @@ public class MockCnmImportController {
                 .filter(status -> status.importId().equals(importId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Mock import not found: " + importId));
+    }
+
+    @GetMapping("/{importId}/snapshots")
+    public CnmPage<CnmSnapshotMetadata> importSnapshots(
+            @PathVariable String importId,
+            @RequestParam(required = false) CnmSnapshotState state,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        return snapshots(importId, state, page, size);
     }
 
     @GetMapping("/{importId}/files/{fileId}/profile/payload")
@@ -274,6 +301,28 @@ public class MockCnmImportController {
                 now);
         String statusMessage = message == null || message.isBlank() ? "Mock import ready" : message.trim();
         return new ImportStatus(id, serviceType, timeFrame, ImportState.SUCCESS, List.of(file), now, statusMessage);
+    }
+
+    private CnmSnapshotMetadata snapshot(ImportStatus status) {
+        ImportFileStatus file = status.files().isEmpty() ? null : status.files().get(0);
+        CnmSnapshotState state = status.state() == ImportState.FAILED ? CnmSnapshotState.FAILED : CnmSnapshotState.DONE;
+        return new CnmSnapshotMetadata(
+                status.importId() + ":snapshot",
+                status.importId(),
+                status.serviceType(),
+                file == null ? "TSO-XYZ" : file.tsoName(),
+                file == null ? "2024-12-02" : file.businessDay(),
+                file == null ? "23:30" : file.businessTime(),
+                file == null ? "1D" : file.modelTimeFrame(),
+                status.files().stream().map(ImportFileStatus::fileId).toList(),
+                12,
+                9,
+                4,
+                0,
+                5,
+                state,
+                state == CnmSnapshotState.DONE ? "Mock snapshot ready" : "Mock snapshot failed",
+                status.createdAt());
     }
 
     private ImportFileStatus file(String importId, String fileId) {

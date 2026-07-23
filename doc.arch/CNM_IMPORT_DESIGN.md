@@ -79,9 +79,11 @@ The aggregate import status should be extended from the current `INIT`, `STORED`
 
 3. Add asynchronous processor:
    - Add a RabbitMQ listener in `srv.cnm.services` or a separate worker module when deployment separation is needed.
-   - The listener reads object bytes from object storage, extracts RDF metadata, persists `cnm-profiles`, and updates the file state.
+   - The listener reads object bytes from object storage, extracts RDF metadata, persists `cnm-profiles`, `cnm-profile-payloads`, `cnm-profile-fragments`, and `cnm-mrid-index`, then updates the file state.
    - The listener creates a `ProfileProcessingContext` per file; the context owns the import/file identity, model grouping values, profile hints, and the canonical queue key.
    - Use idempotent updates keyed by `importId` and `fileId` so event redelivery is safe.
+   - When all files in a TSO/business day/business time/timeframe group are parsed, publish `CnmSnapshotAssemblyRequested` and return without assembling the snapshot in the file-processing thread.
+   - A separate snapshot listener assembles `CgmNetworkSnapshot`, persists metadata in `cnm-network-snapshots`, and persists large JSON sections in `cnm-network-snapshot-payloads`.
 
 4. Preserve consistency:
    - Publish events only after the file object and file row are durable.
@@ -145,6 +147,9 @@ sequenceDiagram
     participant Worker as "CNM file processor"
     participant RDF as "RdfMetadataExtractor"
     participant Profiles as "Elasticsearch cnm-profiles"
+    participant Fragments as "Elasticsearch profile fragments and mRID index"
+    participant Snapshots as "Elasticsearch cnm-network-snapshots"
+    participant SnapshotPayloads as "Elasticsearch cnm-network-snapshot-payloads"
 
     rect rgb(245, 247, 250)
         Note over Boot,MinIO: Application initialization
@@ -221,8 +226,9 @@ sequenceDiagram
             Worker->>RDF: extract RDF profile references
             alt metadata extraction succeeds
                 RDF-->>Worker: CGMES/NCP metadata
-                Worker->>Profiles: upsert searchable profile document
-                Worker->>Events: publish IidmProfileTransformRequested
+                Worker->>Profiles: upsert searchable profile metadata
+                Worker->>Profiles: upsert profile payload JSON
+                Worker->>Fragments: upsert ProfileFragment and mRID index rows
                 Worker->>Imports: mark file PARSED
             else extraction fails
                 Worker->>Imports: mark file FAILED with error message
@@ -232,10 +238,22 @@ sequenceDiagram
                 Imports->>Imports: aggregate FAILED
             else all files PARSED
                 Imports->>Imports: aggregate SUCCESS
+                Worker->>Events: publish IidmProfileTransformRequested for each parsed profile context
+                Worker->>Events: publish CnmSnapshotAssemblyRequested
             else files still pending
                 Imports->>Imports: aggregate STORED
             end
         end
+    end
+
+    loop each snapshot assembly event
+        Events-->>Worker: CnmSnapshotAssemblyRequested
+        Worker->>Imports: load import and verify model group is PARSED
+        Worker->>Fragments: assemble model group snapshot
+        Worker->>Snapshots: save STARTED snapshot metadata
+        Worker->>SnapshotPayloads: save sectioned snapshot JSON payloads
+        Worker->>Snapshots: save DONE snapshot metadata
+        Worker->>Events: publish IIDM snapshot transform request
     end
 
     opt view files for an import
@@ -315,8 +333,27 @@ After successful object storage, the service publishes file-processing events
 through `com.infra` and returns the import as `STORED`. The asynchronous
 processor stores profile metadata in the `cnm-profiles` Elasticsearch index.
 Large typed profile JSON is stored separately in `cnm-profile-payloads` by
-`fileId`. The profile search API filters by profile type, TSO, business day,
+`fileId`. Compact RDF fact fragments are stored in `cnm-profile-fragments`, and
+their mRID entries are indexed in `cnm-mrid-index` for cross-profile
+diagnostics. The profile search API filters by profile type, TSO, business day,
 and business time without loading payload fields.
+
+The intake recognises `.rdf`, `.xml`, and `.idm` model entries, including nested
+ZIP content. `.idm` is accepted into the same asynchronous metadata path so
+incremental model updates can be represented by the data contracts before a
+dedicated patch-application flow is introduced.
+
+Once every file in the same import/TSO/business day/business-time/timeframe
+group is `PARSED`, `srv.cnm.services` publishes one
+`IidmProfileTransformRequested` for every parsed `ProfileProcessingContext` in
+that group, then publishes `CnmSnapshotAssemblyRequested`. The separate snapshot
+listener assembles a complete `CgmNetworkSnapshot` from stored fragments.
+Metadata is persisted in `cnm-network-snapshots`; the large stitched payload is
+persisted in `cnm-network-snapshot-payloads` by section. The snapshot listener
+then publishes an additional IIDM transform request with `sourceSnapshotId`.
+If section persistence fails, the snapshot metadata is marked `FAILED`, while
+the import remains a successful parsed import and the already parsed profile
+payload remains available for diagnostics.
 
 Profile-content table APIs load the payload document only when a user opens a
 specific file. See `RDF_METADATA_MGMT.md` for the DTO, JSON mapping, dynamic
@@ -342,7 +379,7 @@ endpoints.
 - A file-processing event is published only after the object and file row are persisted.
 - Event publication failure marks the file and aggregate as `FAILED`, because the asynchronous processor cannot be guaranteed to run.
 - Event consumers are idempotent. Reprocessing an event for an already `PARSED` or `FAILED` file must acknowledge the event without duplicating profile documents.
-- Profile documents are upserted using stable identifiers derived from `importId` and `fileId`.
+- Profile, fragment, mRID index, and snapshot documents are upserted using stable identifiers derived from `importId`, `fileId`, mRID, and model grouping metadata.
 - Aggregate recomputation happens after every file update:
   - any file `FAILED` -> aggregate `FAILED`
   - all files `PARSED` -> aggregate `SUCCESS`

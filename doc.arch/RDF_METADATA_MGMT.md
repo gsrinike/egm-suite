@@ -14,6 +14,8 @@ The implementation must not map raw RDF/XML directly to IIDM. Each RDF/XML paylo
 - Reuse common grid-topology DTOs across profiles so shared concepts such as substations, voltage levels, equipment, terminals, and connectivity relations are not duplicated.
 - Store profile data in Elasticsearch as JSON owned by the processed file profile document.
 - Convert DTOs to JSON and JSON back to DTOs through `com.mapping`.
+- Persist compact profile fragments and mRID index entries so complete model
+  snapshots can be assembled after all files in a TSO/model group are parsed.
 - Expose profile content through REST APIs that can be rendered as dynamic tables.
 - Add a reusable browser-side logging utility in `gui.common` and use it from `gui.cnm.manager` and `gui.rcc.manager`.
 
@@ -41,6 +43,9 @@ sequenceDiagram
     participant Mapping as "com.mapping JSON mapper"
     participant Imports as "cnm-imports index"
     participant Profiles as "cnm-profiles index"
+    participant Fragments as "cnm-profile-fragments / cnm-mrid-index"
+    participant Snapshots as "cnm-network-snapshots metadata index"
+    participant SnapshotPayloads as "cnm-network-snapshot-payloads index"
     participant API as "CNM REST API"
     participant GUI as "gui.cnm.manager / gui.rcc.manager"
 
@@ -61,9 +66,18 @@ sequenceDiagram
         Parser-->>Worker: metadata, counts, warnings, payload
         Worker->>Mapping: toJson(ProfilePayload)
         Mapping-->>Worker: profile JSON
-        Worker->>Profiles: upsert profile document with JSON payload
+        Worker->>Profiles: upsert profile metadata document
+        Worker->>Fragments: upsert ProfileFragment JSON and mRID index rows
         Worker->>Imports: mark file PARSED
         Worker->>Imports: recompute aggregate SUCCESS, STORED, or FAILED
+        alt all files in model group are PARSED
+            Worker->>Fragments: load fragments for TSO/business day/time/timeframe
+            Worker->>Worker: assemble CgmNetworkSnapshot with two-pass stitching
+            Worker->>Snapshots: save STARTED snapshot metadata
+            Worker->>SnapshotPayloads: save sectioned snapshot JSON payloads
+            Worker->>Snapshots: save DONE snapshot metadata
+            Worker->>Worker: publish IIDM snapshot transform request
+        end
     end
 
     GUI->>API: GET /api/cnm/imports/{importId}/files/{fileId}/profile/tables
@@ -84,6 +98,12 @@ sequenceDiagram
 - `GridTopologyReference`: source mRID, target mRID, reference type, and optional profile source.
 - `GridTopologyRelation`: relation ID, source, target, relation type, and scalar attributes.
 - `ProfilePayload<T>`: profile family, profile type, file ID, object ID, common topology objects, relations, warnings, and the profile-specific DTO.
+- `ProfileFragment`: compact RDF fact fragment for one file, preserving scalar
+  attributes, object references, entity counts, and diagnostics.
+- `CgmNetworkSnapshot`: stitched static topology plus dynamic state for a
+  TSO/business day/business time/timeframe model group.
+- `IncrementalModelUpdate`: placeholder contract for `.idm` incremental updates
+  against a base snapshot.
 
 Profile-specific packages should remain under the existing `data.cnm` domain packages:
 
@@ -114,7 +134,7 @@ Each profile DTO should store typed collections for the profile it represents. F
    - `UnknownProfileExtractionStrategy` for unsupported profiles that still need metadata, warnings, and raw entity counts.
 
 3. Build an interim RDF fact model:
-   - Parse RDF/XML with namespace-aware XML APIs or an RDF library owned by the service module.
+   - Parse RDF/XML with RDF4J Rio streaming handlers owned by `srv.cnm.services`.
    - Capture subject mRID, RDF type, scalar properties, and object references.
    - Keep parsing exceptions inside the extraction layer and return actionable warnings or file-level failures.
 
@@ -147,6 +167,20 @@ File-processing events are serialized by import ID, TSO, business day, business
 time, and timeframe. This per-model queue key is required because EQ, TP, SSH,
 and SV files for a TSO are cross-referenced and should not update shared import
 state concurrently.
+
+After each file is parsed, the service persists a `ProfileFragment` and mRID
+index entries. When every file in the same import/TSO/business
+day/business-time/timeframe group reaches `PARSED`, file processing publishes
+`CnmSnapshotAssemblyRequested` and returns. A separate snapshot listener invokes
+`CgmSnapshotAssembler` to build a complete `CgmNetworkSnapshot`. The assembler
+uses a two-pass approach: first it indexes every RDF fact by mRID, then it
+classifies static topology objects, dynamic SSH/SV state points, resolved
+relations, and unresolved references. The resulting snapshot is stored as
+metadata in `cnm-network-snapshots` and sectioned JSON payload documents in
+`cnm-network-snapshot-payloads`. This keeps profile parsing responsive and
+avoids loading the complete model unless IIDM transformation explicitly needs
+it. The older per-file profile payload remains available for profile exploration
+and diagnostics.
 
 ## Elasticsearch Document Model
 
@@ -192,6 +226,18 @@ nested Elasticsearch fields, because CGMES/NCP profile structures can introduce
 conflicting object and scalar shapes across files. Search filters stay on stable
 metadata fields in `cnm-profiles`. Profile content exploration loads the payload
 by `fileId` from `cnm-profile-payloads` and converts it back to DTOs.
+
+Additional processing indices:
+
+- `cnm-profile-fragments`: compact per-file RDF fact JSON plus stable metadata.
+- `cnm-mrid-index`: one row per extracted mRID for cross-profile lookup and
+  diagnostics.
+- `cnm-network-snapshots`: stitched model snapshot metadata by
+  import/TSO/business day/business time/timeframe, including object counts,
+  payload section count, state, and diagnostics count.
+- `cnm-network-snapshot-payloads`: large stitched model JSON sections keyed by
+  snapshot ID and section name, for topology objects, relations, state values,
+  unresolved references, and diagnostics.
 
 Index mappings should be explicit where `com.infra` supports them. If an index
 already exists, startup must not recreate it. New fields should be added
