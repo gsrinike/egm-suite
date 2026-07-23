@@ -60,6 +60,11 @@ Each file uses `ImportFileState`:
 The aggregate state is derived from file states. A failed file makes the import
 `FAILED`; all parsed files make it `SUCCESS`.
 
+Each file also exposes aggregate IIDM transformation status. The status is
+`NOT_STARTED`, `STARTED`, `DONE`, or `FAILED`, with a count of related IIDM
+transforms. Any failed related transform makes the aggregate IIDM status
+`FAILED`; all completed related transforms make it `DONE`.
+
 ## Storage Ownership
 
 `srv.cnm.services` owns these Elasticsearch indices:
@@ -75,6 +80,10 @@ The aggregate state is derived from file states. A failed file makes the import
 
 Raw RDF/XML and ZIP entries are stored in MinIO through
 `com.infra.storage.object`.
+
+The service reads lightweight IIDM transform documents from the IIDM-owned
+`iidm-profile-transforms` index to aggregate file-level IIDM status. It does
+not own or mutate those IIDM documents.
 
 ## Event Flow
 
@@ -102,6 +111,10 @@ sequenceDiagram
   MQ->>IIDM: Consume IIDM transform request
 ```
 
+CNM processing queues use three listener attempts. After retry exhaustion the
+message is rejected without requeue and RabbitMQ routes it to the configured
+DLQ.
+
 ## Grouping Rules
 
 RDF files are processed with a `ProfileProcessingContext` containing import ID,
@@ -116,10 +129,12 @@ as support files in IIDM transform requests for every completed model group.
 ## GUI Behavior
 
 The import screen shows aggregate imports. The File link opens file-level
-status and profile metadata. The Profiles tab lists successful imports in a
-dropdown and displays profile metadata and profile JSON tables for the selected
-file. The IIDM tab lists successful imports and transformed IIDM networks through
-the IIDM transformer APIs.
+status, profile metadata, IIDM aggregate status, and an IIDM link showing the
+number of related transformations. The IIDM link opens the IIDM view for the
+same import. The Profiles tab lists successful imports in a dropdown and
+displays profile metadata and profile JSON tables for the selected file. The
+IIDM tab lists successful imports and transformed IIDM networks through the IIDM
+transformer APIs.
 
 Refresh behavior is controlled by the shared `AutoRefreshControl` in
 `gui.common`.

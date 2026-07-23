@@ -8,11 +8,16 @@ paths:
       summary: List IIDM profile transforms
       parameters:
         - { name: importId, in: query, required: false, schema: { type: string } }
+        - { name: search, in: query, required: false, schema: { type: string } }
         - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
         - { name: size, in: query, required: false, schema: { type: integer, default: 50 } }
       responses:
         '200':
           description: Transform list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IidmTransformSummaryPage'
   /api/iidm/transforms/{fileId}:
     get:
       summary: Get IIDM transform by file ID
@@ -68,3 +73,44 @@ paths:
       responses:
         '200':
           description: IIDM table bundle with rows only for the requested table/page
+components:
+  schemas:
+    IidmTransformState:
+      type: string
+      enum: [NOT_STARTED, STARTED, DONE, FAILED]
+    ProfileFamily:
+      type: string
+      enum: [NCP, CGMES, Unknown]
+    IidmTransformSummary:
+      type: object
+      properties:
+        transformId: { type: string }
+        importId: { type: string }
+        fileId: { type: string }
+        sourceFileIds:
+          type: array
+          items: { type: string }
+        sourceFileNames:
+          type: array
+          items: { type: string }
+        profileType: { type: string }
+        profileFamily:
+          $ref: '#/components/schemas/ProfileFamily'
+        transformState:
+          $ref: '#/components/schemas/IidmTransformState'
+        transformMessage: { type: string }
+        diagnosticCount: { type: integer }
+        networkId: { type: string }
+        startedAt: {}
+        completedAt: {}
+        failedAt: {}
+    IidmTransformSummaryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IidmTransformSummary'
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }

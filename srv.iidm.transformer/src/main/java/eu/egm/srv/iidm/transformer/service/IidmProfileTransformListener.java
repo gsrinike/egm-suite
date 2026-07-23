@@ -3,9 +3,6 @@ package eu.egm.srv.iidm.transformer.service;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.Exchange;
-import org.springframework.amqp.rabbit.annotation.Queue;
-import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +19,9 @@ public class IidmProfileTransformListener {
         this.transformService = transformService;
     }
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = "${iidm.transform.event.requested-queue:iidm.profile.transform}", durable = "true"),
-            exchange = @Exchange(value = "${iidm.transform.event.exchange:iidm.events}", type = "topic", durable = "true"),
-            key = "${iidm.transform.event.requested-routing-key:iidm.profile.transform.requested}"))
+    @RabbitListener(
+            queues = "${iidm.transform.event.requested-queue:iidm.profile.transform}",
+            containerFactory = "retryingRabbitListenerContainerFactory")
     public void transform(IidmProfileTransformRequested request) {
         LOGGER.info(
                 "Consumed IIDM transform request importId={}, fileId={}, sourceFiles={}",

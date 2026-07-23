@@ -159,6 +159,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 request.fileId(),
                 request.importId(),
                 request.fileId(),
+                sourceFileIds(request),
+                sourceFileNames(request),
                 request.profileType(),
                 request.profileFamily(),
                 request.sourceProfilePayloadId(),
@@ -179,6 +181,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     request.fileId(),
                     request.importId(),
                     request.fileId(),
+                    sourceFileIds(request),
+                    sourceFileNames(request),
                     request.profileType(),
                     request.profileFamily(),
                     request.sourceProfilePayloadId(),
@@ -199,6 +203,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     request.fileId(),
                     request.importId(),
                     request.fileId(),
+                    sourceFileIds(request),
+                    sourceFileNames(request),
                     request.profileType(),
                     request.profileFamily(),
                     request.sourceProfilePayloadId(),
@@ -246,7 +252,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     workspace,
                     networkId(request.importId(), request.fileId()),
                     request.importId(),
-                    request.sourceFiles().stream().map(CgmesIidmSourceFile::fileId).toList(),
+                    request.sourceFiles().stream().map(this::sourceFileReference).toList(),
                     request.businessDay(),
                     request.businessTime(),
                     request.timeFrame(),
@@ -528,6 +534,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
         String query = search.trim();
         return List.of(
                 DocumentFilter.contains("fileId", query),
+                DocumentFilter.contains("sourceFileNames", query),
+                DocumentFilter.contains("sourceFileIds", query),
                 DocumentFilter.contains("profileType", query),
                 DocumentFilter.contains("profileFamily", query),
                 DocumentFilter.contains("transformState", query),
@@ -540,6 +548,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 document.id(),
                 document.importId(),
                 document.fileId(),
+                document.sourceFileIds(),
+                document.sourceFileNames(),
                 document.profileType(),
                 document.profileFamily(),
                 document.transformState(),
@@ -566,6 +576,36 @@ public class IidmProfileTransformService extends RestServiceSupport {
                         .toList(),
                 document.createdAt(),
                 document.updatedAt());
+    }
+
+    private List<String> sourceFileIds(IidmProfileTransformRequested request) {
+        if (request.sourceFiles() == null || request.sourceFiles().isEmpty()) {
+            return request.fileId() == null || request.fileId().isBlank() ? List.of() : List.of(request.fileId());
+        }
+        return request.sourceFiles().stream()
+                .map(CgmesIidmSourceFile::fileId)
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+    }
+
+    private List<String> sourceFileNames(IidmProfileTransformRequested request) {
+        if (request.sourceFiles() == null || request.sourceFiles().isEmpty()) {
+            return List.of();
+        }
+        return request.sourceFiles().stream()
+                .map(this::sourceFileReference)
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+    }
+
+    private String sourceFileReference(CgmesIidmSourceFile source) {
+        if (source == null) {
+            return "";
+        }
+        if (source.fileName() != null && !source.fileName().isBlank()) {
+            return source.fileName();
+        }
+        return source.fileId();
     }
 
     private IidmTableBundle tableBundle(IidmNetworkDocument document, String selectedTableId, int page, int size, boolean metadataOnly) {

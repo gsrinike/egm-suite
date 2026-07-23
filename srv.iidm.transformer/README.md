@@ -13,14 +13,18 @@ network results for GUI exploration and downstream analysis.
 - Capture bounded PowSyBl conversion diagnostics.
 - Persist transform state in `iidm-profile-transforms`.
 - Persist XIIDM and JSON table projection in `iidm-networks`.
+- Store source file IDs for correlation and source file names for display.
+- Declare the IIDM request queue with a dead-letter queue and three retry
+  attempts.
 - Expose paged/searchable transform and network table APIs.
 
 ## Storage
 
 `iidm-profile-transforms` contains transform status, message, diagnostics,
-timestamps, source linkage, and network ID. `iidm-networks` contains source file
-IDs, metadata, element counts, XIIDM payload, and GUI-oriented JSON table
-projection. List APIs exclude heavy payload fields.
+timestamps, source linkage, source file IDs/names, and network ID.
+`iidm-networks` contains source filenames, metadata, element counts, XIIDM
+payload, and GUI-oriented JSON table projection. List APIs exclude heavy
+payload fields.
 
 ## Runtime Dependencies
 

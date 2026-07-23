@@ -1,5 +1,5 @@
 <template>
-  <main class="app-shell" :class="{ embedded }">
+  <main class="app-shell" :class="{ embedded }" @click.capture="clearMessage">
     <div v-if="!embedded" class="app-header">
       <div>
         <p>CNM Manager</p>
@@ -108,6 +108,17 @@
         <Link @click="openImportFiles(String(row.importId))">
           View {{ row.fileCount }} file{{ Number(row.fileCount) === 1 ? '' : 's' }}
         </Link>
+      </template>
+      <template #cell-iidmLink="{ row }">
+        <Link
+          v-if="Number(row.iidmTransformationCount) > 0"
+          @click="openIidmFromImport(String(row.importId))"
+        >
+          {{ row.iidmTransformationCount }} transformation{{ Number(row.iidmTransformationCount) === 1 ? '' : 's' }}
+        </Link>
+        <span v-else class="disabled-profile-link" title="IIDM transformation has not started">
+          0 transformations
+        </span>
       </template>
       <template #cell-action="{ row }">
         <Button v-if="row.state === 'FAILED'" :disabled="busy" @click="chooseRetry(String(row.importId))">
@@ -234,6 +245,7 @@ import {
   type CnmServiceType,
   type CnmSnapshotMetadata,
   type DynamicTableBundle,
+  type IidmTransformationStatus,
   type IidmTableBundle,
   type IidmTransformSummary,
   type ImportStatus,
@@ -276,10 +288,13 @@ const selectedIidmTableId = ref('');
 const iidmTablePage = ref(0);
 const iidmTablePageSize = 100;
 const iidmTableSearch = ref('');
+const iidmImportSummaries = ref<Record<string, { count: number; status: IidmTransformationStatus }>>({});
 const lightTheme = ref(false);
 let importRefreshTimer: number | undefined;
 let importRefreshInFlight = false;
 let requestedImportRefreshInterval: number | null = null;
+let iidmSummaryRefreshTimer: number | undefined;
+const iidmSummaryRefreshAttempts = new Map<string, number>();
 
 const menuItems = [
   { id: 'imports', label: 'Imports' },
@@ -304,6 +319,8 @@ const columns = [
   { key: 'serviceType', label: 'Service' },
   { key: 'timeFrame', label: 'Timeframe' },
   { key: 'state', label: 'State' },
+  { key: 'iidmTransformationStatus', label: 'IIDM status' },
+  { key: 'iidmLink', label: 'IIDM' },
   { key: 'file', label: 'File' },
   { key: 'createdAt', label: 'Created' },
   { key: 'message', label: 'Message' },
@@ -338,7 +355,7 @@ const profileColumns = [
 
 const iidmColumns = [
   { key: 'importId', label: 'Import ID' },
-  { key: 'fileId', label: 'File ID' },
+  { key: 'sourceFiles', label: 'Source files' },
   { key: 'profileType', label: 'Profile type' },
   { key: 'profileFamily', label: 'Profile family' },
   { key: 'transformState', label: 'State' },
@@ -369,6 +386,8 @@ const rows = computed(() => imports.value.map((item) => ({
   serviceType: item.serviceType,
   timeFrame: displayTimeFrame(item.timeFrame),
   state: item.state,
+  iidmTransformationStatus: displayIidmTransformationStatus(importIidmTransformationSummary(item).status),
+  iidmTransformationCount: importIidmTransformationSummary(item).count,
   fileCount: item.files?.length ?? 0,
   createdAt: formatDateTime(item.createdAt),
   message: item.message
@@ -381,6 +400,7 @@ const fileRows = computed(() => (selectedImport.value?.files ?? []).map((file) =
 const profileRows = computed(() => profiles.value.map((profile) => ({ ...profile })));
 const iidmRows = computed(() => iidmTransforms.value.map((transform) => ({
   ...transform,
+  sourceFiles: (transform.sourceFileNames?.length ? transform.sourceFileNames : [transform.fileId]).join(', '),
   startedAt: formatDateTime(transform.startedAt),
   completedAt: formatDateTime(transform.completedAt),
   failedAt: formatDateTime(transform.failedAt)
@@ -424,9 +444,11 @@ onUnmounted(() => {
   if (importRefreshTimer !== undefined) {
     window.clearInterval(importRefreshTimer);
   }
+  clearIidmSummaryRefreshTimer();
 });
 watch(activeView, (view) => {
   emit('viewChange', view);
+  clearMessage();
   applyImportAutoRefresh();
   if (view === 'profiles') {
     void refreshProfiles();
@@ -437,6 +459,7 @@ watch(activeView, (view) => {
   }
 });
 watch(selectedProfileImportId, () => {
+  clearMessage();
   profiles.value = [];
   profileTables.value = undefined;
   selectedProfileFileName.value = '';
@@ -445,6 +468,7 @@ watch(selectedProfileImportId, () => {
   }
 });
 watch(selectedIidmImportId, () => {
+  clearMessage();
   iidmTransforms.value = [];
   iidmTables.value = undefined;
   selectedIidmNetworkId.value = '';
@@ -456,14 +480,17 @@ watch(selectedIidmImportId, () => {
 });
 
 function toggleTheme() {
+  clearMessage();
   lightTheme.value = toggleThemePreference(lightTheme.value);
 }
 
 function selectActiveView(view: string) {
+  clearMessage();
   activeView.value = view;
 }
 
 function selectFiles(event: Event) {
+  clearMessage();
   selectedFiles.value = Array.from((event.target as HTMLInputElement).files ?? []);
   if (retryImportId.value && selectedFiles.value.length > 0) {
     void upload(retryImportId.value);
@@ -471,6 +498,7 @@ function selectFiles(event: Event) {
 }
 
 function chooseRetry(importId: string) {
+  clearMessage();
   const failedImport = imports.value.find((item) => item.importId === importId);
   if (failedImport) {
     serviceType.value = failedImport.serviceType;
@@ -487,7 +515,7 @@ function chooseRetry(importId: string) {
 
 async function openImportFiles(importId: string) {
   busy.value = true;
-  message.value = '';
+  clearMessage();
   try {
     selectedImport.value = await getImport(importId);
     selectedImportSnapshots.value = (await listSnapshots({ importId, page: 0, size: 50 })).items;
@@ -501,6 +529,7 @@ async function openImportFiles(importId: string) {
 }
 
 function closeImportFiles() {
+  clearMessage();
   selectedImport.value = undefined;
   selectedImportSnapshots.value = [];
   profileTables.value = undefined;
@@ -525,9 +554,16 @@ async function openImportFileProfileTables(fileId: string, fileName: string) {
   await openProfileTables(selectedImport.value.importId, fileId, fileName, 'import-files');
 }
 
+async function openIidmFromImport(importId: string) {
+  clearMessage();
+  selectedIidmImportId.value = importId;
+  activeView.value = 'iidm';
+  await refreshIidmTransforms();
+}
+
 async function openProfileTables(importId: string, fileId: string, fileName: string, returnView: string) {
   busy.value = true;
-  message.value = '';
+  clearMessage();
   selectedProfileFileName.value = fileName;
   profileReturnView.value = returnView;
   try {
@@ -547,9 +583,9 @@ async function openProfileTables(importId: string, fileId: string, fileName: str
 
 async function refresh() {
   busy.value = true;
-  message.value = '';
+  clearMessage();
   try {
-    applyImportSnapshot((await listImports()).items);
+    await applyImportSnapshot((await listImports()).items);
   } catch (error) {
     logClientError('refresh imports failed', error);
     message.value = error instanceof Error ? error.message : 'Unable to load imports';
@@ -564,7 +600,7 @@ async function refreshImportsSilently() {
   }
   importRefreshInFlight = true;
   try {
-    applyImportSnapshot((await listImports()).items);
+    await applyImportSnapshot((await listImports()).items);
   } catch (error) {
     logClientError('silent import refresh failed', error);
   } finally {
@@ -587,7 +623,7 @@ function applyImportAutoRefresh() {
   }
 }
 
-function applyImportSnapshot(nextImports: ImportStatus[]) {
+async function applyImportSnapshot(nextImports: ImportStatus[]) {
   imports.value = nextImports;
   if (selectedImport.value) {
     const updatedImport = nextImports.find((item) => item.importId === selectedImport.value?.importId);
@@ -596,9 +632,76 @@ function applyImportSnapshot(nextImports: ImportStatus[]) {
     }
   }
   alignSelectedMetadataSelections();
+  await refreshIidmImportSummaries(nextImports);
+}
+
+async function refreshIidmImportSummaries(nextImports: ImportStatus[]) {
+  const candidates = nextImports.filter((item) => item.state === 'SUCCESS');
+  if (candidates.length === 0) {
+    iidmImportSummaries.value = {};
+    return;
+  }
+  const entries = await Promise.all(candidates.map(async (item) => {
+    try {
+      const page = await listIidmTransforms({
+        importId: item.importId,
+        page: 0,
+        size: 500
+      });
+      return [item.importId, {
+        count: page.total,
+        status: transformPageStatus(page.items)
+      }] as const;
+    } catch (error) {
+      logClientError('refreshIidmImportSummaries failed', error, { importId: item.importId });
+      return [item.importId, {
+        count: 0,
+        status: 'NOT_STARTED' as IidmTransformationStatus
+      }] as const;
+    }
+  }));
+  iidmImportSummaries.value = Object.fromEntries(entries);
+  scheduleIidmSummaryFollowUp(candidates);
+}
+
+function scheduleIidmSummaryFollowUp(candidates: ImportStatus[]) {
+  clearIidmSummaryRefreshTimer();
+  if (activeView.value !== 'imports') {
+    return;
+  }
+  const needsFollowUp = candidates.some((item) => {
+    const summary = iidmImportSummaries.value[item.importId];
+    if (!summary || summary.count === 0) {
+      return incrementIidmSummaryAttempt(item.importId);
+    }
+    if (summary.status === 'STARTED') {
+      return true;
+    }
+    iidmSummaryRefreshAttempts.delete(item.importId);
+    return false;
+  });
+  if (needsFollowUp) {
+    iidmSummaryRefreshTimer = window.setTimeout(() => {
+      void refreshIidmImportSummaries(imports.value);
+    }, 2000);
+  }
+}
+
+function incrementIidmSummaryAttempt(importId: string) {
+  const attempts = (iidmSummaryRefreshAttempts.get(importId) ?? 0) + 1;
+  iidmSummaryRefreshAttempts.set(importId, attempts);
+  return attempts <= 60;
+}
+
+function clearIidmSummaryRefreshTimer() {
+  if (iidmSummaryRefreshTimer !== undefined) {
+    window.clearTimeout(iidmSummaryRefreshTimer);
+    iidmSummaryRefreshTimer = undefined;
+  }
 }
 
 async function refreshProfiles() {
+  clearMessage();
   if (!selectedProfileImportId.value) {
     profiles.value = [];
     message.value = profileCapableImports.value.length === 0
@@ -625,6 +728,7 @@ async function refreshProfiles() {
 }
 
 async function refreshIidmTransforms() {
+  clearMessage();
   if (!selectedIidmImportId.value) {
     iidmTransforms.value = [];
     message.value = iidmReadyImports.value.length === 0
@@ -652,7 +756,7 @@ async function refreshIidmTransforms() {
 
 async function openIidmTables(networkId: string) {
   busy.value = true;
-  message.value = '';
+  clearMessage();
   selectedIidmNetworkId.value = networkId;
   selectedIidmTableId.value = '';
   iidmTablePage.value = 0;
@@ -677,7 +781,7 @@ async function loadIidmTableRows(tableId: string, page: number) {
     return;
   }
   busy.value = true;
-  message.value = '';
+  clearMessage();
   selectedIidmTableId.value = tableId;
   iidmTablePage.value = page;
   try {
@@ -718,7 +822,7 @@ async function upload(importId?: string) {
     return;
   }
   busy.value = true;
-  message.value = '';
+  clearMessage();
   try {
     const imported = await uploadImport(
       selectedFiles.value,
@@ -727,7 +831,7 @@ async function upload(importId?: string) {
       importMessage.value,
       importId
     );
-    applyImportSnapshot([imported, ...imports.value.filter((item) => item.importId !== imported.importId)]);
+    await applyImportSnapshot([imported, ...imports.value.filter((item) => item.importId !== imported.importId)]);
     message.value = imported.state === 'FAILED'
       ? imported.message
       : `Import created with ${imported.files.length} model file${imported.files.length === 1 ? '' : 's'}`;
@@ -778,6 +882,34 @@ function alignSelectedMetadataSelections() {
 
 function displayModelTimeFrame(value: string) {
   return value === '1D' ? 'DAY AHEAD' : value;
+}
+
+function displayIidmTransformationStatus(value: string) {
+  return value === 'NOT_STARTED' ? 'NOT STARTED' : value;
+}
+
+function importIidmTransformationSummary(importStatus: ImportStatus) {
+  return iidmImportSummaries.value[importStatus.importId] ?? {
+    count: 0,
+    status: 'NOT_STARTED' as IidmTransformationStatus
+  };
+}
+
+function transformPageStatus(transforms: IidmTransformSummary[]): IidmTransformationStatus {
+  if (transforms.length === 0) {
+    return 'NOT_STARTED';
+  }
+  if (transforms.some((transform) => transform.transformState === 'FAILED')) {
+    return 'FAILED';
+  }
+  if (transforms.every((transform) => transform.transformState === 'DONE')) {
+    return 'DONE';
+  }
+  return 'STARTED';
+}
+
+function clearMessage() {
+  message.value = '';
 }
 
 function formatDateTime(value: string) {

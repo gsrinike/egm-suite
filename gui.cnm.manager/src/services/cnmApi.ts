@@ -5,6 +5,7 @@ export type TimeFrame = 'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD';
 export type ImportState = 'INIT' | 'STORED' | 'SUCCESS' | 'FAILED';
 export type ImportFileState = 'INIT' | 'STORED' | 'PARSED' | 'FAILED';
 export type CnmSnapshotState = 'STARTED' | 'DONE' | 'FAILED';
+export type IidmTransformationStatus = 'NOT_STARTED' | 'STARTED' | 'DONE' | 'FAILED';
 
 export interface ImportFileStatus {
   fileId: string;
@@ -19,6 +20,8 @@ export interface ImportFileStatus {
   profileType: string;
   modelVersion: string;
   message: string;
+  iidmTransformationStatus: IidmTransformationStatus;
+  iidmTransformationCount: number;
   uploadedAt: string;
 }
 
@@ -71,6 +74,8 @@ export interface CnmSnapshotMetadata {
 export interface DynamicTableBundle {
   importId: string;
   fileId: string;
+  sourceFileIds: string[];
+  sourceFileNames: string[];
   profileType: string;
   profileFamily: string;
   payload: unknown;
@@ -83,6 +88,8 @@ export interface IidmTransformSummary {
   transformId: string;
   importId: string;
   fileId: string;
+  sourceFileIds: string[];
+  sourceFileNames: string[];
   profileType: string;
   profileFamily: string;
   transformState: IidmTransformState;

@@ -20,8 +20,14 @@ public record ImportFileStatus(
         String modelVersion,
         List<RdfProfileReference> profiles,
         String message,
+        IidmTransformationStatus iidmTransformationStatus,
+        int iidmTransformationCount,
         Instant uploadedAt) {
     public ImportFileStatus {
         profiles = profiles == null ? List.of() : List.copyOf(profiles);
+        iidmTransformationStatus = iidmTransformationStatus == null
+                ? IidmTransformationStatus.NOT_STARTED
+                : iidmTransformationStatus;
+        iidmTransformationCount = Math.max(iidmTransformationCount, 0);
     }
 }

@@ -25,6 +25,12 @@ configuration. Object storage is optional; modules that do not configure it get
 a disabled adapter that fails only if invoked. RabbitMQ exchanges listed in the
 module configuration are declared at startup. BPM can be embedded or remote.
 
+RabbitMQ consumers can use the shared
+`retryingRabbitListenerContainerFactory`. It applies the
+`utility.messaging.listener.retry.max-attempts` policy, defaults to three
+attempts, and rejects exhausted messages without requeue so RabbitMQ can route
+them to the queue dead-letter exchange.
+
 ## Usage Pattern
 
 1. A service defines a `DocumentAdapter<T>` for its document type.

@@ -106,3 +106,7 @@ Object-storage buckets are initialized during service startup or adapter
 initialization, not during concurrent uploads. RabbitMQ exchanges used by a
 publisher are declared during startup. Elasticsearch list/search queries exclude
 large payload fields where services provide lightweight metadata APIs.
+
+CNM and IIDM consumers use `utility.messaging.listener.retry.max-attempts: 3`.
+After retry exhaustion the listener rejects the message without requeue, and
+RabbitMQ routes it to the configured dead-letter queue.

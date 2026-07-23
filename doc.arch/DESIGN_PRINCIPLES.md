@@ -65,6 +65,8 @@ Document storage is separated by ownership and query use:
 - Large JSON/XML payloads are chunked or stored separately from list/search
   documents so list screens do not load heavy data.
 - RabbitMQ topic exchanges are declared at application startup by publishers.
+- CNM and IIDM queues retry failed listener handling three times and route
+  exhausted messages to module-owned dead-letter queues.
 
 ## Frontend Reuse
 

@@ -1,4 +1,4 @@
-package eu.egm.srv.cnm.services.config;
+package eu.egm.srv.iidm.transformer.config;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
@@ -11,24 +11,18 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Declares the downstream IIDM transform queue from the CNM publisher side.
- *
- * <p>RabbitMQ drops topic messages when no queue is bound at publish time. CNM
- * publishes transform requests asynchronously after profile processing, so it
- * declares the durable IIDM request queue and binding as well as the exchange.
- * The IIDM transformer listener declares the same topology when it starts; both
- * declarations are idempotent as long as the names and durability match.</p>
+ * Declares IIDM transform queues with dead-letter handling.
  */
 @Configuration
 public class IidmTransformTopologyConfig {
     @Bean
     Declarables iidmTransformRequestedTopology(
-            @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String exchangeName,
-            @Value("${cnm.import.event.iidm-transform-dead-letter-exchange:iidm.events.dlx}") String deadLetterExchangeName,
-            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String routingKey,
-            @Value("${cnm.import.event.iidm-transform-queue:iidm.profile.transform}") String queueName,
-            @Value("${cnm.import.event.iidm-transform-dlq:iidm.profile.transform.dlq}") String deadLetterQueueName,
-            @Value("${cnm.import.event.iidm-transform-dead-letter-routing-key:iidm.profile.transform.failed.dlq}") String deadLetterRoutingKey) {
+            @Value("${iidm.transform.event.exchange:iidm.events}") String exchangeName,
+            @Value("${iidm.transform.event.dead-letter-exchange:iidm.events.dlx}") String deadLetterExchangeName,
+            @Value("${iidm.transform.event.requested-routing-key:iidm.profile.transform.requested}") String routingKey,
+            @Value("${iidm.transform.event.requested-queue:iidm.profile.transform}") String queueName,
+            @Value("${iidm.transform.event.requested-dlq:iidm.profile.transform.dlq}") String deadLetterQueueName,
+            @Value("${iidm.transform.event.requested-dead-letter-routing-key:iidm.profile.transform.failed.dlq}") String deadLetterRoutingKey) {
         TopicExchange exchange = new TopicExchange(exchangeName, true, false);
         TopicExchange deadLetterExchange = new TopicExchange(deadLetterExchangeName, true, false);
         Queue queue = QueueBuilder.durable(queueName)

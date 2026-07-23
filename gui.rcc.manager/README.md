@@ -7,6 +7,8 @@
 - Sidebar navigation for CGM, CSA, CC, OPC, and workflow monitoring.
 - CGM > Import Manager embeds the CNM manager view and keeps CNM/IIDM backend
   URLs configurable.
+- The embedded CNM view includes file-level IIDM aggregate status and links to
+  the IIDM transformation view.
 - CSA screens call CSA/common service APIs.
 - Workflow Monitor visualizes workflow instances.
 - CC and OPC are displayed as inactive placeholders.

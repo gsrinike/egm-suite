@@ -1,14 +1,13 @@
-package eu.egm.srv.iidm.transformer.domain;
+package eu.egm.srv.cnm.services.domain;
 
 import eu.egm.data.cnm.common.ProfileFamily;
-import eu.egm.data.iidm.common.IidmDiagnostic;
 import eu.egm.data.iidm.common.IidmTransformState;
 import java.util.List;
 
 /**
- * Transform status document owned by the IIDM transformer service.
+ * Read-only view of IIDM transform documents used to aggregate import file status.
  */
-public record IidmProfileTransformDocument(
+public record IidmProfileTransformReadDocument(
         String id,
         String importId,
         String fileId,
@@ -19,14 +18,13 @@ public record IidmProfileTransformDocument(
         String sourceProfilePayloadId,
         IidmTransformState transformState,
         String transformMessage,
-        List<IidmDiagnostic> diagnostics,
+        Object diagnostics,
         String iidmNetworkId,
         Object startedAt,
         Object completedAt,
         Object failedAt) {
-    public IidmProfileTransformDocument {
+    public IidmProfileTransformReadDocument {
         sourceFileIds = sourceFileIds == null ? List.of() : List.copyOf(sourceFileIds);
         sourceFileNames = sourceFileNames == null ? List.of() : List.copyOf(sourceFileNames);
-        diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
     }
 }

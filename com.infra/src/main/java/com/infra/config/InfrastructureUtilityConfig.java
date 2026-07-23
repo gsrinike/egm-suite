@@ -19,12 +19,18 @@ import java.util.List;
 import java.util.Arrays;
 import org.springframework.amqp.core.Declarables;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.RejectAndDontRequeueRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.boot.autoconfigure.amqp.RabbitTemplateCustomizer;
+import org.springframework.retry.interceptor.RetryOperationsInterceptor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -65,6 +71,33 @@ public class InfrastructureUtilityConfig {
     @Bean
     RabbitTemplateCustomizer rabbitTemplateJsonCustomizer(MessageConverter jsonMessageConverter) {
         return rabbitTemplate -> rabbitTemplate.setMessageConverter(jsonMessageConverter);
+    }
+
+    @Bean
+    RetryOperationsInterceptor infrastructureRabbitRetryInterceptor(
+            @Value("${utility.messaging.listener.retry.max-attempts:3}") int maxAttempts,
+            @Value("${utility.messaging.listener.retry.initial-interval-ms:1000}") long initialIntervalMs,
+            @Value("${utility.messaging.listener.retry.multiplier:2.0}") double multiplier,
+            @Value("${utility.messaging.listener.retry.max-interval-ms:10000}") long maxIntervalMs) {
+        return RetryInterceptorBuilder.stateless()
+                .maxAttempts(Math.max(maxAttempts, 1))
+                .backOffOptions(initialIntervalMs, multiplier, maxIntervalMs)
+                .recoverer(new RejectAndDontRequeueRecoverer())
+                .build();
+    }
+
+    @Bean
+    SimpleRabbitListenerContainerFactory retryingRabbitListenerContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory connectionFactory,
+            MessageConverter jsonMessageConverter,
+            RetryOperationsInterceptor infrastructureRabbitRetryInterceptor) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(factory, connectionFactory);
+        factory.setMessageConverter(jsonMessageConverter);
+        factory.setAdviceChain(infrastructureRabbitRetryInterceptor);
+        factory.setDefaultRequeueRejected(false);
+        return factory;
     }
 
     @Bean

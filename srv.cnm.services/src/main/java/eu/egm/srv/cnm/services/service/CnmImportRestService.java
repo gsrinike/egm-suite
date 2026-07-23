@@ -24,6 +24,7 @@ import eu.egm.data.cnm.common.DynamicTableRow;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatus;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
 import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
@@ -50,6 +51,8 @@ import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocument;
+import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.CgmSnapshotAssembler;
 import eu.egm.srv.cnm.services.rdf.ProfileProcessingContext;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
@@ -110,6 +113,7 @@ public class CnmImportRestService extends RestServiceSupport {
     private final DocumentRepositoryService<CnmMridIndexDocument> mridIndexRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository;
+    private final DocumentRepositoryService<IidmProfileTransformReadDocument> iidmTransformRepository;
     private final EventPublisherService eventPublisher;
     private final JsonMappingService jsonMappingService;
     private final RdfMetadataExtractor metadataExtractor;
@@ -170,6 +174,7 @@ public class CnmImportRestService extends RestServiceSupport {
         this.mridIndexRepository = infrastructureUtils.documentRepository(new CnmMridIndexDocumentAdapter());
         this.networkSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotDocumentAdapter());
         this.networkSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadDocumentAdapter());
+        this.iidmTransformRepository = infrastructureUtils.documentRepository(new IidmProfileTransformReadDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.metadataExtractor = metadataExtractor;
@@ -1656,8 +1661,9 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private ImportStatus toStatus(CnmImportDocument document) {
+        Map<String, IidmTransformAggregate> iidmTransforms = iidmTransformAggregates(document.id());
         List<ImportFileStatus> files = document.files().stream()
-                .map(this::toFileStatus)
+                .map(file -> toFileStatus(file, iidmTransforms.getOrDefault(file.fileId(), IidmTransformAggregate.empty())))
                 .toList();
         return new ImportStatus(
                 document.id(),
@@ -1669,7 +1675,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 document.message());
     }
 
-    private ImportFileStatus toFileStatus(CnmImportFileDocument file) {
+    private ImportFileStatus toFileStatus(CnmImportFileDocument file, IidmTransformAggregate iidmTransformAggregate) {
         ModelFileName fileNameMetadata = parseModelFileName(file.fileName());
         ProfileFamily family = file.profileFamily() == null || file.profileFamily() == ProfileFamily.Unknown
                 ? fileNameMetadata.profileFamily()
@@ -1688,7 +1694,51 @@ public class CnmImportRestService extends RestServiceSupport {
                 valueOr(file.modelVersion(), fileNameMetadata.version()),
                 file.profiles(),
                 file.message(),
+                iidmTransformAggregate.status(),
+                iidmTransformAggregate.count(),
                 instant(file.uploadedAt()));
+    }
+
+    private Map<String, IidmTransformAggregate> iidmTransformAggregates(String importId) {
+        try {
+            List<IidmProfileTransformReadDocument> transforms = iidmTransformRepository.findByField("importId", importId, 10_000);
+            Map<String, List<IidmProfileTransformReadDocument>> byFileId = new LinkedHashMap<>();
+            for (IidmProfileTransformReadDocument transform : transforms) {
+                List<String> sourceFileIds = transform.sourceFileIds().isEmpty()
+                        ? List.of(transform.fileId())
+                        : transform.sourceFileIds();
+                for (String fileId : sourceFileIds) {
+                    if (fileId != null && !fileId.isBlank()) {
+                        byFileId.computeIfAbsent(fileId, ignored -> new ArrayList<>()).add(transform);
+                    }
+                }
+            }
+            Map<String, IidmTransformAggregate> aggregates = new LinkedHashMap<>();
+            byFileId.forEach((fileId, values) -> aggregates.put(fileId, IidmTransformAggregate.from(values)));
+            return aggregates;
+        } catch (Exception exception) {
+            logger.warn("Unable to aggregate IIDM transform status for import {}", importId, exception);
+            return Map.of();
+        }
+    }
+
+    private record IidmTransformAggregate(IidmTransformationStatus status, int count) {
+        private static IidmTransformAggregate empty() {
+            return new IidmTransformAggregate(IidmTransformationStatus.NOT_STARTED, 0);
+        }
+
+        private static IidmTransformAggregate from(List<IidmProfileTransformReadDocument> transforms) {
+            if (transforms == null || transforms.isEmpty()) {
+                return empty();
+            }
+            if (transforms.stream().anyMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.FAILED)) {
+                return new IidmTransformAggregate(IidmTransformationStatus.FAILED, transforms.size());
+            }
+            if (transforms.stream().allMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE)) {
+                return new IidmTransformAggregate(IidmTransformationStatus.DONE, transforms.size());
+            }
+            return new IidmTransformAggregate(IidmTransformationStatus.STARTED, transforms.size());
+        }
     }
 
     private String valueOr(String value, String fallback) {

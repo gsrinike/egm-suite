@@ -14,13 +14,21 @@ cnm:
     raw-bucket: cnm-rdf-models
     event:
       exchange: cnm.events
+      dead-letter-exchange: cnm.events.dlx
       file-processing-routing-key: cnm.file.processing.requested
       file-processing-queue: cnm.file.process
+      file-processing-dlq: cnm.file.process.dlq
+      file-processing-dead-letter-routing-key: cnm.file.processing.failed
       snapshot-assembly-routing-key: cnm.snapshot.assembly.requested
       snapshot-assembly-queue: cnm.snapshot.assemble
+      snapshot-assembly-dlq: cnm.snapshot.assemble.dlq
+      snapshot-assembly-dead-letter-routing-key: cnm.snapshot.assembly.failed
       iidm-transform-exchange: iidm.events
+      iidm-transform-dead-letter-exchange: iidm.events.dlx
       iidm-transform-routing-key: iidm.profile.transform.requested
       iidm-transform-queue: iidm.profile.transform
+      iidm-transform-dlq: iidm.profile.transform.dlq
+      iidm-transform-dead-letter-routing-key: iidm.profile.transform.failed.dlq
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

@@ -18,6 +18,10 @@ model groups are complete.
 - Stream RDF/XML with RDF4J and extract profile-specific JSON payloads.
 - Serialize processing per import/TSO/business day/business time/timeframe.
 - Publish IIDM transform requests with all files needed by a model group.
+- Declare CNM processing queues with dead-letter queues and three retry
+  attempts.
+- Read IIDM transform summaries to expose file-level aggregate IIDM status and
+  transformation counts.
 - Expose OpenAPI from `src/main/resources/openapi/cnm-services.yaml`.
 
 ## Key Indices
@@ -35,6 +39,10 @@ model groups are complete.
 The service uses Elasticsearch, MinIO, RabbitMQ, `com.utils` configuration,
 `com.vault` secret resolution, and `com.infra` adapters. It declares outbound
 RabbitMQ exchanges it publishes to, including IIDM transform events.
+
+CNM owns import processing queues. The IIDM transformer owns IIDM transform
+documents, but CNM reads the lightweight `iidm-profile-transforms` index to
+decorate file status responses with aggregate IIDM state.
 
 ## Developer Command
 

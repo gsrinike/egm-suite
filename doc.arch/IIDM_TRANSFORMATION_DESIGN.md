@@ -26,6 +26,10 @@ Boundary files (`EQ_BD`, `TP_BD`) are included in the same staged directory as
 support files. This is required for IGM model groups whose equipment and
 topology reference boundary data.
 
+Transform documents persist source file IDs for correlation and source file
+names for display. Network source-file tables use filenames as the visible
+source reference.
+
 Compatibility paths remain available for older events that reference profile
 payload IDs or CNM snapshot IDs.
 
@@ -34,9 +38,10 @@ payload IDs or CNM snapshot IDs.
 `srv.iidm.transformer` owns two document groups:
 
 - `iidm-profile-transforms`: transform state, message, diagnostics,
-  source-profile linkage, timestamps, and IIDM network ID.
-- `iidm-networks`: IIDM network metadata, source file IDs, element counts, XIIDM
-  payload, and GUI-oriented JSON table projection.
+  source-profile linkage, source file IDs/names, timestamps, and IIDM network
+  ID.
+- `iidm-networks`: IIDM network metadata, source filenames, element counts,
+  XIIDM payload, and GUI-oriented JSON table projection.
 
 XIIDM remains the canonical PowSyBl interchange representation. The JSON
 projection is stored to render GUI tables without reconstructing a PowSyBl
@@ -69,6 +74,10 @@ The service exposes:
 
 Search and paging are applied before the GUI receives table rows so large IIDM
 networks are not loaded into the browser at once.
+
+The IIDM request queue uses three listener attempts. After retry exhaustion the
+message is rejected without requeue and RabbitMQ routes it to the configured
+DLQ.
 
 ## Flow
 

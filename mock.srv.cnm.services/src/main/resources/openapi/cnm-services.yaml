@@ -249,6 +249,9 @@ components:
     ImportFileState:
       type: string
       enum: [INIT, STORED, PARSED, FAILED]
+    IidmTransformationStatus:
+      type: string
+      enum: [NOT_STARTED, STARTED, DONE, FAILED]
     ProfileFamily:
       type: string
       enum: [NCP, CGMES, Unknown]
@@ -296,6 +299,10 @@ components:
             $ref: '#/components/schemas/RdfProfileReference'
         message:
           type: string
+        iidmTransformationStatus:
+          $ref: '#/components/schemas/IidmTransformationStatus'
+        iidmTransformationCount:
+          type: integer
         uploadedAt:
           type: string
           format: date-time

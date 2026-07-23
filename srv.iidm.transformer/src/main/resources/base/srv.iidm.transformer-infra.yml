@@ -8,5 +8,8 @@ utility:
     secret-key: ${vault:MINIO_SECRET_KEY}
     buckets: cnm-rdf-models
   messaging:
+    listener:
+      retry:
+        max-attempts: 3
     topic-exchange:
       name: iidm.events

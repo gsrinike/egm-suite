@@ -6,12 +6,13 @@
 
 - Imports: create imports, upload RDF/XML or ZIP files, provide an import
   message, view aggregate status, and open file details.
-- File details: view per-file status, profile type, TSO, business day/time, and
-  retry options where applicable.
+- File details: view per-file status, profile type, TSO, business day/time,
+  aggregate IIDM transformation status, IIDM transform counts, and retry
+  options where applicable.
 - Profiles: select a successful import, view profile metadata, and open dynamic
   profile payload tables.
-- IIDM: select a successful import, view IIDM transform status, and lazily open
-  selected network tables.
+- IIDM: select a successful import or use a file-level IIDM link, view IIDM
+  transform status, and lazily open selected network tables.
 
 Large uploads are chunked in the browser. Shared tables, dynamic tables,
 refresh controls, theme persistence, and error logging come from `gui.common`.

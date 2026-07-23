@@ -16,6 +16,7 @@ import eu.egm.data.cnm.common.ImportFileStatus;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
 import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.RdfProfileReference;
 import eu.egm.data.cnm.common.TimeFrame;
@@ -83,6 +84,8 @@ public class MockCnmImportController {
                         "",
                         List.of(),
                         request.message(),
+                        IidmTransformationStatus.NOT_STARTED,
+                        0,
                         now))
                 .toList();
         ImportStatus status = new ImportStatus(
@@ -247,6 +250,8 @@ public class MockCnmImportController {
                                 request.message() == null || request.message().isBlank()
                                         ? file.message()
                                         : request.message(),
+                                file.iidmTransformationStatus(),
+                                file.iidmTransformationCount(),
                                 file.uploadedAt())
                         : file)
                 .toList();
@@ -298,6 +303,8 @@ public class MockCnmImportController {
                 "002",
                 List.of(profile),
                 "RDF metadata parsed and raw model stored",
+                IidmTransformationStatus.DONE,
+                1,
                 now);
         String statusMessage = message == null || message.isBlank() ? "Mock import ready" : message.trim();
         return new ImportStatus(id, serviceType, timeFrame, ImportState.SUCCESS, List.of(file), now, statusMessage);
