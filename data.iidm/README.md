@@ -13,5 +13,7 @@ Key types:
 - `IidmNetworkModel`: transformation result backed by a real PowSyBl `Network`.
 - `IidmNetworkSummary`: serializable counts and metadata derived from `Network`.
 - `IidmNetworkXiidm`: XIIDM read/write helpers for persistence and exchange.
+- `CgmesIidmSourceFile` and `CgmesIidmImportOptions`: direct CGMES source-file
+  descriptors and PowSyBl import option contracts.
 - `IidmProfileTransformRequested`, `IidmProfileTransformCompleted`, and
   `IidmProfileTransformFailed`: event contracts for the transform workflow.

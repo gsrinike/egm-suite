@@ -1,0 +1,6 @@
+vault:
+  enabled: false
+  authorization:
+    client-id: srv.iidm.transformer
+    allowed-keys: MINIO_SECRET_KEY
+MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:minioadmin}

@@ -5,6 +5,7 @@ server:
   port: ${IIDM_TRANSFORMER_PORT:8098}
 iidm:
   transform:
+    raw-bucket: cnm-rdf-models
     event:
       exchange: iidm.events
       requested-routing-key: iidm.profile.transform.requested

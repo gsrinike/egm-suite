@@ -28,6 +28,8 @@ import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
+import eu.egm.data.iidm.common.CgmesIidmImportOptions;
+import eu.egm.data.iidm.common.CgmesIidmSourceFile;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.mapping.JacksonJsonMappingService;
 import eu.egm.mapping.JsonMappingService;
@@ -1024,29 +1026,53 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private void publishIidmTransformRequested(String importId, List<CnmImportFileDocument> groupFiles) {
-        groupFiles.forEach(file -> publishIidmTransformRequested(processingContext(importId, file)));
-    }
-
-    private void publishIidmTransformRequested(ProfileProcessingContext context) {
+        if (groupFiles.isEmpty()) {
+            return;
+        }
+        CnmImportFileDocument representative = groupFiles.getFirst();
         try {
             eventPublisher.publish(
                     iidmTransformExchange,
                     iidmTransformRoutingKey,
                     new IidmProfileTransformRequested(
-                            context.importId(),
-                            context.fileId(),
-                            context.fileId(),
+                            importId,
+                            directTransformFileId(groupFiles),
                             "",
-                            context.profileType(),
-                            context.profileFamily(),
-                            context.objectId(),
-                            context.businessDay(),
-                            context.businessTime(),
-                            context.tsoName(),
-                            context.timeFrame()));
+                            "",
+                            "CGMES_SOURCE",
+                            representative.profileFamily(),
+                            "",
+                            representative.businessDay(),
+                            representative.businessTime(),
+                            representative.tsoName(),
+                            representative.modelTimeFrame(),
+                            groupFiles.stream()
+                                    .map(file -> new CgmesIidmSourceFile(
+                                            file.fileId(),
+                                            file.fileName(),
+                                            file.objectId(),
+                                            file.profileFamily(),
+                                            file.profileType()))
+                                    .toList(),
+                            new CgmesIidmImportOptions(Map.of())));
+            logger.info(
+                    "Published direct CGMES IIDM transform request for import {} with {} source files",
+                    importId,
+                    groupFiles.size());
         } catch (Exception exception) {
-            logger.warn("Unable to publish IIDM transform event for {}", context.fileId(), exception);
+            logger.warn("Unable to publish direct CGMES IIDM transform event for {}", importId, exception);
         }
+    }
+
+    private String directTransformFileId(List<CnmImportFileDocument> groupFiles) {
+        CnmImportFileDocument representative = groupFiles.getFirst();
+        return representative.businessDay()
+                + ":"
+                + representative.businessTime()
+                + ":"
+                + representative.tsoName()
+                + ":"
+                + representative.modelTimeFrame();
     }
 
     private void publishIidmSnapshotTransformRequested(

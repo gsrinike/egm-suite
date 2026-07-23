@@ -344,13 +344,14 @@ incremental model updates can be represented by the data contracts before a
 dedicated patch-application flow is introduced.
 
 Once every file in the same import/TSO/business day/business-time/timeframe
-group is `PARSED`, `srv.cnm.services` publishes one
-`IidmProfileTransformRequested` for every parsed `ProfileProcessingContext` in
-that group, then publishes `CnmSnapshotAssemblyRequested`. The separate snapshot
-listener assembles a complete `CgmNetworkSnapshot` from stored fragments.
-Metadata is persisted in `cnm-network-snapshots`; the large stitched payload is
-persisted in `cnm-network-snapshot-payloads` by section. The snapshot listener
-then publishes an additional IIDM transform request with `sourceSnapshotId`.
+group is `PARSED`, `srv.cnm.services` publishes one grouped
+`IidmProfileTransformRequested` containing the raw source object IDs for that
+model group. `srv.iidm.transformer` uses those source files for direct PowSyBl
+CGMES import. CNM then publishes `CnmSnapshotAssemblyRequested` for metadata
+exploration and compatibility diagnostics. The separate snapshot listener
+assembles a complete `CgmNetworkSnapshot` from stored fragments. Metadata is
+persisted in `cnm-network-snapshots`; the large stitched payload is persisted in
+`cnm-network-snapshot-payloads` by section.
 If section persistence fails, the snapshot metadata is marked `FAILED`, while
 the import remains a successful parsed import and the already parsed profile
 payload remains available for diagnostics.

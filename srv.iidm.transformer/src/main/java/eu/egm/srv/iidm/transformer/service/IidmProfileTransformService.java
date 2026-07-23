@@ -6,6 +6,7 @@ import com.infra.storage.document.DocumentFilter;
 import com.infra.storage.document.DocumentPage;
 import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.DocumentSearchRequest;
+import com.infra.storage.object.ObjectStorageService;
 import com.utils.restservice.RestServiceSupport;
 import com.utils.profile.ProfileDefaults;
 import com.utils.profile.ProfileDefaultsService;
@@ -35,9 +36,12 @@ import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.data.iidm.common.IidmTransformState;
+import eu.egm.data.iidm.common.CgmesIidmSourceFile;
 import eu.egm.data.iidm.network.IidmNetworkModel;
 import eu.egm.data.iidm.network.IidmNetworkSummary;
 import eu.egm.data.iidm.network.IidmNetworkXiidm;
+import eu.egm.map.cnm.iidm.CgmesSourceToIidmMappingConfiguration;
+import eu.egm.map.cnm.iidm.CgmesSourceToIidmTransformer;
 import eu.egm.map.cnm.iidm.CnmToIidmMappingConfiguration;
 import eu.egm.map.cnm.iidm.CnmToIidmTransformer;
 import eu.egm.mapping.JsonMappingService;
@@ -59,6 +63,9 @@ import eu.egm.srv.iidm.transformer.api.IidmPage;
 import eu.egm.srv.iidm.transformer.api.IidmTableBundle;
 import eu.egm.srv.iidm.transformer.api.IidmTransformSummaryResponse;
 import io.micrometer.observation.ObservationRegistry;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -80,9 +87,12 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final DocumentRepositoryService<CnmNetworkSnapshotPayloadReadDocument> sourceSnapshotPayloadRepository;
     private final DocumentRepositoryService<IidmProfileTransformDocument> transformRepository;
     private final DocumentRepositoryService<IidmNetworkDocument> networkRepository;
+    private final ObjectStorageService objectStorageService;
     private final EventPublisherService eventPublisher;
     private final JsonMappingService jsonMappingService;
     private final CnmToIidmTransformer transformer;
+    private final CgmesSourceToIidmTransformer sourceTransformer;
+    private final String rawBucket;
     private final String eventExchange;
     private final String completedRoutingKey;
     private final String failedRoutingKey;
@@ -92,6 +102,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
             ObservationRegistry observationRegistry,
             InfrastructureUtils infrastructureUtils,
             JsonMappingService jsonMappingService,
+            @Value("${iidm.transform.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${iidm.transform.event.exchange:iidm.events}") String eventExchange,
             @Value("${iidm.transform.event.completed-routing-key:iidm.profile.transform.completed}") String completedRoutingKey,
             @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey) {
@@ -101,9 +112,12 @@ public class IidmProfileTransformService extends RestServiceSupport {
         this.sourceSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadReadDocumentAdapter());
         this.transformRepository = infrastructureUtils.documentRepository(new IidmProfileTransformDocumentAdapter());
         this.networkRepository = infrastructureUtils.documentRepository(new IidmNetworkDocumentAdapter());
+        this.objectStorageService = infrastructureUtils.objectStorageService();
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.transformer = new CnmToIidmTransformer(new ReflectionMappingService(), iidmMappingConfiguration());
+        this.sourceTransformer = new CgmesSourceToIidmTransformer(new ReflectionMappingService(), cgmesSourceMappingConfiguration());
+        this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
         this.completedRoutingKey = completedRoutingKey;
         this.failedRoutingKey = failedRoutingKey;
@@ -120,6 +134,17 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 defaults.stringValue("iidm.defaults.bus-id", "EGM_DEFAULT_BUS"),
                 defaults.stringValue("iidm.defaults.bus-name", "Default Bus"),
                 defaults.doubleValue("iidm.defaults.line-x", 0.0001));
+    }
+
+    private CgmesSourceToIidmMappingConfiguration cgmesSourceMappingConfiguration() {
+        ProfileDefaults defaults = new ProfileDefaultsService().load("iidm", "defaults");
+        Map<String, String> properties = new LinkedHashMap<>();
+        defaults.values().forEach((key, value) -> {
+            if (key.startsWith("iidm.import.cgmes.")) {
+                properties.put(key, String.valueOf(value));
+            }
+        });
+        return new CgmesSourceToIidmMappingConfiguration(properties);
     }
 
     public void transform(IidmProfileTransformRequested request) {
@@ -143,9 +168,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 null,
                 null));
         try {
-            IidmNetworkModel network = request.sourceSnapshotId() == null || request.sourceSnapshotId().isBlank()
-                    ? transformProfilePayload(request)
-                    : transformSnapshot(request);
+            IidmNetworkModel network = transformNetwork(request);
             networkRepository.save(toNetworkDocument(network));
             long completedAt = Instant.now().toEpochMilli();
             transformRepository.save(new IidmProfileTransformDocument(
@@ -183,6 +206,77 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     failedAt));
             eventPublisher.publish(eventExchange, failedRoutingKey,
                     new IidmProfileTransformFailed(request.importId(), request.fileId(), message));
+        }
+    }
+
+    private IidmNetworkModel transformNetwork(IidmProfileTransformRequested request) {
+        if (isDirectCgmesSourceRequest(request)) {
+            return transformCgmesSource(request);
+        }
+        return request.sourceSnapshotId() == null || request.sourceSnapshotId().isBlank()
+                ? transformProfilePayload(request)
+                : transformSnapshot(request);
+    }
+
+    private boolean isDirectCgmesSourceRequest(IidmProfileTransformRequested request) {
+        return (request.sourceProfilePayloadId() == null || request.sourceProfilePayloadId().isBlank())
+                && (request.sourceSnapshotId() == null || request.sourceSnapshotId().isBlank())
+                && request.sourceFiles() != null
+                && request.sourceFiles().stream().anyMatch(file -> file.objectId() != null && !file.objectId().isBlank());
+    }
+
+    private IidmNetworkModel transformCgmesSource(IidmProfileTransformRequested request) {
+        Path workspace = null;
+        try {
+            workspace = Files.createTempDirectory("egm-cgmes-iidm-");
+            for (int index = 0; index < request.sourceFiles().size(); index++) {
+                CgmesIidmSourceFile source = request.sourceFiles().get(index);
+                byte[] bytes = objectStorageService.read(rawBucket, source.objectId());
+                Path target = workspace.resolve(index + "-" + safeFileName(source));
+                Files.write(target, bytes);
+            }
+            return sourceTransformer.transform(
+                    workspace,
+                    networkId(request.importId(), request.fileId()),
+                    request.importId(),
+                    request.sourceFiles().stream().map(CgmesIidmSourceFile::fileId).toList(),
+                    request.businessDay(),
+                    request.businessTime(),
+                    request.timeFrame(),
+                    request.tsoName(),
+                    request.importOptions().properties());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to stage CGMES source files for IIDM transformation", exception);
+        } finally {
+            deleteWorkspace(workspace);
+        }
+    }
+
+    private String safeFileName(CgmesIidmSourceFile source) {
+        String fileName = source.fileName();
+        if (fileName == null || fileName.isBlank()) {
+            fileName = source.objectId();
+            int slash = fileName.lastIndexOf('/');
+            fileName = slash >= 0 && slash < fileName.length() - 1 ? fileName.substring(slash + 1) : fileName;
+        }
+        String sanitized = fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+        return sanitized.isBlank() ? "cgmes-profile.xml" : sanitized;
+    }
+
+    private void deleteWorkspace(Path workspace) {
+        if (workspace == null) {
+            return;
+        }
+        try (var stream = Files.walk(workspace)) {
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException ignored) {
+                    // Temporary staging cleanup is best effort.
+                }
+            });
+        } catch (IOException ignored) {
+            // Temporary staging cleanup is best effort.
         }
     }
 

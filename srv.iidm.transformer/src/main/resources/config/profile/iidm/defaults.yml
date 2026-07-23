@@ -9,3 +9,21 @@ iidm:
     bus-name: Default Bus
     line-x: 0.0001
     zero: 0.0
+  import:
+    cgmes:
+      convert-sv-injections: true
+      create-active-power-control-extension: true
+      create-busbar-section-for-every-connectivity-node: false
+      decode-escaped-identifiers: true
+      ensure-id-alias-unicity: false
+      import-control-areas: true
+      naming-strategy: identity
+      powsybl-triplestore: rdf4j
+      source-for-iidm-id: mRID
+      store-cgmes-model-as-network-extension: true
+      store-cgmes-conversion-context-as-network-extension: false
+      import-node-breaker-as-bus-breaker: false
+      disconnect-dangling-line-if-boundary-side-is-disconnected: false
+      missing-permanent-limit-percentage: 100
+      cgm-with-subnetworks: true
+      cgm-with-subnetworks-defined-by: MODELING_AUTHORITY

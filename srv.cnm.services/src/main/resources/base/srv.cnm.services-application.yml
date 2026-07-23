@@ -20,6 +20,7 @@ cnm:
       snapshot-assembly-queue: cnm.snapshot.assemble
       iidm-transform-exchange: iidm.events
       iidm-transform-routing-key: iidm.profile.transform.requested
+      iidm-transform-queue: iidm.profile.transform
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

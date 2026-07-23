@@ -2,29 +2,34 @@
 
 ## Purpose
 
-IIDM transformation starts after CNM RDF metadata extraction has produced typed
-CNM JSON documents. The preferred source is a stitched `CgmNetworkSnapshot`
-assembled after all files in a TSO/business day/business time/timeframe group
-are parsed. The transformation does not parse raw RDF/XML and maps persisted CNM
-DTOs into PowSyBl IIDM `Network` objects. The PowSyBl dependency is intentionally
-owned by `data.iidm` and `map.cnm.iidm` so load-flow, security-analysis, and RAO
-services can consume real IIDM networks without reinterpreting CGMES payloads.
+IIDM transformation starts after CNM RDF metadata extraction has confirmed that
+all files in a TSO/business day/business time/timeframe group are parsed. The
+preferred source is the original CGMES source file set stored in object storage.
+`srv.iidm.transformer` stages those files and delegates CGMES-to-IIDM conversion
+to PowSyBl's native CIM-CGMES importer, which loads RDF/XML into its RDF4J
+triplestore and creates a PowSyBl IIDM `Network`.
+
+Persisted CNM DTOs and stitched `CgmNetworkSnapshot` payloads remain available
+for exploration, diagnostics, and compatibility fallback, but they are not the
+primary IIDM conversion source. The PowSyBl dependency is intentionally owned by
+`data.iidm` and `map.cnm.iidm` so load-flow, security-analysis, and RAO services
+can consume real IIDM networks without importing CGMES parsing logic.
 
 ## Module Ownership
 
 - `data.iidm`: owns PowSyBl IIDM network wrappers, XIIDM helpers, transform
   state, and transform event contracts. It is the explicit module where
   `com.powsybl.*` dependencies are allowed.
-- `map.cnm.iidm`: owns CGMES/NCP profile DTO to PowSyBl IIDM `Network` mapping.
-  It depends on `data.cnm`, `data.iidm`, and `com.mapping`.
+- `map.cnm.iidm`: owns direct CGMES source-file to PowSyBl IIDM `Network`
+  transformation and the compatibility CNM DTO to IIDM mapper. It depends on
+  `data.cnm`, `data.iidm`, and `com.mapping`.
 - `srv.iidm.transformer`: owns RabbitMQ event consumption, CNM profile payload
-  reads, IIDM transform status persistence, IIDM network persistence, and IIDM
-  REST exploration APIs.
+  compatibility reads, raw object staging, IIDM transform status persistence,
+  IIDM network persistence, and IIDM REST exploration APIs.
 - `srv.cnm.services`: owns CNM import, RDF metadata extraction, and asynchronous
-  snapshot assembly. After every file in a model group is parsed, it publishes
-  profile-level IIDM transform request events for each `ProfileProcessingContext`.
-  After a model-group snapshot is assembled and marked `DONE`, it also publishes
-  a snapshot-level IIDM transform request event.
+  snapshot assembly. After every file in a model group is parsed, it publishes a
+  grouped IIDM transform request containing all raw object IDs for that model
+  group. Snapshot-level events remain as compatibility diagnostics.
 - `com.infra`: owns document storage and messaging adapters.
 - `com.mapping`: owns DTO-to-JSON and JSON-to-DTO conversion contracts.
 
@@ -54,9 +59,9 @@ CNM document indices:
 
 IIDM document indices:
 
-- `iidm-profile-transforms`: one transform status document per processed profile
-  file. It records source payload ID, transform state, diagnostics, and the
-  resulting IIDM network ID.
+- `iidm-profile-transforms`: one transform status document per direct CGMES
+  source group or compatibility source. It records the transform state,
+  diagnostics, and the resulting IIDM network ID.
 - `iidm-networks`: PowSyBl IIDM networks exported in XIIDM format and keyed by
   network ID. Searchable fields contain import ID, source file IDs, TSO,
   timeframe, business day, business time, and stable element counts.
@@ -94,22 +99,20 @@ network objects merely to show the list or table selector.
 sequenceDiagram
     autonumber
     participant CNM as "srv.cnm.services"
-    participant CnmPayloads as "cnm-profile-payloads / snapshot payloads"
+    participant ObjectStore as "MinIO raw CGMES source files"
     participant Events as "RabbitMQ iidm.events"
     participant IIDM as "srv.iidm.transformer"
     participant Mapping as "map.cnm.iidm"
     participant TransformIndex as "iidm-profile-transforms"
     participant NetworkIndex as "iidm-networks"
 
-    CNM->>CnmPayloads: save ProfilePayload JSON after file parsing
-    CNM->>Events: publish IidmProfileTransformRequested for each parsed profile context after group completion
-    CNM->>CnmPayloads: save snapshot metadata and sectioned JSON after model group completion
-    CNM->>Events: publish IidmProfileTransformRequested(sourceSnapshotId)
+    CNM->>ObjectStore: raw CGMES profile files already stored
+    CNM->>Events: publish IidmProfileTransformRequested(sourceFiles[])
     Events-->>IIDM: consume transform request
     IIDM->>TransformIndex: upsert STARTED transform document
-    IIDM->>CnmPayloads: read DONE snapshot metadata and payload sections
-    IIDM->>IIDM: reconstruct snapshot DTO through com.mapping
-    IIDM->>Mapping: transform CgmNetworkSnapshot to PowSyBl Network
+    IIDM->>ObjectStore: read source object IDs
+    IIDM->>IIDM: stage files into temporary CGMES import workspace
+    IIDM->>Mapping: import workspace with PowSyBl CIM-CGMES importer
     Mapping-->>IIDM: IidmNetworkModel with PowSyBl Network and diagnostics
     IIDM->>IIDM: export Network as XIIDM
     IIDM->>NetworkIndex: save XIIDM payload and stable counts
@@ -124,28 +127,26 @@ sequenceDiagram
 
 ## Mapping Rules
 
-The first implementation uses a PowSyBl bus/breaker network projection:
+The preferred implementation uses PowSyBl's native CIM-CGMES importer:
 
-- common topology objects become PowSyBl substations, voltage levels, and buses.
-- line, load, and generator objects become PowSyBl connectables when terminal
-  and bus references are resolvable.
-- SV voltage values are applied to PowSyBl buses where topology references are
-  resolvable.
-- unresolved relations are retained as diagnostics instead of failing the whole
-  profile transform.
+- input CGMES RDF/XML files are loaded into PowSyBl's RDF4J triplestore.
+- the complete EQ/TP/SSH/SV model group is converted as one source set.
+- node/breaker and bus/branch topology are handled by PowSyBl.
+- CGMES terminal aliases, boundaries, control areas, SV injections, subnetworks,
+  and naming behavior are governed by PowSyBl import parameters.
 
-Conversion defaults such as fallback nominal voltage, fallback substation,
-voltage-level, bus identifiers, and line reactance are loaded from cached YAML
-configuration under `srv.iidm.transformer/src/main/resources/config/profile/iidm`.
-These values must not be hard-coded in service logic, so parallel transform
-workers use the same immutable in-memory configuration snapshot.
+PowSyBl import defaults are loaded from cached YAML configuration under
+`srv.iidm.transformer/src/main/resources/config/profile/iidm`. Supported
+properties include `iidm.import.cgmes.*` options such as SV injection
+conversion, ID source, triplestore implementation, subnetworks, boundary
+behavior, node/breaker conversion, and busbar-section creation. These values
+must not be hard-coded in service logic, so parallel transform workers use the
+same immutable in-memory configuration snapshot.
 
-The transformer still supports the older profile-payload event path when
-`sourceSnapshotId` is empty, which keeps diagnostic and compatibility flows
-working. Snapshot events are the primary path because EQ/TP/SSH/SV data are
-cross-referenced and should be mapped as one model rather than isolated files.
-Future increments can enrich the snapshot mapper with more PowSyBl-specific
-profile semantics while preserving the same event and document boundary.
+The transformer still supports the older profile-payload and snapshot event
+paths as compatibility fallbacks. Direct source events are selected when the
+event carries `sourceFiles[]` and no `sourceProfilePayloadId` or
+`sourceSnapshotId`.
 
 ## REST Surface
 
@@ -182,5 +183,7 @@ server-side so a term can match rows beyond the currently displayed page.
   mapping, PowSyBl network creation, XIIDM export, or network persistence fails.
 - Transform event handling is idempotent by `fileId`: reprocessing replaces the
   transform document and network document for the same source file.
-- Snapshot transform events are idempotent by `sourceSnapshotId`; the produced
-  network ID is derived from the import ID and snapshot ID.
+- Direct source transform events are idempotent by their grouped event `fileId`;
+  the produced network ID is derived from the import ID and grouped model key.
+- Snapshot transform events are retained for compatibility and are idempotent by
+  `sourceSnapshotId`.
