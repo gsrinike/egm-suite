@@ -13,6 +13,12 @@ The service reads CNM profile payloads from `cnm-profile-payloads` by ID but doe
 not own CNM import/profile metadata. It does not use MinIO/object storage, so its
 infra configuration only needs Elasticsearch and RabbitMQ settings.
 
+IIDM mapping defaults are loaded once and cached through `com.utils` from
+`src/main/resources/config/profile/iidm/defaults.yml`. This keeps conversion
+defaults such as fallback nominal voltage, fallback containers, and line
+reactance out of Java source while remaining thread-safe for parallel transform
+events.
+
 List APIs return lightweight metadata and exclude XIIDM payload fields. GUI
 table exploration is lazy: `/api/iidm/networks/{networkId}/tables` returns table
 metadata, and `/api/iidm/networks/{networkId}/tables/{tableId}` returns one

@@ -237,7 +237,7 @@ components:
       enum: [INIT, STORED, PARSED, FAILED]
     ProfileFamily:
       type: string
-      enum: [EQ, DL, DY, EB, GL, OP, SC, SV, SSH, TP, NCP, CGMES, UK]
+      enum: [NCP, CGMES, Unknown]
     RdfProfileReference:
       type: object
       properties:

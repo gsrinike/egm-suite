@@ -118,6 +118,12 @@ The first implementation uses a PowSyBl bus/breaker network projection:
 - unresolved relations are retained as diagnostics instead of failing the whole
   profile transform.
 
+Conversion defaults such as fallback nominal voltage, fallback substation,
+voltage-level, bus identifiers, and line reactance are loaded from cached YAML
+configuration under `srv.iidm.transformer/src/main/resources/config/profile/iidm`.
+These values must not be hard-coded in service logic, so parallel transform
+workers use the same immutable in-memory configuration snapshot.
+
 Future increments should extend this from profile-level networks to grouped
 CGMES model assembly. EQ should establish the base network, SSH/SV/TP should
 update the same PowSyBl network variant or a derived variant, following

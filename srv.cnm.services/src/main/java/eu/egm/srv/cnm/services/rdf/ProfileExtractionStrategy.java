@@ -20,5 +20,5 @@ interface ProfileExtractionStrategy {
     /**
      * Converts parsed RDF facts into a serializable profile payload.
      */
-    ProfilePayload<?> extract(ProfileFamily family, String profileType, String fileId, String objectId, List<RdfFact> facts);
+    ProfilePayload<?> extract(ProfileProcessingContext context, List<RdfFact> facts);
 }

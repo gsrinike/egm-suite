@@ -8,6 +8,7 @@
 - Support ID, 1D, and 2D timeframes.
 - Extract RDF profile metadata such as `dcterms:conformsTo` asynchronously after object storage succeeds.
 - Classify imported payloads as CGMES, NCP, or unknown.
+- Resolve profile kinds through `CgmesProfileKind` and `NCProfileKind`; `ProfileFamily` remains only `CGMES`, `NCP`, or `Unknown`.
 - Store raw RDF payloads through `com.infra.storage.object`.
 - Persist import metadata through `com.infra.storage.document`.
 - Record rejected or failed uploads as `FAILED` imports and support re-upload under the same import ID.
@@ -31,6 +32,19 @@ searchable metadata document per profile in the `cnm-profiles` Elasticsearch
 index. Large typed profile JSON is stored separately in `cnm-profile-payloads`
 by `fileId`, so profile search/list screens do not load payload data into the
 service heap.
+
+File-processing events are serialized per import, TSO, business day, business
+time, and timeframe inside the service. This keeps cross-referenced EQ, TP, SSH,
+and SV files for the same model group from being parsed against changing import
+state concurrently, while still allowing unrelated TSOs and timeframes to
+process in parallel. The serialization key and extraction metadata are carried
+by `ProfileProcessingContext`, which is passed from the import processor to the
+RDF metadata extractor.
+
+Profile extraction defaults are loaded from cached YAML resources under
+`src/main/resources/config/profile/cgmes` and
+`src/main/resources/config/profile/nc`. The extractor adds diagnostics when a
+processed profile kind is outside the configured supported-kind list.
 
 After profile payload persistence, CNM also publishes IIDM transform requests to
 `iidm.events`. The service declares `iidm.events` through

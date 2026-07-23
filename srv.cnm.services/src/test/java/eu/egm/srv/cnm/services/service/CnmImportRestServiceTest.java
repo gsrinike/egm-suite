@@ -94,7 +94,7 @@ class CnmImportRestServiceTest {
         assertThat(status.files().get(1).tsoName()).isEqualTo("TSO-XYZ");
         assertThat(status.files().get(1).profileType()).isEqualTo("SV");
         assertThat(status.files().get(1).modelVersion()).isEqualTo("002");
-        assertThat(status.files().get(1).profileFamily()).isEqualTo(ProfileFamily.SV);
+        assertThat(status.files().get(1).profileFamily()).isEqualTo(ProfileFamily.CGMES);
         assertThat(status.files()).allMatch(file -> file.state() == ImportFileState.STORED);
         assertThat(profileRepository.saved).isEmpty();
         assertThat(eventPublisher.published)
@@ -119,7 +119,7 @@ class CnmImportRestServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(svProfile.state()).isEqualTo(ImportFileState.PARSED);
-        assertThat(svProfile.profileFamily()).isEqualTo(ProfileFamily.SV);
+        assertThat(svProfile.profileFamily()).isEqualTo(ProfileFamily.CGMES);
         assertThat(svProfile.tsoName()).isEqualTo("TSO-XYZ");
         assertThat(svProfile.timeFrame()).isEqualTo("1D");
         assertThat(svProfile.version()).isEqualTo("002");
@@ -296,7 +296,7 @@ class CnmImportRestServiceTest {
             assertThat(file.modelTimeFrame()).isEqualTo("1D");
             assertThat(file.tsoName()).isEqualTo("TSO-XYZ");
             assertThat(file.profileType()).isEqualTo("SV");
-            assertThat(file.profileFamily()).isEqualTo(ProfileFamily.SV);
+            assertThat(file.profileFamily()).isEqualTo(ProfileFamily.CGMES);
         });
     }
 

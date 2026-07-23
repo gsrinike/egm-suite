@@ -1,0 +1,31 @@
+profile:
+  family: CGMES
+  supported-kinds:
+    - EQ
+    - SSH
+    - SV
+    - TP
+    - DL
+    - GL
+    - DY
+    - SC
+    - OP
+    - AP
+    - EQ_BD
+    - EQ_OP
+    - EQ_SC
+    - EQ_CO
+    - CO
+    - MF
+processing:
+  queue-key-fields:
+    - importId
+    - tsoName
+    - businessDay
+    - businessTime
+    - modelTimeFrame
+  cross-profile-kinds:
+    - EQ
+    - SSH
+    - SV
+    - TP

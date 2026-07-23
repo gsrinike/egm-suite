@@ -1,0 +1,26 @@
+profile:
+  family: NCP
+  supported-kinds:
+    - AEAS
+    - CO
+    - ER
+    - GD
+    - IAM
+    - MA
+    - OR
+    - PS
+    - PSP
+    - RA
+    - RAS
+    - SAR
+    - SM
+    - SIS
+    - SHS
+    - SSI
+processing:
+  queue-key-fields:
+    - importId
+    - tsoName
+    - businessDay
+    - businessTime
+    - modelTimeFrame

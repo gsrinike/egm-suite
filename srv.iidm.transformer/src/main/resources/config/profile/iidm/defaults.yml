@@ -1,0 +1,11 @@
+iidm:
+  defaults:
+    nominal-voltage: 400.0
+    substation-id: EGM_DEFAULT_SUBSTATION
+    substation-name: Default Substation
+    voltage-level-id: EGM_DEFAULT_VL
+    voltage-level-name: Default Voltage Level
+    bus-id: EGM_DEFAULT_BUS
+    bus-name: Default Bus
+    line-x: 0.0001
+    zero: 0.0

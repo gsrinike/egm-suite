@@ -36,6 +36,7 @@ import eu.egm.srv.cnm.services.domain.CnmProfileDocument.CnmEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
+import eu.egm.srv.cnm.services.rdf.ProfileProcessingContext;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
 import io.micrometer.observation.ObservationRegistry;
@@ -55,6 +56,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -71,7 +74,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class CnmImportRestService extends RestServiceSupport {
     private static final Pattern MODEL_FILE_PATTERN =
             Pattern.compile(
-                    "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9]+)_(?<version>\\d+)$",
+                    "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9_-]+)_(?<version>\\d+)$",
                     Pattern.CASE_INSENSITIVE);
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
@@ -89,6 +92,7 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String fileProcessingRoutingKey;
     private final String iidmTransformExchange;
     private final String iidmTransformRoutingKey;
+    private final ConcurrentMap<String, Object> processingLocks = new ConcurrentHashMap<>();
 
     public CnmImportRestService(
             Environment environment,
@@ -520,7 +524,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 LocalTime.parse(timestamp.substring(9, 13), DateTimeFormatter.ofPattern("HHmm")).toString(),
                 matcher.group("timeFrame").toUpperCase(Locale.ROOT),
                 matcher.group("tso"),
-                matcher.group("profile").toUpperCase(Locale.ROOT),
+                matcher.group("profile").toUpperCase(Locale.ROOT).replace('-', '_'),
                 matcher.group("version"),
                 ProfileFamily.fromCode(matcher.group("profile")));
     }
@@ -581,10 +585,23 @@ public class CnmImportRestService extends RestServiceSupport {
         return toStatus(document);
     }
 
-    public synchronized ImportStatus processFile(CnmFileProcessingRequested event) {
+    public ImportStatus processFile(CnmFileProcessingRequested event) {
         if (event == null) {
             throw new IllegalArgumentException("File-processing event is required");
         }
+        CnmImportDocument current = findImportDocument(event.importId());
+        CnmImportFileDocument target = current.files().stream()
+                .filter(file -> file.fileId().equals(event.fileId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Import file not found: " + event.fileId()));
+        ProfileProcessingContext context = processingContext(current.id(), target);
+        Object lock = processingLocks.computeIfAbsent(context.queueKey(), ignored -> new Object());
+        synchronized (lock) {
+            return processFileLocked(event);
+        }
+    }
+
+    private ImportStatus processFileLocked(CnmFileProcessingRequested event) {
         CnmImportDocument current = findImportDocument(event.importId());
         CnmImportFileDocument target = current.files().stream()
                 .filter(file -> file.fileId().equals(event.fileId()))
@@ -597,12 +614,8 @@ public class CnmImportRestService extends RestServiceSupport {
         CnmImportFileDocument processed;
         try {
             byte[] payload = objectStorageService.read(rawBucket, target.objectId());
-            RdfMetadata metadata = metadataExtractor.extract(
-                    payload,
-                    target.profileFamily(),
-                    target.profileType(),
-                    target.fileId(),
-                    target.objectId());
+            ProfileProcessingContext context = processingContext(current.id(), target);
+            RdfMetadata metadata = metadataExtractor.extract(payload, context);
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
             profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
@@ -629,6 +642,19 @@ public class CnmImportRestService extends RestServiceSupport {
             updateProfileStatus(processed.fileId(), ImportFileState.FAILED);
         }
         return toStatus(updated);
+    }
+
+    private ProfileProcessingContext processingContext(String importId, CnmImportFileDocument file) {
+        return ProfileProcessingContext.forFile(
+                importId,
+                file.fileId(),
+                file.objectId(),
+                file.tsoName(),
+                file.businessDay(),
+                file.businessTime(),
+                file.modelTimeFrame(),
+                file.profileFamily(),
+                file.profileType());
     }
 
     private void publishIidmTransformRequested(String importId, CnmImportFileDocument file, RdfMetadata metadata) {

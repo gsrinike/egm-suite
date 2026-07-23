@@ -12,17 +12,14 @@ class UnknownProfileExtractionStrategy extends AbstractProfileExtractionStrategy
 
     @Override
     public ProfilePayload<?> extract(
-            ProfileFamily family,
-            String profileType,
-            String fileId,
-            String objectId,
+            ProfileProcessingContext context,
             List<RdfFact> facts) {
         return new ProfilePayload<>(
-                family == null ? ProfileFamily.Unknown : family,
-                profileType,
-                fileId,
-                objectId,
-                topologyObjects(facts, profileType),
+                context.profileFamily(),
+                context.profileType(),
+                context.fileId(),
+                context.objectId(),
+                topologyObjects(facts, context.profileType()),
                 topologyRelations(facts),
                 List.of("Profile type is not handled by a specialized extractor"),
                 entities(facts));

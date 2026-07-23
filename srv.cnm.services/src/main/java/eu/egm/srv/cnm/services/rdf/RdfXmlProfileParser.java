@@ -2,6 +2,8 @@ package eu.egm.srv.cnm.services.rdf;
 
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.RdfProfileReference;
+import eu.egm.data.cnm.cgmes.CgmesProfileKind;
+import eu.egm.data.cnm.nc.NCProfileKind;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -204,7 +206,26 @@ class RdfXmlProfileParser {
         if (normalized.contains("topology")) {
             return "TP";
         }
-        return name == null ? "" : name.toUpperCase(Locale.ROOT);
+        if (normalized.contains("diagram")) {
+            return "DL";
+        }
+        if (normalized.contains("geographical") || normalized.contains("geographic") || normalized.contains("location")) {
+            return "GL";
+        }
+        for (NCProfileKind kind : NCProfileKind.values()) {
+            if (kind != NCProfileKind.UNKNOWN && normalized.contains(kind.label().toLowerCase(Locale.ROOT).replace(" ", ""))) {
+                return kind.code();
+            }
+        }
+        CgmesProfileKind cgmesKind = CgmesProfileKind.fromCode(name);
+        if (cgmesKind != CgmesProfileKind.UNKNOWN) {
+            return cgmesKind.code();
+        }
+        NCProfileKind ncKind = NCProfileKind.fromCode(name);
+        if (ncKind != NCProfileKind.UNKNOWN) {
+            return ncKind.code();
+        }
+        return name == null ? "" : name.toUpperCase(Locale.ROOT).replace('-', '_');
     }
 
     private String normalizedKey(String key) {

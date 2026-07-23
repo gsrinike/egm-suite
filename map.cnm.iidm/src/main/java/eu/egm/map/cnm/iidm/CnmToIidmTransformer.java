@@ -35,14 +35,16 @@ import java.util.Set;
  * Converts parsed CNM profile payloads into a real PowSyBl IIDM network.
  */
 public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
-    private static final double DEFAULT_NOMINAL_VOLTAGE = 400.0;
-
     private final MappingService mappingService;
     private final MappingConfiguration mappingConfiguration;
+    private final CnmToIidmMappingConfiguration cnmConfiguration;
 
     public CnmToIidmTransformer(MappingService mappingService, MappingConfiguration mappingConfiguration) {
         this.mappingService = mappingService;
         this.mappingConfiguration = mappingConfiguration;
+        this.cnmConfiguration = mappingConfiguration instanceof CnmToIidmMappingConfiguration configuration
+                ? configuration
+                : new CnmToIidmMappingConfiguration();
     }
 
     @Override
@@ -117,8 +119,8 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
         }
         if (substations.isEmpty()) {
             Substation substation = network.newSubstation()
-                    .setId("EGM_DEFAULT_SUBSTATION")
-                    .setName("Default Substation")
+                    .setId(cnmConfiguration.defaultSubstationId())
+                    .setName(cnmConfiguration.defaultSubstationName())
                     .setTso(tsoName)
                     .add();
             substations.put(substation.getId(), substation);
@@ -141,7 +143,7 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
                         .setId(id(object.mRID()))
                         .setName(name(object))
                         .setTopologyKind(TopologyKind.BUS_BREAKER)
-                        .setNominalV(number(object.attributes().get("nominalVoltage"), DEFAULT_NOMINAL_VOLTAGE))
+                        .setNominalV(number(object.attributes().get("nominalVoltage"), cnmConfiguration.nominalVoltage()))
                         .add();
                 copyAttributes(object, voltageLevel);
                 voltageLevels.put(object.mRID(), voltageLevel);
@@ -149,10 +151,10 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
         }
         if (voltageLevels.isEmpty()) {
             VoltageLevel voltageLevel = defaultSubstation.newVoltageLevel()
-                    .setId("EGM_DEFAULT_VL")
-                    .setName("Default Voltage Level")
+                    .setId(cnmConfiguration.defaultVoltageLevelId())
+                    .setName(cnmConfiguration.defaultVoltageLevelName())
                     .setTopologyKind(TopologyKind.BUS_BREAKER)
-                    .setNominalV(DEFAULT_NOMINAL_VOLTAGE)
+                    .setNominalV(cnmConfiguration.nominalVoltage())
                     .add();
             voltageLevels.put(voltageLevel.getId(), voltageLevel);
         }
@@ -183,8 +185,8 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
         }
         if (busByNodeId.isEmpty()) {
             Bus bus = defaultVoltageLevel.getBusBreakerView().newBus()
-                    .setId("EGM_DEFAULT_BUS")
-                    .setName("Default Bus")
+                    .setId(cnmConfiguration.defaultBusId())
+                    .setName(cnmConfiguration.defaultBusName())
                     .add();
             busByNodeId.put(bus.getId(), bus.getId());
             diagnostics.add(new IidmDiagnostic("WARN", "IIDM_DEFAULT_BUS", "Created a default bus because no topology node was extracted", ""));
@@ -242,7 +244,7 @@ public class CnmToIidmTransformer implements Transformer<IidmNetworkModel> {
                     .setBus2(busIds.get(1))
                     .setConnectableBus2(busIds.get(1))
                     .setR(number(object.attributes().get("r"), 0.0))
-                    .setX(number(object.attributes().get("x"), 0.0001))
+                    .setX(number(object.attributes().get("x"), cnmConfiguration.defaultLineX()))
                     .setG1(number(object.attributes().get("g1"), 0.0))
                     .setB1(number(object.attributes().get("b1"), 0.0))
                     .setG2(number(object.attributes().get("g2"), 0.0))

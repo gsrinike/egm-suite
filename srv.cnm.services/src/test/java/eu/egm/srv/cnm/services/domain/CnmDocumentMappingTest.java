@@ -34,7 +34,7 @@ class CnmDocumentMappingTest {
                         Map.entry("fileName", "20241202T2330Z_1D_TSO-XYZ_SV_002.xml"),
                         Map.entry("objectId", "import-1/model.xml"),
                         Map.entry("state", "PARSED"),
-                        Map.entry("profileFamily", "SV"),
+                        Map.entry("profileFamily", "CGMES"),
                         Map.entry("businessDay", "2024-12-02"),
                         Map.entry("businessTime", "23:30"),
                         Map.entry("modelTimeFrame", "1D"),
@@ -63,7 +63,7 @@ class CnmDocumentMappingTest {
                 Map.entry("fileName", "20241202T2330Z_1D_TSO-XYZ_SV_002.xml"),
                 Map.entry("objectId", "import-1/model.xml"),
                 Map.entry("state", "PARSED"),
-                Map.entry("profileFamily", "SV"),
+                Map.entry("profileFamily", "CGMES"),
                 Map.entry("profileType", "SV"),
                 Map.entry("tsoName", "TSO-XYZ"),
                 Map.entry("businessDay", "2024-12-02"),
@@ -75,7 +75,7 @@ class CnmDocumentMappingTest {
         CnmProfileDocument restored = converter.read(CnmProfileDocument.class, source);
 
         assertThat(restored.state()).isEqualTo(ImportFileState.PARSED);
-        assertThat(restored.profileFamily()).isEqualTo(ProfileFamily.SV);
+        assertThat(restored.profileFamily()).isEqualTo(ProfileFamily.CGMES);
         assertThat(restored.profileType()).isEqualTo("SV");
         assertThat(restored.importedAt()).isEqualTo(timestamp);
     }

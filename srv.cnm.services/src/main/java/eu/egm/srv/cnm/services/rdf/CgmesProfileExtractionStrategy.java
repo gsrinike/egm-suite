@@ -1,42 +1,43 @@
 package eu.egm.srv.cnm.services.rdf;
 
+import eu.egm.data.cnm.cgmes.CgmesDiagramLayoutProfile;
 import eu.egm.data.cnm.cgmes.CgmesEquipmentProfile;
+import eu.egm.data.cnm.cgmes.CgmesGeographicalLocationProfile;
 import eu.egm.data.cnm.cgmes.CgmesProfileEntity;
+import eu.egm.data.cnm.cgmes.CgmesProfileKind;
 import eu.egm.data.cnm.cgmes.CgmesStateVariablesProfile;
 import eu.egm.data.cnm.cgmes.CgmesSteadyStateHypothesisProfile;
 import eu.egm.data.cnm.cgmes.CgmesTopologyProfile;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.ProfilePayload;
 import java.util.List;
-import java.util.Locale;
 
 class CgmesProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
     @Override
     public boolean supports(ProfileFamily family, String profileType) {
-        String code = profileType == null ? "" : profileType.toUpperCase(Locale.ROOT);
-        return family != ProfileFamily.NCP && List.of("EQ", "SSH", "SV", "TP").contains(code);
+        return family != ProfileFamily.NCP && CgmesProfileKind.isKnown(profileType);
     }
 
     @Override
     public ProfilePayload<?> extract(
-            ProfileFamily family,
-            String profileType,
-            String fileId,
-            String objectId,
+            ProfileProcessingContext context,
             List<RdfFact> facts) {
-        Object profile = switch ((profileType == null ? "" : profileType).toUpperCase(Locale.ROOT)) {
-            case "EQ" -> equipment(facts);
-            case "SSH" -> ssh(facts);
-            case "SV" -> sv(facts);
-            case "TP" -> tp(facts);
+        CgmesProfileKind kind = CgmesProfileKind.fromCode(context.profileType());
+        Object profile = switch (kind) {
+            case EQUIPMENT, BOUNDARY_EQUIPMENT, EQUIPMENT_OPERATION, EQUIPMENT_SHORT_CIRCUIT, EQUIPMENT_CONTINGENCY -> equipment(facts);
+            case STEADY_STATE_HYPOTHESIS -> ssh(facts);
+            case STATE_VARIABLES -> sv(facts);
+            case TOPOLOGY -> tp(facts);
+            case DIAGRAM_LAYOUT -> dl(facts);
+            case GEOGRAPHICAL_LOCATION -> gl(facts);
             default -> entities(facts);
         };
         return new ProfilePayload<>(
-                family,
-                profileType,
-                fileId,
-                objectId,
-                topologyObjects(facts, profileType),
+                context.profileFamily() == ProfileFamily.Unknown ? ProfileFamily.CGMES : context.profileFamily(),
+                kind == CgmesProfileKind.UNKNOWN ? context.profileType() : kind.code(),
+                context.fileId(),
+                context.objectId(),
+                topologyObjects(facts, context.profileType()),
                 topologyRelations(facts),
                 List.of(),
                 profile);
@@ -74,5 +75,20 @@ class CgmesProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
                 entities(facts, "TopologicalNode"),
                 entities(facts, "ConnectivityNode"),
                 entities(facts, "Terminal"));
+    }
+
+    private CgmesDiagramLayoutProfile dl(List<RdfFact> facts) {
+        return new CgmesDiagramLayoutProfile(
+                entities(facts, "Diagram"),
+                entities(facts, "DiagramObject"),
+                entities(facts, "DiagramObjectPoint"),
+                entities(facts, "VisibilityLayer"));
+    }
+
+    private CgmesGeographicalLocationProfile gl(List<RdfFact> facts) {
+        return new CgmesGeographicalLocationProfile(
+                entities(facts, "Location"),
+                entities(facts, "PositionPoint"),
+                entities(facts, "CoordinateSystem"));
     }
 }

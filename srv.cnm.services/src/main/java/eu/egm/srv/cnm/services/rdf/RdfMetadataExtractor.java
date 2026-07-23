@@ -1,7 +1,12 @@
 package eu.egm.srv.cnm.services.rdf;
 
+import com.utils.profile.ProfileDefaults;
+import com.utils.profile.ProfileDefaultsService;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.ProfilePayload;
+import eu.egm.data.cnm.cgmes.CgmesProfileKind;
+import eu.egm.data.cnm.nc.NCProfileKind;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,8 +29,17 @@ public class RdfMetadataExtractor {
     private final RdfXmlProfileParser parser = new RdfXmlProfileParser();
     private final List<ProfileExtractionStrategy> strategies = List.of(
             new CgmesProfileExtractionStrategy(),
-            new NcpProfileExtractionStrategy(),
+            new NCProfileExtractionStrategy(),
             new UnknownProfileExtractionStrategy());
+    private final ProfileDefaultsService profileDefaultsService;
+
+    public RdfMetadataExtractor() {
+        this(new ProfileDefaultsService());
+    }
+
+    RdfMetadataExtractor(ProfileDefaultsService profileDefaultsService) {
+        this.profileDefaultsService = profileDefaultsService;
+    }
 
     /**
      * Extracts metadata when no filename-derived profile hints are available.
@@ -34,7 +48,16 @@ public class RdfMetadataExtractor {
      * @return profile-aware metadata and typed profile payload
      */
     public RdfMetadata extract(byte[] payload) {
-        return extract(payload, ProfileFamily.Unknown, "", "", "");
+        return extract(payload, ProfileProcessingContext.forFile(
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                ProfileFamily.Unknown,
+                ""));
     }
 
     /**
@@ -57,33 +80,83 @@ public class RdfMetadataExtractor {
             String filenameProfileType,
             String fileId,
             String objectId) {
-        ParsedRdfModel model = parser.parse(payload, filenameFamily, filenameProfileType);
-        ProfileExtractionStrategy strategy = strategies.stream()
-                .filter(candidate -> candidate.supports(model.family(), model.profileType()))
-                .findFirst()
-                .orElseThrow();
-        ProfilePayload<?> profilePayload = strategy.extract(
-                model.family(),
-                model.profileType(),
+        return extract(payload, ProfileProcessingContext.forFile(
+                "",
                 fileId,
                 objectId,
-                model.facts());
-        Map<String, Long> entityCounts = model.facts().stream()
-                .collect(Collectors.groupingBy(RdfFact::type, LinkedHashMap::new, Collectors.counting()));
-        return new RdfMetadata(
-                model.modelId(),
+                "",
+                "",
+                "",
+                "",
+                filenameFamily,
+                filenameProfileType));
+    }
+
+    /**
+     * Extracts profile metadata using a caller-provided processing context.
+     *
+     * @param payload raw RDF/XML bytes
+     * @param context file processing context created by the import processor
+     * @return metadata document contents ready for persistence
+     */
+    public RdfMetadata extract(byte[] payload, ProfileProcessingContext context) {
+        ParsedRdfModel model = parser.parse(payload, context.profileFamily(), context.profileType());
+        ProfileDefaults defaults = profileDefaults(model.family());
+        ProfileProcessingContext detectedContext = context.withDetectedProfile(
                 model.family(),
                 model.profileType(),
-                detectedProfileKind(model.family(), model.profileType()),
-                profileJsonType(model.family(), model.profileType()),
+                defaults);
+        ProfileExtractionStrategy strategy = strategies.stream()
+                .filter(candidate -> candidate.supports(detectedContext.profileFamily(), detectedContext.profileType()))
+                .findFirst()
+                .orElseThrow();
+        ProfilePayload<?> profilePayload = strategy.extract(detectedContext, model.facts());
+        Map<String, Long> entityCounts = model.facts().stream()
+                .collect(Collectors.groupingBy(RdfFact::type, LinkedHashMap::new, Collectors.counting()));
+        List<String> warnings = new ArrayList<>(profilePayload.warnings());
+        warnings.addAll(profileDefaultWarnings(detectedContext));
+        return new RdfMetadata(
+                model.modelId(),
+                detectedContext.profileFamily(),
+                detectedContext.profileType(),
+                detectedProfileKind(detectedContext.profileFamily(), detectedContext.profileType()),
+                profileJsonType(detectedContext.profileFamily(), detectedContext.profileType()),
                 model.profiles(),
                 entityCounts,
-                profilePayload.warnings(),
+                warnings,
                 profilePayload);
     }
 
+    private ProfileDefaults profileDefaults(ProfileFamily family) {
+        if (family == ProfileFamily.Unknown) {
+            return new ProfileDefaults("", Map.of());
+        }
+        String defaultsFamily = family == ProfileFamily.NCP ? "nc" : "cgmes";
+        return profileDefaultsService.load(defaultsFamily, "defaults");
+    }
+
+    private List<String> profileDefaultWarnings(ProfileProcessingContext context) {
+        if (context.profileType().isBlank() || context.profileFamily() == ProfileFamily.Unknown) {
+            return List.of();
+        }
+        ProfileDefaults defaults = context.profileDefaults();
+        if (defaults == null) {
+            return List.of();
+        }
+        List<String> supportedKinds = defaults.stringList("profile.supported-kinds");
+        if (!supportedKinds.isEmpty() && supportedKinds.stream().noneMatch(kind -> kind.equalsIgnoreCase(context.profileType()))) {
+            return List.of("Profile type %s is not listed in %s".formatted(context.profileType(), defaults.source()));
+        }
+        return List.of();
+    }
+
     private String detectedProfileKind(ProfileFamily family, String profileType) {
-        return (family == ProfileFamily.NCP ? "NCP_" : "CGMES_") + valueOr(profileType, "UNKNOWN");
+        if (family == ProfileFamily.NCP) {
+            NCProfileKind kind = NCProfileKind.fromCode(profileType);
+            return "NCP_" + (kind == NCProfileKind.UNKNOWN ? valueOr(profileType, "UNKNOWN") : kind.name());
+        }
+        CgmesProfileKind kind = CgmesProfileKind.fromCode(profileType);
+        return "CGMES_" + (kind == CgmesProfileKind.UNKNOWN ? valueOr(profileType, "UNKNOWN") : kind.name());
     }
 
     private String profileJsonType(ProfileFamily family, String profileType) {

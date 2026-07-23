@@ -9,7 +9,8 @@ The implementation must not map raw RDF/XML directly to IIDM. Each RDF/XML paylo
 ## Goals
 
 - Detect CGMES and NCP profile type from filename metadata and RDF profile references.
-- Extract each known profile into its own DTO representation, such as EQ, SSH, SV, TP, and NCP-specific profiles.
+- Keep `ProfileFamily` limited to `CGMES`, `NCP`, and `Unknown`; resolve concrete profile kinds through `CgmesProfileKind` and `NCProfileKind`.
+- Extract each known profile into its own DTO representation, such as EQ, SSH, SV, TP, DL, GL, and NC profile-specific payloads.
 - Reuse common grid-topology DTOs across profiles so shared concepts such as substations, voltage levels, equipment, terminals, and connectivity relations are not duplicated.
 - Store profile data in Elasticsearch as JSON owned by the processed file profile document.
 - Convert DTOs to JSON and JSON back to DTOs through `com.mapping`.
@@ -86,8 +87,8 @@ sequenceDiagram
 
 Profile-specific packages should remain under the existing `data.cnm` domain packages:
 
-- `data.cnm.cgmes`: `CgmesEquipmentProfile`, `CgmesSteadyStateHypothesisProfile`, `CgmesStateVariablesProfile`, `CgmesTopologyProfile`, and shared CGMES profile entities.
-- `data.cnm.ncp`: NCP profile DTOs aligned with detected NCP profile kinds.
+- `data.cnm.cgmes`: `CgmesEquipmentProfile`, `CgmesSteadyStateHypothesisProfile`, `CgmesStateVariablesProfile`, `CgmesTopologyProfile`, `CgmesDiagramLayoutProfile`, `CgmesGeographicalLocationProfile`, and shared CGMES profile entities.
+- `data.cnm.nc`: Network Code profile DTOs aligned with detected NC profile kinds while preserving `NCP` as the public family value.
 - `data.iidm`: remains the dedicated PowSyBl IIDM module and should not be populated directly from raw RDF/XML.
 
 Each profile DTO should store typed collections for the profile it represents. For example:
@@ -100,16 +101,16 @@ Each profile DTO should store typed collections for the profile it represents. F
 
 ## Extraction Strategy
 
-`RdfMetadataExtractor` should become a coordinator rather than a monolithic parser.
+`RdfMetadataExtractor` is a coordinator rather than a monolithic parser.
 
 1. Detect metadata:
    - Parse filename using `<Timestamp>_<Time Frame>_<TSO Name>_<Profile Type>_<Version>`.
    - Read RDF profile references where present.
-   - Resolve `ProfileFamily` and profile type using existing `ProfileFamily` and profile-kind DTOs.
+   - Resolve `ProfileFamily` and profile type using family-specific profile-kind DTOs.
 
 2. Select strategy:
-   - `CgmesProfileExtractionStrategy` for CGMES EQ, SSH, SV, TP, and related profile kinds.
-   - `NcpProfileExtractionStrategy` for NCP profile kinds.
+   - `CgmesProfileExtractionStrategy` for CGMES EQ, SSH, SV, TP, DL, GL, and related profile kinds.
+   - `NCProfileExtractionStrategy` for NCP profile kinds.
    - `UnknownProfileExtractionStrategy` for unsupported profiles that still need metadata, warnings, and raw entity counts.
 
 3. Build an interim RDF fact model:
@@ -128,6 +129,24 @@ Each profile DTO should store typed collections for the profile it represents. F
    - entity counts
    - warnings
    - typed `ProfilePayload<?>`
+
+`ProfileProcessingContext` is the explicit hand-off object between the import
+processor and the RDF extraction layer. It carries import ID, file ID, object ID,
+TSO, business day, business time, timeframe, detected family/profile type, and
+the cached profile-default configuration used during extraction. Its
+`queueKey()` method is the canonical serialization key for model-group
+processing.
+
+Profile extraction defaults are loaded from cached YAML resources under
+`src/main/resources/config/profile/cgmes` and
+`src/main/resources/config/profile/nc` in `srv.cnm.services`. The supported-kind
+lists are configuration, not hard-coded control flow. Unsupported-but-parseable
+profile kinds are retained with diagnostics so import processing can continue.
+
+File-processing events are serialized by import ID, TSO, business day, business
+time, and timeframe. This per-model queue key is required because EQ, TP, SSH,
+and SV files for a TSO are cross-referenced and should not update shared import
+state concurrently.
 
 ## Elasticsearch Document Model
 

@@ -5,8 +5,12 @@
 ## Package Layout
 
 - `eu.egm.data.cnm.common`: import status, service type, timeframe, profile references, and paged responses.
-- `eu.egm.data.cnm.cgmes`: CGMES metadata and profile vocabulary.
-- `eu.egm.data.cnm.ncp`: NCP metadata and profile vocabulary.
+- `eu.egm.data.cnm.cgmes`: CGMES metadata, profile vocabulary, and profile-specific DTOs.
+- `eu.egm.data.cnm.nc`: Network Code profile metadata and profile vocabulary.
+
+`ProfileFamily` deliberately contains only top-level families: `CGMES`, `NCP`,
+and `Unknown`. Profile-specific values such as `EQ`, `SSH`, `SV`, `TP`, `DL`,
+`GL`, `AEAS`, `SAR`, and `SSI` live in `CgmesProfileKind` and `NCProfileKind`.
 
 IIDM projections and IIDM transform events live in the separate `data.iidm`
 module so CNM profile DTOs stay focused on RDF metadata and common topology.

@@ -107,7 +107,7 @@ public class MockCnmImportController {
                 request.importId(),
                 request.serviceType(),
                 request.timeFrame(),
-                ProfileFamily.SV,
+                ProfileFamily.CGMES,
                 request.message());
         imports.removeIf(item -> item.importId().equals(status.importId()));
         imports.add(0, status);

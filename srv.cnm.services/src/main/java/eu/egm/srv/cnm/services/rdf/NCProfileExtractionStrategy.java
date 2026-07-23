@@ -2,24 +2,23 @@ package eu.egm.srv.cnm.services.rdf;
 
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.ProfilePayload;
-import eu.egm.data.cnm.ncp.NcpProfilePayload;
+import eu.egm.data.cnm.nc.NCProfileKind;
+import eu.egm.data.cnm.nc.NCProfilePayload;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-class NcpProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
+class NCProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
     @Override
     public boolean supports(ProfileFamily family, String profileType) {
-        return family == ProfileFamily.NCP || "NCP".equalsIgnoreCase(profileType);
+        return family == ProfileFamily.NCP || NCProfileKind.isKnown(profileType);
     }
 
     @Override
     public ProfilePayload<?> extract(
-            ProfileFamily family,
-            String profileType,
-            String fileId,
-            String objectId,
+            ProfileProcessingContext context,
             List<RdfFact> facts) {
+        NCProfileKind kind = NCProfileKind.fromCode(context.profileType());
         List<Map<String, Object>> entities = facts.stream()
                 .map(fact -> {
                     Map<String, Object> row = new LinkedHashMap<>(fact.attributes());
@@ -31,12 +30,12 @@ class NcpProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
                 .toList();
         return new ProfilePayload<>(
                 ProfileFamily.NCP,
-                profileType,
-                fileId,
-                objectId,
-                topologyObjects(facts, profileType),
+                kind == NCProfileKind.UNKNOWN ? context.profileType() : kind.code(),
+                context.fileId(),
+                context.objectId(),
+                topologyObjects(facts, context.profileType()),
                 topologyRelations(facts),
                 List.of(),
-                new NcpProfilePayload(profileType, entities));
+                new NCProfilePayload(kind, context.profileType(), entities));
     }
 }

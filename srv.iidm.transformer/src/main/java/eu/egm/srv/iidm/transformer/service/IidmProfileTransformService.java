@@ -7,6 +7,8 @@ import com.infra.storage.document.DocumentPage;
 import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.DocumentSearchRequest;
 import com.utils.restservice.RestServiceSupport;
+import com.utils.profile.ProfileDefaults;
+import com.utils.profile.ProfileDefaultsService;
 import com.powsybl.iidm.network.Bus;
 import com.powsybl.iidm.network.BusbarSection;
 import com.powsybl.iidm.network.Generator;
@@ -86,10 +88,23 @@ public class IidmProfileTransformService extends RestServiceSupport {
         this.networkRepository = infrastructureUtils.documentRepository(new IidmNetworkDocumentAdapter());
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
-        this.transformer = new CnmToIidmTransformer(new ReflectionMappingService(), new CnmToIidmMappingConfiguration());
+        this.transformer = new CnmToIidmTransformer(new ReflectionMappingService(), iidmMappingConfiguration());
         this.eventExchange = eventExchange;
         this.completedRoutingKey = completedRoutingKey;
         this.failedRoutingKey = failedRoutingKey;
+    }
+
+    private CnmToIidmMappingConfiguration iidmMappingConfiguration() {
+        ProfileDefaults defaults = new ProfileDefaultsService().load("iidm", "defaults");
+        return new CnmToIidmMappingConfiguration(
+                defaults.doubleValue("iidm.defaults.nominal-voltage", 400.0),
+                defaults.stringValue("iidm.defaults.substation-id", "EGM_DEFAULT_SUBSTATION"),
+                defaults.stringValue("iidm.defaults.substation-name", "Default Substation"),
+                defaults.stringValue("iidm.defaults.voltage-level-id", "EGM_DEFAULT_VL"),
+                defaults.stringValue("iidm.defaults.voltage-level-name", "Default Voltage Level"),
+                defaults.stringValue("iidm.defaults.bus-id", "EGM_DEFAULT_BUS"),
+                defaults.stringValue("iidm.defaults.bus-name", "Default Bus"),
+                defaults.doubleValue("iidm.defaults.line-x", 0.0001));
     }
 
     public void transform(IidmProfileTransformRequested request) {

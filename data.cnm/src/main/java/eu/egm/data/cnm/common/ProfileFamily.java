@@ -1,24 +1,17 @@
 package eu.egm.data.cnm.common;
 
-import java.util.Arrays;
-
 /**
- * RDF profile family declared by the imported model.
+ * Top-level RDF profile family declared by the imported model.
+ *
+ * <p>Profile-specific values such as EQ, SSH, SV, TP, DL, GL, or NC profile
+ * names belong to family-specific profile-kind enums. This enum deliberately
+ * stays at family level so file metadata, RDF headers, Elasticsearch documents,
+ * and downstream services do not mix profile kind and profile family concepts.</p>
  */
 public enum ProfileFamily {
-    EQ("EQ"),
-    DL("DL"),
-    DY("DY"),
-    EB("EB"),
-    GL("GL"),
-    OP("OP"),
-    SC("SC"),
-    SV("SV"),
-    SSH("SSH"),
-    TP("TP"),
     NCP("NCP"),
     CGMES("CGMES"),
-    Unknown("UK");
+    Unknown("Unknown");
 
     private final String code;
 
@@ -31,10 +24,37 @@ public enum ProfileFamily {
     }
 
     public static ProfileFamily fromCode(String code) {
-        return Arrays.stream(values())
-                .filter(value -> value.equalsProfileFamily(code))
-                .findFirst()
-                .orElse(Unknown);
+        if (code == null || code.isBlank()) {
+            return Unknown;
+        }
+        String normalized = code.trim().replace('-', '_');
+        if (CGMES.equalsProfileFamily(normalized)) {
+            return CGMES;
+        }
+        if (NCP.equalsProfileFamily(normalized) || "NC".equalsIgnoreCase(normalized)) {
+            return NCP;
+        }
+        if (isCgmesCoreProfile(normalized)) {
+            return CGMES;
+        }
+        if (isNcOnlyProfile(normalized)) {
+            return NCP;
+        }
+        return Unknown;
+    }
+
+    private static boolean isCgmesCoreProfile(String code) {
+        return switch (code.toUpperCase()) {
+            case "EQ", "SSH", "SV", "TP", "DL", "GL", "DY", "SC", "OP", "AP", "EQ_BD", "EQ_OP", "EQ_SC", "EQ_CO" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isNcOnlyProfile(String code) {
+        return switch (code.toUpperCase()) {
+            case "AEAS", "ER", "GD", "IAM", "MA", "OR", "PS", "PSP", "RA", "RAS", "SAR", "SM", "SIS", "SHS", "SSI" -> true;
+            default -> false;
+        };
     }
 
     @Override

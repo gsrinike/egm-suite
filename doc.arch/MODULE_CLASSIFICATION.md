@@ -26,7 +26,7 @@ Rules:
 
 Current modules:
 
-- `data.cnm`: data transfer objects shared between CNM GUI, service, and mock modules. Packages are separated by `common`, `cgmes`, and `ncp`. See [README](../data.cnm/README.md).
+- `data.cnm`: data transfer objects shared between CNM GUI, service, and mock modules. Packages are separated by `common`, `cgmes`, and `nc`. See [README](../data.cnm/README.md).
 - `data.iidm`: PowSyBl-based IIDM network wrappers, summaries, XIIDM helpers, and IIDM transform event contracts. See [README](../data.iidm/README.md).
 - `map.cnm.iidm`: CNM profile DTO to PowSyBl IIDM `Network` mapping with no Spring or infrastructure dependency. See [README](../map.cnm.iidm/README.md).
 - `srv.cnm.services`: Spring Boot REST service that accepts RDF profile files, classifies CGMES/NCP profile references, stores raw files through `com.infra`, and persists import metadata. See [README](../srv.cnm.services/README.md).

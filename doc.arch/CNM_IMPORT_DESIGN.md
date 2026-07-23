@@ -14,7 +14,7 @@ The application accepts RDF profile files aligned with the ENTSO-E application p
 
 ## Modules
 
-- `data.cnm`: transport DTOs shared by GUI, service, and mock modules. Packages are separated into `common`, `cgmes`, and `ncp`.
+- `data.cnm`: transport DTOs shared by GUI, service, and mock modules. Packages are separated into `common`, `cgmes`, and `nc`.
 - `data.iidm`: PowSyBl-based IIDM network wrappers, summaries, XIIDM helpers, and IIDM transform event contracts.
 - `map.cnm.iidm`: CNM profile DTO to PowSyBl IIDM `Network` mapping.
 - `srv.cnm.services`: Spring Boot REST service exposing CNM import APIs and OpenAPI documentation.
@@ -48,9 +48,9 @@ The import flow is split into two consistency boundaries.
    - Return to the GUI after object storage and event publication, without waiting for RDF metadata extraction.
 
 2. Processing boundary:
-   - Consume file-processing events asynchronously.
+   - Consume file-processing events asynchronously, serialized per import, TSO, business day, business time, and timeframe.
    - Read the file payload from object storage.
-   - Parse filename metadata and extract RDF metadata.
+   - Parse filename metadata and extract RDF metadata using cached profile defaults from `src/main/resources/config/profile/cgmes` and `src/main/resources/config/profile/nc`.
    - Persist searchable profile metadata in Elasticsearch.
    - Update the file row as `PARSED` or `FAILED`.
    - Recompute and persist the aggregate import state after every file update.
@@ -80,6 +80,7 @@ The aggregate import status should be extended from the current `INIT`, `STORED`
 3. Add asynchronous processor:
    - Add a RabbitMQ listener in `srv.cnm.services` or a separate worker module when deployment separation is needed.
    - The listener reads object bytes from object storage, extracts RDF metadata, persists `cnm-profiles`, and updates the file state.
+   - The listener creates a `ProfileProcessingContext` per file; the context owns the import/file identity, model grouping values, profile hints, and the canonical queue key.
    - Use idempotent updates keyed by `importId` and `fileId` so event redelivery is safe.
 
 4. Preserve consistency:
