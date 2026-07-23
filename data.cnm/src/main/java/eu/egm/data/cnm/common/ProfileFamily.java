@@ -45,7 +45,8 @@ public enum ProfileFamily {
 
     private static boolean isCgmesCoreProfile(String code) {
         return switch (code.toUpperCase()) {
-            case "EQ", "SSH", "SV", "TP", "DL", "GL", "DY", "SC", "OP", "AP", "EQ_BD", "EQ_OP", "EQ_SC", "EQ_CO" -> true;
+            case "EQ", "SSH", "SV", "TP", "DL", "GL", "DY", "SC", "OP", "AP", "EQBD", "EQ_BD", "TPBD", "TP_BD",
+                 "EQ_OP", "EQ_SC", "EQ_CO" -> true;
             default -> false;
         };
     }

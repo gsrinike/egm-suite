@@ -1,93 +1,103 @@
 # Energy Grid Management Suite
 
-Open-source baseline for shared Energy Grid Management platform capabilities. The current repository contains reusable utility, mapping, infrastructure, authentication, and vault modules plus CNM import and RCC/CSA workflow application modules.
+Energy Grid Management Suite is a Maven multi-module workspace for grid model
+management and regional coordination applications. The current codebase provides
+shared platform capabilities, Common Network Model import, PowSyBl IIDM
+transformation, RCC/CSA orchestration, reusable analysis service boundaries, and
+Vue-based management screens.
 
-## Module Map
+## Current Module Families
 
-This README is the suite entry point. Detailed behavior belongs in each module README.
+### Shared capabilities
 
-- `com.utils`: shared utility code, cache abstractions, environment resolution, and module-scoped configuration loading.
-- `com.mapping`: generic configuration-driven object mapping.
-- `com.infra`: reusable backend infrastructure adapters for document storage, object storage, event publishing, and BPM process invocation.
-- `com.auth`: OIDC/OAuth 2.0 authorization service backed by Keycloak.
-- `com.vault`: HashiCorp Vault and fallback secret lookup with bootstrap authorization checks.
-- `data.cnm`: DTOs exchanged by CNM GUI, service, and mock modules for CGMES, NCP, and IIDM metadata.
-- `data.common`: DTOs exchanged by RCC workflow, CSA, LF/SA, RAO, GUI, BPM, and mock modules.
-- `srv.cnm.services`: Spring Boot REST service for CNM RDF import and import status retrieval.
-- `mock.srv.cnm.services`: mock Spring Boot service compatible with the CNM import OpenAPI contract.
-- `srv.common.lfsa`: Spring Boot REST service for reusable load-flow and security-analysis capability.
-- `mock.srv.common.lfsa`: mock LF/SA service compatible with the common LF/SA OpenAPI contract.
-- `srv.common.rao`: Spring Boot REST service for reusable remedial-action optimization capability.
-- `mock.srv.common.rao`: mock RAO service compatible with the common RAO OpenAPI contract.
-- `srv.csa.services`: Spring Boot REST service that coordinates CSA case workflow and invokes common LF/SA, RAO, and BPM services.
-- `mock.srv.csa.services`: mock CSA service compatible with the CSA OpenAPI contract.
-- `bpm.csa.service`: Camunda-backed CSA workflow process service exposed through generic BPM REST endpoints.
-- `gui.common`: Vue shared component and styling module for standard buttons, links, menus, dropdowns, and data tables.
-- `gui.cnm.manager`: Vue CNM manager application for importing RDF models and viewing upload status.
-- `gui.rcc.manager`: Vue RCC manager application focused on CSA execution and workflow monitoring.
-- `doc.arch`: architecture notes, local deployment details, module classification, and the module archetype.
+- `com.utils`: environment resolution, YAML configuration loading, cache helpers,
+  REST service support, outbound `RestTemplate` configuration, and bootstrap
+  secret authorization contracts.
+- `com.mapping`: generic mapping contracts, reflection mapping, transformer
+  contracts, and JSON conversion.
+- `com.infra`: infrastructure adapters for Elasticsearch document storage,
+  MinIO object storage, RabbitMQ events, and Camunda/remote BPM integration.
+- `com.auth`: Keycloak-backed OIDC/OAuth2 authentication and authorization
+  service.
+- `com.vault`: authorized Vault/environment/config secret resolution.
 
-## Build Metadata
+### CNM and IIDM
 
-- `egm-dependencies/pom.xml` is the Maven parent dependency catalog. It centralizes dependency and plugin versions through Maven-compatible `version.*` property tags, `dependencyManagement`, and `pluginManagement`; it does not add those dependencies to every module.
-- `modules.yml` is the standalone module inventory for developer review and automation. Maven requires the active aggregator module list to remain inline in `pom.xml`, so keep both lists synchronized when adding or removing modules.
-- Module POMs should declare only the dependencies they directly use. Infrastructure dependencies such as MinIO, Elasticsearch, RabbitMQ, Camunda, and Spring Boot belong in backend modules that need them.
+- `data.cnm`: transport DTOs for CNM import, CGMES/NCP profile metadata,
+  profile payloads, common topology, snapshots, and dynamic tables.
+- `data.iidm`: PowSyBl-backed IIDM event and network DTOs.
+- `map.cnm.iidm`: CGMES source and compatibility CNM DTO to PowSyBl IIDM
+  transformation.
+- `srv.cnm.services`: CNM import service for chunked uploads, raw object
+  storage, RDF metadata extraction, profile persistence, and IIDM event
+  publication.
+- `srv.iidm.transformer`: IIDM transformer service that consumes transform
+  events, converts raw CGMES groups with PowSyBl, and persists IIDM documents.
+- `mock.srv.cnm.services`: in-memory CNM mock service.
+- `gui.common`: shared Vue components, styling, theme utilities, and browser
+  logging helpers.
+- `gui.cnm.manager`: CNM import and exploration UI.
 
-## Quick Start
+### RCC, CSA, and common analysis
 
-Start the shared local infrastructure:
+- `data.common`: DTOs shared by RCC, CSA, load-flow/security-analysis, RAO,
+  BPM, GUI, and mocks.
+- `srv.common.lfsa`: reusable load-flow and security-analysis service boundary.
+- `mock.srv.common.lfsa`: mock LF/SA service.
+- `srv.common.rao`: reusable remedial-action optimization service boundary.
+- `mock.srv.common.rao`: mock RAO service.
+- `srv.csa.services`: CSA orchestration service.
+- `mock.srv.csa.services`: mock CSA orchestration service.
+- `bpm.csa.service`: Camunda-backed CSA workflow service.
+- `gui.rcc.manager`: RCC manager UI with CGM import integration, CSA screens,
+  and workflow monitoring.
 
-```bash
-docker compose -f docker/docker-compose.yml up elasticsearch minio rabbitmq keycloak otel-collector
-```
-
-Run the CNM service:
-
-```bash
-mvn -pl srv.cnm.services -am spring-boot:run
-```
-
-Run the CSA mock backend and GUI during frontend development:
-
-```bash
-mvn -pl mock.srv.csa.services -am spring-boot:run
-cd gui.rcc.manager && npm run dev
-```
-
-## Common Builds
+## Build And Run
 
 Build all Maven modules:
 
 ```bash
-mvn verify
+mvn -Dmaven.repo.local=work/m2 verify
 ```
 
-Build Docker images through Maven:
+Package selected backend modules without Docker work:
 
 ```bash
-mvn -Ddocker.namespace=your-dockerhub-user package
+mvn -Dmaven.repo.local=work/m2 \
+  -Ddocker.skip=true -Ddocker.skip.build=true -Ddocker.skip.push=true \
+  -pl srv.cnm.services,srv.iidm.transformer -am package
 ```
 
-Run the full local Docker Compose stack from locally built artifacts:
+Start the local stack:
 
 ```bash
-mvn -Ddocker.skip.build=true -Ddocker.skip.push=true clean package
-docker compose -f docker/docker-compose.yml up
+docker/egm-compose.sh up
 ```
 
-## Where Details Live
-
-- Authentication endpoints, Keycloak configuration, and gateway authorization flow: `com.auth/README.md`.
-- Configuration loading order, environment resolution, and cache-provider resolution: `com.utils/README.md`.
-- Infrastructure adapter contracts and technology ownership rules: `com.infra/README.md`.
-- Mapping implementation details: `com.mapping/README.md`.
-- Vault configuration and authorized secret resolution: `com.vault/README.md`.
-- CNM import application details: `data.cnm/README.md`, `srv.cnm.services/README.md`, `mock.srv.cnm.services/README.md`, `gui.common/README.md`, and `gui.cnm.manager/README.md`.
-- RCC/CSA application details: `data.common/README.md`, `srv.common.lfsa/README.md`, `srv.common.rao/README.md`, `srv.csa.services/README.md`, `bpm.csa.service/README.md`, `mock.srv.csa.services/README.md`, and `gui.rcc.manager/README.md`.
-- Local deployment, environment rules, and architecture guidance: `doc.arch/README.md` and the documents under `doc.arch`.
-
-## Tests
+Build and deploy the main local CNM/RCC stack:
 
 ```bash
-mvn test
+./build-and-deploy.sh
 ```
+
+Run Vue modules locally from their module directory:
+
+```bash
+npm install
+npm run dev
+```
+
+## Documentation
+
+- Architecture overview: `doc.arch/README.md`
+- Current design principles: `doc.arch/DESIGN_PRINCIPLES.md`
+- Module classification: `doc.arch/MODULE_CLASSIFICATION.md`
+- CNM import design: `doc.arch/CNM_IMPORT_DESIGN.md`
+- RDF metadata design: `doc.arch/RDF_METADATA_MGMT.md`
+- IIDM transformation design: `doc.arch/IIDM_TRANSFORMATION_DESIGN.md`
+- RCC/CSA design: `doc.arch/RCC_CSA_DESIGN.md`
+- Local deployment and environment: `doc.arch/LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`
+- Codex/repository rules: `doc.arch/codegen/codex/README.md`
+
+Each active module also owns a local `README.md` with its scope, package shape,
+and developer commands.

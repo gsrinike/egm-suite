@@ -27,7 +27,7 @@ class CgmesProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
             case EQUIPMENT, BOUNDARY_EQUIPMENT, EQUIPMENT_OPERATION, EQUIPMENT_SHORT_CIRCUIT, EQUIPMENT_CONTINGENCY -> equipment(facts);
             case STEADY_STATE_HYPOTHESIS -> ssh(facts);
             case STATE_VARIABLES -> sv(facts);
-            case TOPOLOGY -> tp(facts);
+            case TOPOLOGY, BOUNDARY_TOPOLOGY -> tp(facts);
             case DIAGRAM_LAYOUT -> dl(facts);
             case GEOGRAPHICAL_LOCATION -> gl(facts);
             default -> entities(facts);

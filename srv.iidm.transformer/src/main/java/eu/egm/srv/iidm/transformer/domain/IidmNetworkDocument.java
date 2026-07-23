@@ -16,6 +16,9 @@ public record IidmNetworkDocument(
         String networkFormat,
         String networkXiidm,
         List<String> networkXiidmChunks,
+        String networkJsonType,
+        String networkJson,
+        List<String> networkJsonChunks,
         List<IidmElementCountDocument> elementCounts,
         Object createdAt,
         Object updatedAt) {
@@ -23,6 +26,9 @@ public record IidmNetworkDocument(
         sourceFileIds = sourceFileIds == null ? List.of() : List.copyOf(sourceFileIds);
         networkXiidm = networkXiidm == null ? "" : networkXiidm;
         networkXiidmChunks = networkXiidmChunks == null ? List.of() : List.copyOf(networkXiidmChunks);
+        networkJsonType = networkJsonType == null ? "" : networkJsonType;
+        networkJson = networkJson == null ? "" : networkJson;
+        networkJsonChunks = networkJsonChunks == null ? List.of() : List.copyOf(networkJsonChunks);
         elementCounts = elementCounts == null ? List.of() : List.copyOf(elementCounts);
     }
 

@@ -19,6 +19,7 @@ public enum CgmesProfileKind {
     OPERATION("OP", "Operation"),
     AVAILABILITY_PLAN("AP", "Availability Plan"),
     BOUNDARY_EQUIPMENT("EQ_BD", "Boundary Equipment"),
+    BOUNDARY_TOPOLOGY("TP_BD", "Boundary Topology"),
     EQUIPMENT_OPERATION("EQ_OP", "Equipment Operation"),
     EQUIPMENT_SHORT_CIRCUIT("EQ_SC", "Equipment Short Circuit"),
     EQUIPMENT_CONTINGENCY("EQ_CO", "Equipment Contingency"),
@@ -43,7 +44,9 @@ public enum CgmesProfileKind {
     }
 
     public boolean matches(String value) {
-        return normalize(code).equals(normalize(value)) || normalize(label).equals(normalize(value));
+        return normalize(code).equals(normalize(value))
+                || normalize(label).equals(normalize(value))
+                || compactMatches(value);
     }
 
     public static CgmesProfileKind fromCode(String value) {
@@ -61,5 +64,13 @@ public enum CgmesProfileKind {
         return value == null
                 ? ""
                 : value.trim().replace('-', '_').replace(' ', '_').toUpperCase(Locale.ROOT);
+    }
+
+    private static String compact(String value) {
+        return normalize(value).replace("_", "");
+    }
+
+    private boolean compactMatches(String value) {
+        return compact(code).equals(compact(value)) || compact(label).equals(compact(value));
     }
 }

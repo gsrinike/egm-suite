@@ -1,90 +1,79 @@
 # Design Principles
 
-This document records the principles adopted in the Energy Grid Management Suite and how they are applied in the current codebase.
+This document describes the principles currently applied in the repository.
 
-## 1. Modular Ownership
+## Modular Ownership
 
-Each module has a narrow purpose and a clear owner boundary:
+Each module owns one kind of responsibility.
 
-- `com.*` modules provide cross-cutting capabilities such as utility/cache/configuration loading, authorized secret lookup, infrastructure adapters, and authentication.
-- CNM modules provide the application-specific surface for Common Network Model import and future CGM, CSA, and CC use cases.
+- `com.*` modules own shared platform capabilities: configuration, mapping,
+  infrastructure adapters, authentication, vault integration, cache helpers, and
+  REST service utilities.
+- `data.*` modules own transport contracts and DTOs.
+- `map.*` modules own transformation logic without Spring or infrastructure
+  dependencies.
+- `srv.*` modules own runnable REST services and workers.
+- `mock.srv.*` modules mirror service contracts with deterministic in-memory
+  behavior.
+- `bpm.*` modules own process definitions and process runtime endpoints.
+- `gui.*` modules own Vue applications or shared Vue components.
 
-This keeps shared platform capabilities focused and prevents technology-specific details from leaking across module boundaries.
+## Dependency Direction
 
-## 2. Dependency Direction
+Dependencies point from applications toward stable shared contracts.
 
-Dependencies flow from use-case modules toward stable contracts and utilities:
+- Service modules use `com.utils`, `com.infra`, `com.mapping`, and data modules.
+- Services invoke infrastructure through `InfrastructureUtils`; they do not
+  import Elasticsearch, MinIO, RabbitMQ, or Camunda adapters directly.
+- `srv.cnm.services` publishes IIDM events but does not depend on
+  `srv.iidm.transformer`.
+- `srv.iidm.transformer` owns IIDM persistence and may use PowSyBl through
+  `data.iidm` and `map.cnm.iidm`.
+- CSA orchestration uses common LF/SA and RAO service contracts and does not
+  depend directly on `bpm.csa.service`.
+- `com.vault` depends on `com.utils` for bootstrap secret authorization.
+  `com.auth` does not depend on `com.vault`.
 
-- Services may depend on required shared modules such as `com.utils`, `com.mapping`, and `com.infra`.
-- CNM service modules depend on `data.cnm` for transport contracts and invoke infrastructure through `com.infra`.
-- CNM GUI modules depend on `gui.common` for reusable Vue components.
-- `com.vault` depends on `com.utils` for bootstrap secret authorization. `com.auth` must not depend on `com.vault`.
-- Shared mapping behavior belongs in `com.mapping`.
-- Shared REST service support and outbound HTTP client wiring belong in `com.utils.restservice`.
-- Shared infrastructure behavior belongs in `com.infra` and is exposed through adapter interfaces.
+## Configuration
 
-The root Maven POM manages versions but does not force technology dependencies into every module.
+Runtime configuration is YAML-based and module-scoped. `com.utils` resolves the
+runtime environment from JVM property `env`, environment variable `ENV`, then
+`local`.
 
-## 3. Configuration Over Code
-
-Runtime configuration is externalized into module-specific files:
+Configuration files follow this shape:
 
 - `base/<module>-application.yml`
 - `base/<module>-infra.yml`
-- `base/<module>-vault.yml`
 - `base/<module>-cache-config.yml`
+- `base/<module>-vault.yml`
 - `<env>/<module>-application.yml`
 - `<env>/<module>-infra.yml`
-- `<env>/<module>-vault.yml`
 - `<env>/<module>-cache-config.yml`
+- `<env>/<module>-vault.yml`
 
-Base configuration defines defaults. Environment folders override only what changes.
+Environment-specific files override base defaults. Secrets can be referenced as
+`${vault:KEY}` and are authorized before Vault, environment, or config fallback
+values are returned.
 
-See [com.utils README](../com.utils/README.md).
+## Storage And Events
 
-## 4. Adapter and Factory Boundaries
+Document storage is separated by ownership and query use:
 
-Technology-specific behavior is hidden behind service interfaces and adapters:
+- CNM import metadata, profile metadata, profile payloads, profile fragments,
+  mRID indexes, and snapshots are owned by `srv.cnm.services`.
+- IIDM transform states and IIDM networks are owned by `srv.iidm.transformer`.
+- Large JSON/XML payloads are chunked or stored separately from list/search
+  documents so list screens do not load heavy data.
+- RabbitMQ topic exchanges are declared at application startup by publishers.
 
-- `com.infra.storage.document.DocumentRepositoryService` hides Elasticsearch access.
-- `com.infra.storage.object.ObjectStorageService` hides MinIO access.
-- `com.infra.event.EventPublisherService` hides RabbitMQ access.
-- `com.infra.bpm.BusinessProcessService` hides Camunda process orchestration and monitoring access.
-- `InfrastructureUtils` resolves concrete adapters.
-- `VaultService` hides HashiCorp Vault and environment/config fallback secret lookup, while `com.utils.secret.SecretAuthorizationService` authorizes each client/key pair before a secret is returned.
-- `MappingService` hides the mapping implementation used by domain transformers.
+## Frontend Reuse
 
-This makes backend services easier to test and keeps infrastructure replacement possible.
+`gui.common` owns shared styling, theme utilities, browser logging, refresh
+controls, and reusable components such as `DataTable` and `DynamicTable`.
+Feature GUIs consume these components through the package entry point.
 
-## 5. Local-First Developer Workflow
+## Verification
 
-The project is designed to run locally with Maven and Docker Compose:
-
-- Maven compiles/tests/builds modules.
-- Docker Compose starts shared local dependencies such as Elasticsearch, MinIO, RabbitMQ, OpenTelemetry, and Keycloak.
-- Docker image build/push behavior is controlled through Maven properties.
-
-Developers can run targeted module builds with `-pl <module> -am` and disable Docker work with:
-
-```bash
--Ddocker.skip.build=true -Ddocker.skip.push=true
-```
-
-## 6. Observability by Default in Services
-
-Runnable backend modules include standard logging and OpenTelemetry dependencies when they emit runtime telemetry. Libraries and DTO modules avoid runtime observability dependencies.
-
-## 7. Test Scope Matches Risk
-
-Tests are kept close to the behavior being changed:
-
-- Utility modules test configuration, cache, mapping, infrastructure, authorization, and vault behavior close to the owning package.
-- Runnable service modules test controller validation, service orchestration, and adapter-facing behavior when such modules are added.
-
-## 8. Documentation Beside the Module
-
-Each module owns a `README.md` explaining purpose, contents, implementation notes, and developer commands. Architecture documents link to those module READMEs instead of duplicating every detail.
-
-## 9. Contract-First Service Surfaces
-
-Runnable REST services publish OpenAPI specifications with the module. Mock services are built against the same contract shape so GUI work can continue without the production backend or infrastructure stack.
+Material code changes should be verified with targeted Maven or npm commands.
+Documentation-only changes should be validated with reference scans for stale
+module names, broken links, and contradictory state descriptions.

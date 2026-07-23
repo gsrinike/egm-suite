@@ -9,6 +9,7 @@ import com.infra.storage.document.DocumentSearchRequest;
 import com.infra.storage.document.DocumentSort;
 import com.infra.storage.object.ObjectStorageService;
 import com.utils.restservice.RestServiceSupport;
+import eu.egm.data.cnm.cgmes.CgmesProfileKind;
 import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmPage;
 import eu.egm.data.cnm.common.CnmProfileMetadata;
@@ -91,6 +92,10 @@ public class CnmImportRestService extends RestServiceSupport {
     private static final Pattern MODEL_FILE_PATTERN =
             Pattern.compile(
                     "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9_-]+)_(?<version>\\d+)$",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern BOUNDARY_MODEL_FILE_PATTERN =
+            Pattern.compile(
+                    "^(?<timestamp>\\d{8}T\\d{4}Z)__+(?<authority>.+?)_(?<profile>EQBD|EQ_BD|TPBD|TP_BD)_(?<version>\\d+)$",
                     Pattern.CASE_INSENSITIVE);
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
     private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
@@ -340,7 +345,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 safeFileName,
                 "",
                 toFileState(state),
-                ProfileFamily.Unknown,
+                modelFileName.profileFamily(),
                 modelFileName.businessDay(),
                 modelFileName.businessTime(),
                 modelFileName.timeFrame(),
@@ -548,6 +553,20 @@ public class CnmImportRestService extends RestServiceSupport {
         int dot = baseName.lastIndexOf('.');
         String stem = dot > 0 ? baseName.substring(0, dot) : baseName;
         Matcher matcher = MODEL_FILE_PATTERN.matcher(stem);
+        Matcher boundaryMatcher = BOUNDARY_MODEL_FILE_PATTERN.matcher(stem);
+        if (boundaryMatcher.matches()) {
+            String timestamp = boundaryMatcher.group("timestamp");
+            String profileType = boundaryMatcher.group("profile").toUpperCase(Locale.ROOT).replace('-', '_');
+            CgmesProfileKind profileKind = CgmesProfileKind.fromCode(profileType);
+            return new ModelFileName(
+                    LocalDate.parse(timestamp.substring(0, 8), DateTimeFormatter.BASIC_ISO_DATE).toString(),
+                    LocalTime.parse(timestamp.substring(9, 13), DateTimeFormatter.ofPattern("HHmm")).toString(),
+                    "",
+                    boundaryMatcher.group("authority"),
+                    profileKind == CgmesProfileKind.UNKNOWN ? profileType : profileKind.code(),
+                    boundaryMatcher.group("version"),
+                    ProfileFamily.CGMES);
+        }
         if (!matcher.matches()) {
             return ModelFileName.empty();
         }
@@ -711,14 +730,81 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private void publishSnapshotAssemblyIfComplete(CnmImportDocument document, CnmImportFileDocument processedFile) {
-        List<CnmImportFileDocument> groupFiles = document.files().stream()
-                .filter(file -> sameModelGroup(file, processedFile))
-                .toList();
-        if (groupFiles.isEmpty() || groupFiles.stream().anyMatch(file -> file.state() != ImportFileState.PARSED)) {
+        List<CnmImportFileDocument> boundaryFiles = parsedBoundaryFiles(document);
+        if (hasUnparsedBoundaryFiles(document)) {
+            logger.info("Skipping IIDM transform publication for import {} until all boundary files are parsed", document.id());
+        }
+        if (isBoundaryProfile(processedFile)) {
+            publishCompletedDirectTransforms(document, boundaryFiles);
             return;
         }
-        publishIidmTransformRequested(document.id(), groupFiles);
-        publishSnapshotAssemblyRequested(document, processedFile);
+        List<CnmImportFileDocument> groupFiles = modelGroupFiles(document, processedFile);
+        if (!groupFiles.isEmpty()
+                && groupFiles.stream().allMatch(file -> file.state() == ImportFileState.PARSED)
+                && !hasUnparsedBoundaryFiles(document)) {
+            publishIidmTransformRequested(document.id(), withBoundaryFiles(groupFiles, boundaryFiles));
+            publishSnapshotAssemblyRequested(document, processedFile);
+        }
+    }
+
+    private void publishCompletedDirectTransforms(CnmImportDocument document, List<CnmImportFileDocument> boundaryFiles) {
+        document.files().stream()
+                .filter(file -> !isBoundaryProfile(file))
+                .filter(file -> file.state() == ImportFileState.PARSED)
+                .collect(java.util.stream.Collectors.groupingBy(
+                        this::modelGroupKey,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()))
+                .values()
+                .stream()
+                .filter(groupFiles -> groupFiles.stream().allMatch(file -> file.state() == ImportFileState.PARSED))
+                .forEach(groupFiles -> publishIidmTransformRequested(document.id(), withBoundaryFiles(groupFiles, boundaryFiles)));
+    }
+
+    private List<CnmImportFileDocument> modelGroupFiles(CnmImportDocument document, CnmImportFileDocument processedFile) {
+        return document.files().stream()
+                .filter(file -> !isBoundaryProfile(file))
+                .filter(file -> sameModelGroup(file, processedFile))
+                .toList();
+    }
+
+    private List<CnmImportFileDocument> parsedBoundaryFiles(CnmImportDocument document) {
+        return document.files().stream()
+                .filter(this::isBoundaryProfile)
+                .filter(file -> file.state() == ImportFileState.PARSED)
+                .toList();
+    }
+
+    private boolean hasUnparsedBoundaryFiles(CnmImportDocument document) {
+        return document.files().stream()
+                .filter(this::isBoundaryProfile)
+                .anyMatch(file -> file.state() != ImportFileState.PARSED);
+    }
+
+    private List<CnmImportFileDocument> withBoundaryFiles(
+            List<CnmImportFileDocument> groupFiles,
+            List<CnmImportFileDocument> boundaryFiles) {
+        List<CnmImportFileDocument> files = new ArrayList<>(groupFiles);
+        files.addAll(boundaryFiles);
+        return files;
+    }
+
+    private String modelGroupKey(CnmImportFileDocument file) {
+        return valueOr(file.tsoName(), "")
+                + "|"
+                + valueOr(file.businessDay(), "")
+                + "|"
+                + valueOr(file.businessTime(), "")
+                + "|"
+                + valueOr(file.modelTimeFrame(), "");
+    }
+
+    private boolean isBoundaryProfile(CnmImportFileDocument file) {
+        if (file == null) {
+            return false;
+        }
+        CgmesProfileKind kind = CgmesProfileKind.fromCode(file.profileType());
+        return kind == CgmesProfileKind.BOUNDARY_EQUIPMENT || kind == CgmesProfileKind.BOUNDARY_TOPOLOGY;
     }
 
     public void assembleSnapshot(CnmSnapshotAssemblyRequested event) {

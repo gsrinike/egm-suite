@@ -67,6 +67,12 @@ class RdfXmlProfileParser {
 
     private String profileCode(String name) {
         String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if (normalized.contains("equipmentboundary")) {
+            return CgmesProfileKind.BOUNDARY_EQUIPMENT.code();
+        }
+        if (normalized.contains("topologyboundary")) {
+            return CgmesProfileKind.BOUNDARY_TOPOLOGY.code();
+        }
         if (normalized.contains("equipment")) {
             return "EQ";
         }

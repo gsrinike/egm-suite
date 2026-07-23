@@ -1,19 +1,21 @@
 # data.iidm
 
-`data.iidm` contains PowSyBl-based IIDM network wrappers and transform event
-contracts used by EGM services. The canonical IIDM model is
-`com.powsybl.iidm.network.Network`.
+`data.iidm` is the PowSyBl-facing IIDM DTO boundary.
 
-The module intentionally depends on PowSyBl and remains independent from Spring,
-Elasticsearch, RabbitMQ, MinIO, and frontend code. Runtime services own
-infrastructure and API behavior; this module owns the grid model contracts.
+## Responsibilities
 
-Key types:
+- Define IIDM transform request, success, and failure events.
+- Represent transform diagnostics and transform state.
+- Represent source CGMES files included in a transform request.
+- Wrap PowSyBl `Network` values in `IidmNetworkModel`.
+- Provide `IidmNetworkSummary` counts for persisted networks.
+- Provide `IidmNetworkXiidm` helpers for XIIDM serialization.
 
-- `IidmNetworkModel`: transformation result backed by a real PowSyBl `Network`.
-- `IidmNetworkSummary`: serializable counts and metadata derived from `Network`.
-- `IidmNetworkXiidm`: XIIDM read/write helpers for persistence and exchange.
-- `CgmesIidmSourceFile` and `CgmesIidmImportOptions`: direct CGMES source-file
-  descriptors and PowSyBl import option contracts.
-- `IidmProfileTransformRequested`, `IidmProfileTransformCompleted`, and
-  `IidmProfileTransformFailed`: event contracts for the transform workflow.
+This module may depend on PowSyBl. It does not own Spring services,
+Elasticsearch documents, MinIO access, RabbitMQ consumers, or GUI code.
+
+## Developer Command
+
+```bash
+mvn -Dmaven.repo.local=work/m2 -pl data.iidm test
+```

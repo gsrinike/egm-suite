@@ -1,8 +1,24 @@
 # data.common
 
-Shared DTO module for RCC-style services.
+`data.common` owns DTOs shared by RCC, CSA, common LF/SA, common RAO, BPM,
+GUI, and mock modules.
 
-It contains technology-neutral records and enums used by CSA orchestration,
-common Load Flow/Security Analysis, common RAO, BPM workflow monitoring, and
-the RCC GUI. This module intentionally has no Spring, Camunda, storage, or
-messaging dependency.
+## Contents
+
+- network case references
+- load-flow requests and results
+- security-analysis requests and results
+- contingency violations
+- RAO requests, results, and remedial actions
+- CSA case status
+- workflow instance and task views
+- common paging and timeframe values
+
+The module is framework-neutral and does not depend on Spring, Camunda,
+Elasticsearch, MinIO, RabbitMQ, or calculation-engine libraries.
+
+## Developer Command
+
+```bash
+mvn -Dmaven.repo.local=work/m2 -pl data.common test
+```

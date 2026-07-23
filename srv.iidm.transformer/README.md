@@ -1,29 +1,36 @@
 # srv.iidm.transformer
 
-`srv.iidm.transformer` consumes IIDM transform events and creates PowSyBl IIDM
-networks. The preferred event carries `sourceFiles`, a grouped list of raw CGMES
-objects stored by `srv.cnm.services` after all cross-referenced files for a
-model group are parsed. The service stages those source objects in a temporary
-workspace and delegates conversion to PowSyBl's native CIM-CGMES importer.
+`srv.iidm.transformer` consumes IIDM transform events and persists PowSyBl IIDM
+network results for GUI exploration and downstream analysis.
 
-Storage ownership:
+## Responsibilities
 
-- `iidm-profile-transforms`: transform state, diagnostics, and linkage by `fileId`.
-- `iidm-networks`: profile-level PowSyBl network exports in XIIDM format, plus
-  searchable network counts and source metadata.
+- Consume `IidmProfileTransformRequested` events.
+- Read raw CGMES source files from object storage.
+- Stage grouped source files, including boundary files, for PowSyBl.
+- Convert CGMES directly to PowSyBl `Network` through `map.cnm.iidm`.
+- Preserve compatibility conversion from CNM profile payloads or snapshots.
+- Capture bounded PowSyBl conversion diagnostics.
+- Persist transform state in `iidm-profile-transforms`.
+- Persist XIIDM and JSON table projection in `iidm-networks`.
+- Expose paged/searchable transform and network table APIs.
 
-The direct path reads raw CGMES source bytes from object storage. The service
-can still read legacy snapshot metadata from `cnm-network-snapshots` and
-per-file profile payloads from `cnm-profile-payloads` when a compatibility event
-does not provide direct `sourceFiles`.
+## Storage
 
-IIDM and PowSyBl CGMES import defaults are loaded once and cached through
-`com.utils` from `src/main/resources/config/profile/iidm/defaults.yml`. This
-keeps values such as `iidm.import.cgmes.source-for-iidm-id`, subnetwork
-handling, SV injection conversion, and compatibility fallback defaults out of
-Java source while remaining thread-safe for parallel transform events.
+`iidm-profile-transforms` contains transform status, message, diagnostics,
+timestamps, source linkage, and network ID. `iidm-networks` contains source file
+IDs, metadata, element counts, XIIDM payload, and GUI-oriented JSON table
+projection. List APIs exclude heavy payload fields.
 
-List APIs return lightweight metadata and exclude XIIDM payload fields. GUI
-table exploration is lazy: `/api/iidm/networks/{networkId}/tables` returns table
-metadata, and `/api/iidm/networks/{networkId}/tables/{tableId}` returns one
-paged table at a time.
+## Runtime Dependencies
+
+The service uses Elasticsearch, MinIO, RabbitMQ, PowSyBl, `com.utils`,
+`com.vault`, `com.mapping`, and `com.infra`.
+
+## Developer Command
+
+```bash
+mvn -Dmaven.repo.local=work/m2 \
+  -Ddocker.skip=true -Ddocker.skip.build=true -Ddocker.skip.push=true \
+  -pl srv.iidm.transformer -am test
+```

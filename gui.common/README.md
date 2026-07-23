@@ -1,18 +1,22 @@
 # gui.common
 
-`gui.common` contains domain-neutral shared Vue.js components and styling.
+`gui.common` is the domain-neutral Vue component and styling package shared by
+feature GUIs.
 
-## Components
+## Exports
 
 - `Button`
-- `DataTable` with sorting, pagination, scroll, and in-table search across all columns.
-- `Dropdown`
-- `DynamicTable`
 - `Link`
+- `Dropdown`
 - `Menu`
+- `DataTable`
+- `DynamicTable`
 - `RefreshButton`
+- `AutoRefreshControl`
+- theme preference helpers
+- browser-side error logging helpers
 
-See `COMPONENTS.md` for detailed component responsibilities, props, events, and
-usage guidance.
+Components and CSS use generic names and must not reference CNM, CSA, IIDM, or
+other business domains.
 
-The package is consumed by `gui.cnm.manager` through a local workspace dependency.
+See `COMPONENTS.md` for the component API and usage guidance.

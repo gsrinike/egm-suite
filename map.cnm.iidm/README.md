@@ -1,15 +1,22 @@
 # map.cnm.iidm
 
-`map.cnm.iidm` transforms CGMES sources into real PowSyBl IIDM `Network`
-objects wrapped by `data.iidm`.
+`map.cnm.iidm` converts CNM/CGMES inputs into PowSyBl IIDM networks. It is a
+library module with no Spring or infrastructure ownership.
 
-The preferred transformer, `CgmesSourceToIidmTransformer`, delegates raw CGMES
-RDF/XML source files to PowSyBl's native CIM-CGMES importer. PowSyBl loads the
-complete source set into its RDF4J triplestore and performs CGMES-to-IIDM
-conversion directly.
+## Transformers
 
-The compatibility transformer, `CnmToIidmTransformer`, remains available for
-parsed CNM DTOs and diagnostic flows. It keeps a two-pass structure:
+- `CgmesSourceToIidmTransformer`: preferred path. It stages raw CGMES files and
+  delegates conversion to PowSyBl's native CGMES importer.
+- `CnmToIidmTransformer`: compatibility path for parsed CNM profile DTOs and
+  diagnostic scenarios.
+- `CnmToIidmTransformerFactory`: factory for creating the compatibility
+  transformer with mapping configuration.
 
-1. instantiate substations, voltage levels, and buses from topology objects.
-2. resolve terminals/equipment associations into PowSyBl connectables.
+The preferred path expects a complete source group, including boundary data when
+required by the CGMES files.
+
+## Developer Command
+
+```bash
+mvn -Dmaven.repo.local=work/m2 -pl map.cnm.iidm -am test
+```

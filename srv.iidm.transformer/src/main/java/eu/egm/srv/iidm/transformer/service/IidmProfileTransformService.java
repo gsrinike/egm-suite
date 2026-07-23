@@ -35,6 +35,7 @@ import eu.egm.data.cnm.topology.StaticTopologyModel;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
+import eu.egm.data.iidm.common.IidmDiagnostic;
 import eu.egm.data.iidm.common.IidmTransformState;
 import eu.egm.data.iidm.common.CgmesIidmSourceFile;
 import eu.egm.data.iidm.network.IidmNetworkModel;
@@ -92,6 +93,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final JsonMappingService jsonMappingService;
     private final CnmToIidmTransformer transformer;
     private final CgmesSourceToIidmTransformer sourceTransformer;
+    private final IidmNetworkJsonProjection networkJsonProjection = new IidmNetworkJsonProjection();
     private final String rawBucket;
     private final String eventExchange;
     private final String completedRoutingKey;
@@ -167,10 +169,12 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 startedAt,
                 null,
                 null));
+        IidmTransformDiagnosticsCollector diagnosticsCollector = new IidmTransformDiagnosticsCollector(networkId);
         try {
             IidmNetworkModel network = transformNetwork(request);
             networkRepository.save(toNetworkDocument(network));
             long completedAt = Instant.now().toEpochMilli();
+            List<IidmDiagnostic> diagnostics = diagnosticsCollector.successDiagnostics(network.diagnostics());
             transformRepository.save(new IidmProfileTransformDocument(
                     request.fileId(),
                     request.importId(),
@@ -180,7 +184,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     request.sourceProfilePayloadId(),
                     IidmTransformState.DONE,
                     "IIDM transformation completed",
-                    network.diagnostics(),
+                    diagnostics,
                     network.id(),
                     startedAt,
                     completedAt,
@@ -190,6 +194,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
         } catch (Exception exception) {
             long failedAt = Instant.now().toEpochMilli();
             String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+            List<IidmDiagnostic> diagnostics = diagnosticsCollector.failureDiagnostics(exception, networkId);
             transformRepository.save(new IidmProfileTransformDocument(
                     request.fileId(),
                     request.importId(),
@@ -199,13 +204,15 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     request.sourceProfilePayloadId(),
                     IidmTransformState.FAILED,
                     message,
-                    List.of(),
+                    diagnostics,
                     networkId,
                     startedAt,
                     null,
                     failedAt));
             eventPublisher.publish(eventExchange, failedRoutingKey,
                     new IidmProfileTransformFailed(request.importId(), request.fileId(), message));
+        } finally {
+            diagnosticsCollector.close();
         }
     }
 
@@ -344,7 +351,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 filters(importId),
                 List.of(),
                 List.of(),
-                List.of("networkXiidm", "networkXiidmChunks"),
+                List.of("networkXiidm", "networkXiidmChunks", "networkJson", "networkJsonChunks"),
                 page,
                 size));
         return new IidmPage<>(
@@ -451,6 +458,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private IidmNetworkDocument toNetworkDocument(IidmNetworkModel network) {
         String networkXiidm = IidmNetworkXiidm.write(network.network());
+        String networkJson = jsonMappingService.toJson(networkJsonProjection.project(network.network()));
         IidmNetworkSummary summary = network.summary();
         long now = Instant.now().toEpochMilli();
         return new IidmNetworkDocument(
@@ -464,6 +472,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 IidmNetworkXiidm.FORMAT,
                 networkXiidm.length() <= NETWORK_XIIDM_CHUNK_SIZE ? networkXiidm : "",
                 chunks(networkXiidm),
+                IidmNetworkJsonProjection.TYPE,
+                networkJson.length() <= NETWORK_XIIDM_CHUNK_SIZE ? networkJson : "",
+                chunks(networkJson),
                 List.of(
                         new IidmElementCountDocument("substations", summary.substationCount()),
                         new IidmElementCountDocument("voltageLevels", summary.voltageLevelCount()),
@@ -613,24 +624,37 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     .filter(spec -> spec.tableId().equals(selectedTableId))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Unknown IIDM table: " + selectedTableId));
-            case "substations" -> withNetwork(document, "substations", "Substations", substationColumns(),
+            case "substations" -> withProjectedRows(document, "substations", "Substations", substationColumns(),
                     network -> stream(network.getSubstations()).stream().map(this::substationRow).toList());
-            case "voltage-levels" -> withNetwork(document, "voltage-levels", "Voltage levels", voltageLevelColumns(),
+            case "voltage-levels" -> withProjectedRows(document, "voltage-levels", "Voltage levels", voltageLevelColumns(),
                     network -> stream(network.getVoltageLevels()).stream().map(this::voltageLevelRow).toList());
-            case "buses" -> withNetwork(document, "buses", "Buses", busColumns(),
+            case "buses" -> withProjectedRows(document, "buses", "Buses", busColumns(),
                     network -> stream(network.getBusBreakerView().getBuses()).stream().map(this::busRow).toList());
-            case "lines" -> withNetwork(document, "lines", "Lines", lineColumns(),
+            case "lines" -> withProjectedRows(document, "lines", "Lines", lineColumns(),
                     network -> stream(network.getLines()).stream().map(this::lineRow).toList());
-            case "generators" -> withNetwork(document, "generators", "Generators", generatorColumns(),
+            case "generators" -> withProjectedRows(document, "generators", "Generators", generatorColumns(),
                     network -> stream(network.getGenerators()).stream().map(this::generatorRow).toList());
-            case "loads" -> withNetwork(document, "loads", "Loads", loadColumns(),
+            case "loads" -> withProjectedRows(document, "loads", "Loads", loadColumns(),
                     network -> stream(network.getLoads()).stream().map(this::loadRow).toList());
-            case "switches" -> withNetwork(document, "switches", "Switches", switchColumns(),
+            case "switches" -> withProjectedRows(document, "switches", "Switches", switchColumns(),
                     network -> stream(network.getSwitches()).stream().map(this::switchRow).toList());
-            case "busbar-sections" -> withNetwork(document, "busbar-sections", "Busbar sections", busbarSectionColumns(),
+            case "busbar-sections" -> withProjectedRows(document, "busbar-sections", "Busbar sections", busbarSectionColumns(),
                     network -> stream(network.getBusbarSections()).stream().map(this::busbarSectionRow).toList());
             default -> throw new IllegalArgumentException("Unknown IIDM table: " + selectedTableId);
         };
+    }
+
+    private IidmTableSpec withProjectedRows(
+            IidmNetworkDocument document,
+            String tableId,
+            String label,
+            List<DynamicTableColumn> columns,
+            Function<Network, List<Map<String, Object>>> fallbackRows) {
+        List<Map<String, Object>> rows = projectedRows(document, tableId);
+        if (rows != null) {
+            return new IidmTableSpec(tableId, label, columns, rows, "id");
+        }
+        return withNetwork(document, tableId, label, columns, fallbackRows);
     }
 
     private IidmTableSpec withNetwork(
@@ -705,6 +729,38 @@ public class IidmProfileTransformService extends RestServiceSupport {
             return document.networkXiidm();
         }
         return String.join("", document.networkXiidmChunks());
+    }
+
+    private List<Map<String, Object>> projectedRows(IidmNetworkDocument document, String tableId) {
+        String json = networkJson(document);
+        if (json.isBlank()) {
+            return null;
+        }
+        Map<?, ?> projection = jsonMappingService.fromJson(json, Map.class);
+        Object value = projection.get(tableId);
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Object row : values) {
+            if (row instanceof Map<?, ?> rowMap) {
+                rows.add(toStringKeyMap(rowMap));
+            }
+        }
+        return rows;
+    }
+
+    private Map<String, Object> toStringKeyMap(Map<?, ?> source) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        source.forEach((key, value) -> row.put(String.valueOf(key), displayValue(value)));
+        return row;
+    }
+
+    private String networkJson(IidmNetworkDocument document) {
+        if (document.networkJson() != null && !document.networkJson().isBlank()) {
+            return document.networkJson();
+        }
+        return String.join("", document.networkJsonChunks());
     }
 
     private DynamicTableDefinition table(
