@@ -9,6 +9,9 @@ utility:
     buckets: cnm-rdf-models
   messaging:
     listener:
+      concurrent-consumers: ${CNM_RABBIT_CONCURRENT_CONSUMERS:8}
+      max-concurrent-consumers: ${CNM_RABBIT_MAX_CONCURRENT_CONSUMERS:16}
+      prefetch-count: ${CNM_RABBIT_PREFETCH_COUNT:1}
       retry:
         max-attempts: 3
     topic-exchange:

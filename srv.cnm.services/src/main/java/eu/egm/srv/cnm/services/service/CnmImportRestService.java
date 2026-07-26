@@ -123,6 +123,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private final JsonMappingService jsonMappingService;
     private final RdfMetadataExtractor metadataExtractor;
     private final CgmSnapshotAssembler snapshotAssembler = new CgmSnapshotAssembler();
+    private final boolean mridIndexEnabled;
+    private final long slowMetadataProcessingThresholdMs;
     private final String rawBucket;
     private final String eventExchange;
     private final String fileProcessingRoutingKey;
@@ -185,6 +187,9 @@ public class CnmImportRestService extends RestServiceSupport {
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.metadataExtractor = metadataExtractor;
+        this.mridIndexEnabled = environment.getProperty("cnm.import.metadata.mrid-index.enabled", Boolean.class, true);
+        this.slowMetadataProcessingThresholdMs =
+                environment.getProperty("cnm.import.metadata.slow-threshold-ms", Long.class, 5_000L);
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
         this.fileProcessingRoutingKey = fileProcessingRoutingKey;
@@ -623,6 +628,30 @@ public class CnmImportRestService extends RestServiceSupport {
     private record RdfPayload(String relativePath, String fileName, byte[] bytes) {
     }
 
+    private static final class ProcessingTimings {
+        private final long startedAt = System.nanoTime();
+        private final Map<String, Long> marks = new LinkedHashMap<>();
+        private long previous = startedAt;
+
+        private void mark(String name) {
+            long now = System.nanoTime();
+            marks.put(name, now - previous);
+            previous = now;
+        }
+
+        private long elapsedMs(String name) {
+            return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(marks.getOrDefault(name, 0L));
+        }
+
+        private long totalMs() {
+            long total = 0L;
+            for (Long value : marks.values()) {
+                total += value;
+            }
+            return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(total);
+        }
+    }
+
     private record ModelFileName(
             String businessDay,
             String businessTime,
@@ -675,6 +704,7 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private ImportStatus processFileLocked(CnmFileProcessingRequested event) {
+        ProcessingTimings timings = new ProcessingTimings();
         CnmImportDocument current = findImportDocument(event.importId());
         CnmImportFileDocument target = current.files().stream()
                 .filter(file -> file.fileId().equals(event.fileId()))
@@ -688,21 +718,34 @@ public class CnmImportRestService extends RestServiceSupport {
         }
 
         CnmImportFileDocument processed;
+        RdfMetadata metadata = null;
         try {
             byte[] payload = objectStorageService.read(rawBucket, target.objectId());
+            timings.mark("objectRead");
             ProfileProcessingContext context = processingContext(current.id(), target);
-            RdfMetadata metadata = metadataExtractor.extract(payload, context);
+            metadata = metadataExtractor.extract(payload, context);
+            timings.mark("rdfExtract");
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
+            timings.mark("profileMetadataSave");
             profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
+            timings.mark("profilePayloadSave");
             profileFragmentRepository.save(toProfileFragmentDocument(current.id(), processed, metadata));
-            mridIndexRepository.saveAll(toMridIndexDocuments(current.id(), processed, metadata));
+            timings.mark("profileFragmentSave");
+            if (mridIndexEnabled) {
+                mridIndexRepository.saveAll(toMridIndexDocuments(current.id(), processed, metadata));
+            }
+            timings.mark("mridIndex");
         } catch (Exception exception) {
             logger.warn("Unable to process CNM RDF/XML metadata for {}", target.objectId(), exception);
             processed = withStatus(target, ImportFileState.FAILED, message(exception));
+            timings.mark("failed");
         }
 
-        return completeProcessedFile(current, processed);
+        ImportStatus status = completeProcessedFile(current, processed);
+        timings.mark("statusUpdate");
+        logMetadataProcessingTimings(current.id(), processed, metadata, timings);
+        return status;
     }
 
     private ImportStatus completeProcessedFile(CnmImportDocument current, CnmImportFileDocument processed) {
@@ -740,6 +783,41 @@ public class CnmImportRestService extends RestServiceSupport {
         return latestFile.iidmTransformationStatus() == IidmTransformationStatus.NOT_STARTED
                 ? processed
                 : withIidmTransformStatus(processed, latestFile.iidmTransformationStatus());
+    }
+
+    private void logMetadataProcessingTimings(
+            String importId,
+            CnmImportFileDocument file,
+            RdfMetadata metadata,
+            ProcessingTimings timings) {
+        long totalMs = timings.totalMs();
+        if (totalMs < slowMetadataProcessingThresholdMs && !logger.isDebugEnabled()) {
+            return;
+        }
+        long factCount = metadata == null || metadata.fragment() == null ? 0 : metadata.fragment().facts().size();
+        String message = "CNM RDF metadata timings import={} file={} state={} facts={} totalMs={} "
+                + "objectReadMs={} rdfExtractMs={} profileMetadataSaveMs={} profilePayloadSaveMs={} "
+                + "profileFragmentSaveMs={} mridIndexMs={} statusUpdateMs={} mridIndexEnabled={}";
+        Object[] values = {
+                importId,
+                file.fileId(),
+                file.state(),
+                factCount,
+                totalMs,
+                timings.elapsedMs("objectRead"),
+                timings.elapsedMs("rdfExtract"),
+                timings.elapsedMs("profileMetadataSave"),
+                timings.elapsedMs("profilePayloadSave"),
+                timings.elapsedMs("profileFragmentSave"),
+                timings.elapsedMs("mridIndex"),
+                timings.elapsedMs("statusUpdate"),
+                mridIndexEnabled
+        };
+        if (totalMs >= slowMetadataProcessingThresholdMs) {
+            logger.warn(message, values);
+        } else {
+            logger.debug(message, values);
+        }
     }
 
     private boolean isSnapshotAssemblyFailure(CnmImportFileDocument file) {

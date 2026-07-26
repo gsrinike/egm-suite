@@ -91,12 +91,20 @@ public class InfrastructureUtilityConfig {
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             ConnectionFactory connectionFactory,
             MessageConverter jsonMessageConverter,
-            RetryOperationsInterceptor infrastructureRabbitRetryInterceptor) {
+            RetryOperationsInterceptor infrastructureRabbitRetryInterceptor,
+            @Value("${utility.messaging.listener.concurrent-consumers:1}") int concurrentConsumers,
+            @Value("${utility.messaging.listener.max-concurrent-consumers:1}") int maxConcurrentConsumers,
+            @Value("${utility.messaging.listener.prefetch-count:1}") int prefetchCount) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setMessageConverter(jsonMessageConverter);
         factory.setAdviceChain(infrastructureRabbitRetryInterceptor);
         factory.setDefaultRequeueRejected(false);
+        int boundedConcurrentConsumers = Math.max(concurrentConsumers, 1);
+        int boundedMaxConcurrentConsumers = Math.max(maxConcurrentConsumers, boundedConcurrentConsumers);
+        factory.setConcurrentConsumers(boundedConcurrentConsumers);
+        factory.setMaxConcurrentConsumers(boundedMaxConcurrentConsumers);
+        factory.setPrefetchCount(Math.max(prefetchCount, 1));
         return factory;
     }
 

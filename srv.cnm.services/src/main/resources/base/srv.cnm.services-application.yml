@@ -12,6 +12,10 @@ server:
 cnm:
   import:
     raw-bucket: cnm-rdf-models
+    metadata:
+      slow-threshold-ms: ${CNM_METADATA_SLOW_THRESHOLD_MS:5000}
+      mrid-index:
+        enabled: ${CNM_MRID_INDEX_ENABLED:false}
     event:
       exchange: cnm.events
       dead-letter-exchange: cnm.events.dlx
