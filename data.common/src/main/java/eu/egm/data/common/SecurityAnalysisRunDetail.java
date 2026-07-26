@@ -8,6 +8,9 @@ import java.util.Map;
  */
 public record SecurityAnalysisRunDetail(
         SecurityAnalysisRunSummary summary,
+        LfSaParameterConfiguration parameterConfiguration,
+        LoadFlowComputationResult loadFlowResult,
+        SecurityAnalysisComputationResult computationResult,
         List<LineFlow> lineFlows,
         List<ContingencyViolation> violations,
         Map<String, Long> networkElementCounts,

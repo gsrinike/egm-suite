@@ -1,0 +1,33 @@
+limits:
+  maxSearchImports: 1000
+  maxSearchRuns: 1000
+  maxDiagnostics: 50
+  maxLineFlows: 500
+  maxIidmNetworks: 500
+
+loadFlow:
+  strategy: DC_ONLY
+  parameters:
+    distributedSlack: true
+    useReactiveLimits: true
+    transformerVoltageControlOn: true
+    phaseShifterRegulationOn: true
+    shuntCompensatorVoltageControlOn: true
+    readSlackBus: false
+    writeSlackBus: false
+    voltageInitMode: PREVIOUS_VALUES
+    balanceType: PROPORTIONAL_TO_GENERATION_P
+    componentMode: MAIN_CONNECTED
+    hvdcAcEmulation: true
+    dcPowerFactor: 1.0
+
+securityAnalysis:
+  parameters:
+    voltageLimitsChecked: true
+    currentLimitsChecked: true
+    activePowerLimitsChecked: true
+    intermediateResultsInOperatorStrategy: false
+    debugDir: ""
+  contingencies:
+    elementType: LINE
+    maxGenerated: 25

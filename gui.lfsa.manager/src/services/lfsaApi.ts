@@ -21,6 +21,8 @@ export interface SecurityAnalysisRunSummary {
   runId: string;
   fileImportId: string;
   state: string;
+  loadFlowState: string;
+  securityAnalysisState: string;
   runDate: string;
   runTime: string;
   networkCount: number;
@@ -28,6 +30,62 @@ export interface SecurityAnalysisRunSummary {
   violationCount: number;
   diagnosticCount: number;
   message: string;
+}
+
+export interface LoadFlowComputationResult {
+  succeeded: boolean;
+  status: string;
+  componentCount: number;
+  componentStatuses: string[];
+  metrics: Record<string, string>;
+  logs: string;
+}
+
+export type LoadFlowStrategy = 'DC_ONLY' | 'AC_ONLY' | 'AC_WITH_DC_FAILOVER';
+
+export interface LoadFlowParametersDto {
+  distributedSlack: boolean;
+  useReactiveLimits: boolean;
+  transformerVoltageControlOn: boolean;
+  phaseShifterRegulationOn: boolean;
+  shuntCompensatorVoltageControlOn: boolean;
+  readSlackBus: boolean;
+  writeSlackBus: boolean;
+  voltageInitMode: string;
+  balanceType: string;
+  componentMode: string;
+  hvdcAcEmulation: boolean;
+  dcPowerFactor: number;
+}
+
+export interface SecurityAnalysisParametersDto {
+  voltageLimitsChecked: boolean;
+  currentLimitsChecked: boolean;
+  activePowerLimitsChecked: boolean;
+  intermediateResultsInOperatorStrategy: boolean;
+  debugDir: string;
+  contingencyElementType: string;
+  maxGeneratedContingencies: number;
+}
+
+export interface LfSaParameterConfiguration {
+  id: string;
+  name: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  loadFlowStrategy: LoadFlowStrategy;
+  loadFlowParameters: LoadFlowParametersDto;
+  securityAnalysisParameters: SecurityAnalysisParametersDto;
+}
+
+export interface SecurityAnalysisComputationResult {
+  succeeded: boolean;
+  preContingencyStatus: string;
+  contingencyCount: number;
+  postContingencyStatuses: string[];
+  preContingencyViolations: ContingencyViolation[];
+  postContingencyViolations: ContingencyViolation[];
 }
 
 export interface LineFlow {
@@ -51,6 +109,9 @@ export interface ContingencyViolation {
 
 export interface SecurityAnalysisRunDetail {
   summary: SecurityAnalysisRunSummary;
+  parameterConfiguration: LfSaParameterConfiguration;
+  loadFlowResult: LoadFlowComputationResult | null;
+  computationResult: SecurityAnalysisComputationResult | null;
   lineFlows: LineFlow[];
   violations: ContingencyViolation[];
   networkElementCounts: Record<string, number>;
@@ -75,14 +136,51 @@ export async function searchImports(params: {
   return getJson<Page<SecurityAnalysisImportCandidate>>(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/imports${query(params)}`);
 }
 
-export async function startSecurityAnalysis(fileImportId: string, options: LfsaApiOptions = {}): Promise<SecurityAnalysisRunSummary> {
+export async function startSecurityAnalysis(
+  fileImportId: string,
+  parameterConfigurationId = '',
+  options: LfsaApiOptions = {}
+): Promise<SecurityAnalysisRunSummary> {
   const response = await fetch(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/security-analysis/runs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileImportId })
+    body: JSON.stringify({ fileImportId, parameterConfigurationId })
   });
   if (!response.ok) {
     throw await HttpClientError.fromResponse('Unable to start security analysis', response.url, response);
+  }
+  return response.json();
+}
+
+export async function getDefaultSecurityAnalysisParameters(options: LfsaApiOptions = {}): Promise<LfSaParameterConfiguration> {
+  return getJson<LfSaParameterConfiguration>(
+    `${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/security-analysis/parameters/default`
+  );
+}
+
+export async function listSecurityAnalysisParameters(params: {
+  page?: number;
+  size?: number;
+}, options: LfsaApiOptions = {}): Promise<Page<LfSaParameterConfiguration>> {
+  return getJson<Page<LfSaParameterConfiguration>>(
+    `${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/security-analysis/parameters${query(params)}`
+  );
+}
+
+export async function saveSecurityAnalysisParameters(
+  name: string,
+  loadFlowStrategy: LoadFlowStrategy,
+  loadFlowParameters: LoadFlowParametersDto,
+  securityAnalysisParameters: SecurityAnalysisParametersDto,
+  options: LfsaApiOptions = {}
+): Promise<LfSaParameterConfiguration> {
+  const response = await fetch(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/security-analysis/parameters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, loadFlowStrategy, loadFlowParameters, securityAnalysisParameters })
+  });
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to save LFnSA configuration', response.url, response);
   }
   return response.json();
 }

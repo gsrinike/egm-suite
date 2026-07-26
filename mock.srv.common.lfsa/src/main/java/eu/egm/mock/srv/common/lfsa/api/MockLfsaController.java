@@ -2,10 +2,18 @@ package eu.egm.mock.srv.common.lfsa.api;
 
 import eu.egm.data.common.CommonPage;
 import eu.egm.data.common.ContingencyViolation;
+import eu.egm.data.common.AnalysisStepState;
+import eu.egm.data.common.LfSaParameterConfiguration;
+import eu.egm.data.common.LfSaParameterConfigurationSaveRequest;
 import eu.egm.data.common.LineFlow;
+import eu.egm.data.common.LoadFlowComputationResult;
+import eu.egm.data.common.LoadFlowParametersDto;
 import eu.egm.data.common.LoadFlowRequest;
 import eu.egm.data.common.LoadFlowResult;
+import eu.egm.data.common.LoadFlowStrategy;
+import eu.egm.data.common.SecurityAnalysisComputationResult;
 import eu.egm.data.common.SecurityAnalysisImportCandidate;
+import eu.egm.data.common.SecurityAnalysisParametersDto;
 import eu.egm.data.common.SecurityAnalysisRequest;
 import eu.egm.data.common.SecurityAnalysisResult;
 import eu.egm.data.common.SecurityAnalysisRunDetail;
@@ -37,6 +45,7 @@ public class MockLfSaController {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     private final Map<String, SecurityAnalysisRunDetail> runs = new ConcurrentHashMap<>();
+    private final Map<String, LfSaParameterConfiguration> parameters = new ConcurrentHashMap<>();
 
     @PostMapping(value = "/load-flow", consumes = MediaType.APPLICATION_JSON_VALUE)
     public LoadFlowResult runLoadFlow(@RequestBody LoadFlowRequest request) {
@@ -89,6 +98,8 @@ public class MockLfSaController {
                 runId,
                 request.fileImportId(),
                 SecurityAnalysisRunState.DONE,
+                AnalysisStepState.DONE,
+                AnalysisStepState.DONE,
                 DATE.format(now.atZone(ZoneOffset.UTC)),
                 TIME.format(now.atZone(ZoneOffset.UTC)),
                 2,
@@ -96,8 +107,75 @@ public class MockLfSaController {
                 violations.size(),
                 1,
                 "Mock security analysis completed");
-        runs.put(runId, new SecurityAnalysisRunDetail(summary, flows, violations, Map.of("lines", 2L, "buses", 3L), List.of("Mock PowSyBl run completed")));
+        LfSaParameterConfiguration parameterConfiguration = parameterConfiguration(request.parameterConfigurationId());
+        LoadFlowComputationResult loadFlowResult = new LoadFlowComputationResult(
+                true,
+                "FULLY_CONVERGED",
+                1,
+                List.of("component=0, synchronous=0, status=CONVERGED, iterations=3"),
+                Map.of("realLosses", "12.4"),
+                "");
+        SecurityAnalysisComputationResult computationResult = new SecurityAnalysisComputationResult(
+                true,
+                "CONVERGED",
+                2,
+                List.of("MOCK-N-1=CONVERGED"),
+                List.of(),
+                violations);
+        runs.put(runId, new SecurityAnalysisRunDetail(
+                summary,
+                parameterConfiguration,
+                loadFlowResult,
+                computationResult,
+                flows,
+                violations,
+                Map.of("lines", 2L, "buses", 3L),
+                List.of("Mock PowSyBl run completed")));
         return summary;
+    }
+
+    @GetMapping("/security-analysis/parameters/default")
+    public LfSaParameterConfiguration defaultSecurityAnalysisParameters() {
+        return new LfSaParameterConfiguration(
+                "",
+                "Default LFnSA",
+                "DEFAULT",
+                "",
+                "",
+                LoadFlowStrategy.DC_ONLY,
+                defaultLoadFlowParameters(),
+                defaultSecurityAnalysisParametersDto());
+    }
+
+    @GetMapping("/security-analysis/parameters")
+    public CommonPage<LfSaParameterConfiguration> securityAnalysisParameters(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        List<LfSaParameterConfiguration> rows = new ArrayList<>(parameters.values());
+        return new CommonPage<>(rows, rows.size(), page, size);
+    }
+
+    @PostMapping(value = "/security-analysis/parameters", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public LfSaParameterConfiguration saveSecurityAnalysisParameters(
+            @RequestBody LfSaParameterConfigurationSaveRequest request) {
+        Instant now = Instant.now();
+        String id = UUID.randomUUID().toString();
+        LfSaParameterConfiguration configuration = new LfSaParameterConfiguration(
+                id,
+                request.name() == null || request.name().isBlank()
+                        ? DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC).format(now)
+                                + "_SA_Conf"
+                        : request.name(),
+                "USER",
+                now.toString(),
+                now.toString(),
+                request.loadFlowStrategy() == null ? LoadFlowStrategy.DC_ONLY : request.loadFlowStrategy(),
+                request.loadFlowParameters() == null ? defaultLoadFlowParameters() : request.loadFlowParameters(),
+                request.securityAnalysisParameters() == null
+                        ? defaultSecurityAnalysisParametersDto()
+                        : request.securityAnalysisParameters());
+        parameters.put(id, configuration);
+        return configuration;
     }
 
     @GetMapping("/security-analysis/runs")
@@ -123,5 +201,39 @@ public class MockLfSaController {
             throw new IllegalArgumentException("Mock run not found: " + runId);
         }
         return detail;
+    }
+
+    private LfSaParameterConfiguration parameterConfiguration(String id) {
+        if (id == null || id.isBlank()) {
+            return defaultSecurityAnalysisParameters();
+        }
+        return parameters.getOrDefault(id, defaultSecurityAnalysisParameters());
+    }
+
+    private LoadFlowParametersDto defaultLoadFlowParameters() {
+        return new LoadFlowParametersDto(
+                true,
+                true,
+                true,
+                true,
+                true,
+                false,
+                false,
+                "PREVIOUS_VALUES",
+                "PROPORTIONAL_TO_GENERATION_P",
+                "MAIN_CONNECTED",
+                true,
+                1.0);
+    }
+
+    private SecurityAnalysisParametersDto defaultSecurityAnalysisParametersDto() {
+        return new SecurityAnalysisParametersDto(
+                true,
+                true,
+                true,
+                false,
+                "",
+                "LINE",
+                25);
     }
 }

@@ -3,17 +3,35 @@ package eu.egm.srv.common.lfsa.service;
 import com.infra.InfrastructureUtils;
 import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.DocumentSort;
+import com.powsybl.computation.local.LocalComputationManager;
+import com.powsybl.contingency.Contingency;
+import com.powsybl.contingency.violations.LimitViolation;
 import com.powsybl.iidm.network.Bus;
 import com.powsybl.iidm.network.Line;
 import com.powsybl.iidm.network.Network;
+import com.powsybl.loadflow.LoadFlow;
+import com.powsybl.loadflow.LoadFlowParameters;
+import com.powsybl.loadflow.LoadFlowRunParameters;
+import com.powsybl.security.SecurityAnalysis;
+import com.powsybl.security.SecurityAnalysisParameters;
+import com.powsybl.security.SecurityAnalysisReport;
+import com.powsybl.security.SecurityAnalysisRunParameters;
 import com.utils.restservice.RestServiceSupport;
 import eu.egm.data.cnm.common.ImportState;
+import eu.egm.data.common.AnalysisStepState;
 import eu.egm.data.common.CommonPage;
 import eu.egm.data.common.ContingencyViolation;
+import eu.egm.data.common.LfSaParameterConfiguration;
+import eu.egm.data.common.LfSaParameterConfigurationSaveRequest;
 import eu.egm.data.common.LineFlow;
+import eu.egm.data.common.LoadFlowComputationResult;
+import eu.egm.data.common.LoadFlowParametersDto;
 import eu.egm.data.common.LoadFlowRequest;
 import eu.egm.data.common.LoadFlowResult;
+import eu.egm.data.common.LoadFlowStrategy;
 import eu.egm.data.common.SecurityAnalysisImportCandidate;
+import eu.egm.data.common.SecurityAnalysisComputationResult;
+import eu.egm.data.common.SecurityAnalysisParametersDto;
 import eu.egm.data.common.SecurityAnalysisRequest;
 import eu.egm.data.common.SecurityAnalysisRequested;
 import eu.egm.data.common.SecurityAnalysisResult;
@@ -28,9 +46,14 @@ import eu.egm.srv.common.lfsa.domain.CnmImportReadDocument;
 import eu.egm.srv.common.lfsa.domain.CnmImportReadDocumentAdapter;
 import eu.egm.srv.common.lfsa.domain.IidmNetworkReadDocument;
 import eu.egm.srv.common.lfsa.domain.IidmNetworkReadDocumentAdapter;
+import eu.egm.srv.common.lfsa.config.LfSaDefaults;
+import eu.egm.srv.common.lfsa.config.LfSaDefaultsService;
+import eu.egm.srv.common.lfsa.domain.SecurityAnalysisParameterConfigurationDocument;
+import eu.egm.srv.common.lfsa.domain.SecurityAnalysisParameterConfigurationDocumentAdapter;
 import eu.egm.srv.common.lfsa.domain.SecurityAnalysisRunDocument;
 import eu.egm.srv.common.lfsa.domain.SecurityAnalysisRunDocumentAdapter;
 import io.micrometer.observation.ObservationRegistry;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,14 +76,13 @@ import org.springframework.stereotype.Service;
 public class LfSaService extends RestServiceSupport {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
-    private static final int MAX_SEARCH_IMPORTS = 1000;
-    private static final int MAX_SEARCH_RUNS = 1000;
-    private static final int MAX_DIAGNOSTICS = 50;
 
     private final InfrastructureUtils infrastructureUtils;
+    private final LfSaDefaultsService defaultsService;
     private final DocumentRepositoryService<CnmImportReadDocument> importRepository;
     private final DocumentRepositoryService<IidmNetworkReadDocument> iidmNetworkRepository;
     private final DocumentRepositoryService<SecurityAnalysisRunDocument> runRepository;
+    private final DocumentRepositoryService<SecurityAnalysisParameterConfigurationDocument> parameterRepository;
     private final String exchange;
     private final String routingKey;
 
@@ -68,15 +90,18 @@ public class LfSaService extends RestServiceSupport {
             Environment environment,
             ObservationRegistry observationRegistry,
             InfrastructureUtils infrastructureUtils,
+            LfSaDefaultsService defaultsService,
             @Value("${lfsa.security-analysis.event.exchange:lfsa.events}") String exchange,
             @Value("${lfsa.security-analysis.event.requested-routing-key:lfsa.security-analysis.requested}") String routingKey) {
         super(environment, observationRegistry);
         this.infrastructureUtils = infrastructureUtils;
+        this.defaultsService = defaultsService;
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.importRepository = infrastructureUtils.documentRepository(new CnmImportReadDocumentAdapter());
         this.iidmNetworkRepository = infrastructureUtils.documentRepository(new IidmNetworkReadDocumentAdapter());
         this.runRepository = infrastructureUtils.documentRepository(new SecurityAnalysisRunDocumentAdapter());
+        this.parameterRepository = infrastructureUtils.documentRepository(new SecurityAnalysisParameterConfigurationDocumentAdapter());
     }
 
     public LoadFlowResult runLoadFlow(LoadFlowRequest request) {
@@ -115,8 +140,9 @@ public class LfSaService extends RestServiceSupport {
             String date,
             int page,
             int size) {
+        LfSaDefaults defaults = defaultsService.load();
         List<SecurityAnalysisImportCandidate> rows = importRepository
-                .findAll(MAX_SEARCH_IMPORTS, DocumentSort.descending("createdAt"))
+                .findAll(defaults.maxSearchImports(), DocumentSort.descending("createdAt"))
                 .stream()
                 .filter(importDocument -> importDocument.state() == ImportState.SUCCESS)
                 .filter(importDocument -> matches(service, value(importDocument.serviceType())))
@@ -127,9 +153,67 @@ public class LfSaService extends RestServiceSupport {
         return page(rows, page, size);
     }
 
+    public LfSaParameterConfiguration defaultParameterConfiguration() {
+        LfSaDefaults defaults = defaultsService.load();
+        return new LfSaParameterConfiguration(
+                "",
+                "Default LFnSA",
+                "DEFAULT",
+                "",
+                "",
+                defaults.loadFlowStrategy(),
+                defaults.loadFlowParameters(),
+                defaults.securityAnalysisParameters());
+    }
+
+    public CommonPage<LfSaParameterConfiguration> parameterConfigurations(int page, int size) {
+        List<LfSaParameterConfiguration> rows = parameterRepository
+                .findAll(defaultsService.load().maxSearchRuns(), DocumentSort.descending("updatedAt"))
+                .stream()
+                .map(this::toParameterConfiguration)
+                .toList();
+        return page(rows, page, size);
+    }
+
+    public LfSaParameterConfiguration saveParameterConfiguration(
+            LfSaParameterConfigurationSaveRequest request) {
+        Instant now = Instant.now();
+        String id = UUID.randomUUID().toString();
+        String name = request.name() == null || request.name().isBlank()
+                ? DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC).format(now)
+                        + "_SA_Conf"
+                : request.name().trim();
+        LfSaDefaults defaults = defaultsService.load();
+        LoadFlowStrategy loadFlowStrategy = request.loadFlowStrategy() == null
+                ? defaults.loadFlowStrategy()
+                : request.loadFlowStrategy();
+        LoadFlowParametersDto loadFlowParameters = request.loadFlowParameters() == null
+                ? defaults.loadFlowParameters()
+                : request.loadFlowParameters();
+        SecurityAnalysisParametersDto securityAnalysisParameters = request.securityAnalysisParameters() == null
+                ? defaults.securityAnalysisParameters()
+                : request.securityAnalysisParameters();
+        SecurityAnalysisParameterConfigurationDocument document = new SecurityAnalysisParameterConfigurationDocument(
+                id,
+                name,
+                "USER",
+                now,
+                now,
+                loadFlowStrategy,
+                loadFlowParameters,
+                securityAnalysisParameters);
+        parameterRepository.save(document);
+        return toParameterConfiguration(document);
+    }
+
     public SecurityAnalysisRunSummary startSecurityAnalysis(SecurityAnalysisRunStartRequest request) {
         String importId = requireValue(request.fileImportId(), "fileImportId");
-        List<IidmNetworkReadDocument> networks = iidmNetworkRepository.findByField("importId", importId, 500);
+        LfSaParameterConfiguration parameterConfiguration =
+                resolveParameterConfiguration(request.parameterConfigurationId());
+        List<IidmNetworkReadDocument> networks = iidmNetworkRepository.findByField(
+                "importId",
+                importId,
+                defaultsService.load().maxIidmNetworks());
         String runId = UUID.randomUUID().toString();
         Instant now = Instant.now();
         SecurityAnalysisRunDocument document = new SecurityAnalysisRunDocument(
@@ -139,11 +223,21 @@ public class LfSaService extends RestServiceSupport {
                 now,
                 null,
                 null,
+                AnalysisStepState.STARTED,
+                AnalysisStepState.NOT_STARTED,
+                parameterConfiguration.id(),
+                parameterConfiguration.name(),
+                parameterConfiguration.loadFlowStrategy(),
+                parameterConfiguration.loadFlowParameters(),
+                parameterConfiguration.securityAnalysisParameters(),
+                null,
+                null,
                 networks.stream().map(IidmNetworkReadDocument::id).toList(),
                 Map.of(),
                 List.of(),
                 List.of(),
-                List.of("Security analysis queued for " + networks.size() + " IIDM network document(s)"),
+                List.of("Security analysis queued for " + networks.size()
+                        + " IIDM network document(s) with parameter set " + parameterConfiguration.name()),
                 "Security analysis started");
         runRepository.save(document);
         infrastructureUtils.eventPublisher().publish(
@@ -162,6 +256,15 @@ public class LfSaService extends RestServiceSupport {
                         Instant.now(),
                         null,
                         null,
+                        AnalysisStepState.STARTED,
+                        AnalysisStepState.NOT_STARTED,
+                        "",
+                        "Default LFnSA",
+                        defaultsService.load().loadFlowStrategy(),
+                        defaultsService.load().loadFlowParameters(),
+                        defaultsService.load().securityAnalysisParameters(),
+                        null,
+                        null,
                         event.iidmNetworkIds(),
                         Map.of(),
                         List.of(),
@@ -169,6 +272,9 @@ public class LfSaService extends RestServiceSupport {
                         List.of("Run document was recreated from the event payload"),
                         "Security analysis started"));
         List<String> diagnostics = new ArrayList<>(current.diagnostics());
+        AnalysisStepState latestLoadFlowState = current.loadFlowState();
+        AnalysisStepState latestSecurityAnalysisState = current.securityAnalysisState();
+        LoadFlowComputationResult latestLoadFlowResult = current.loadFlowResult();
         try {
             List<IidmNetworkReadDocument> documents = loadNetworkDocuments(event);
             if (documents.isEmpty()) {
@@ -183,22 +289,93 @@ public class LfSaService extends RestServiceSupport {
             }
             Network merged = mergeInMemory(networks, diagnostics);
             Map<String, Long> counts = elementCounts(merged);
-            List<LineFlow> lineFlows = lineFlows(merged);
-            List<ContingencyViolation> violations = violations(lineFlows);
-            diagnostics.add("Security analysis evaluated " + lineFlows.size() + " line flow row(s)");
+            LoadFlowStrategy selectedStrategy = current.loadFlowStrategy();
+            LoadFlowParametersDto selectedLoadFlowParameters = current.loadFlowParameters();
+            SecurityAnalysisParametersDto selectedSecurityAnalysisParameters = current.securityAnalysisParameters();
+            LoadFlowComputationResult loadFlowResult;
+            boolean securityAnalysisDcMode;
+            List<LineFlow> lineFlows;
+            SecurityAnalysisComputationResult computationResult;
+            List<ContingencyViolation> violations;
+            List<Contingency> contingencies;
+            try (LocalComputationManager computationManager = new LocalComputationManager()) {
+                LoadFlowExecution loadFlowExecution = runPowSyBlLoadFlow(
+                        merged,
+                        selectedStrategy,
+                        selectedLoadFlowParameters,
+                        computationManager,
+                        diagnostics);
+                loadFlowResult = loadFlowExecution.result();
+                securityAnalysisDcMode = loadFlowExecution.dc();
+                latestLoadFlowResult = loadFlowResult;
+                lineFlows = lineFlows(merged);
+                if (!loadFlowResult.succeeded()) {
+                    latestLoadFlowState = AnalysisStepState.FAILED;
+                    latestSecurityAnalysisState = AnalysisStepState.NOT_STARTED;
+                    diagnostics.add("Load flow did not converge; security analysis was not started");
+                    runRepository.save(new SecurityAnalysisRunDocument(
+                            current.id(),
+                            current.fileImportId(),
+                            SecurityAnalysisRunState.FAILED,
+                            current.startedAt(),
+                            null,
+                            Instant.now(),
+                            AnalysisStepState.FAILED,
+                            AnalysisStepState.NOT_STARTED,
+                            current.parameterConfigurationId(),
+                            current.parameterConfigurationName(),
+                            selectedStrategy,
+                            selectedLoadFlowParameters,
+                            selectedSecurityAnalysisParameters,
+                            loadFlowResult,
+                            null,
+                            documents.stream().map(IidmNetworkReadDocument::id).toList(),
+                            counts,
+                            lineFlows,
+                            List.of(),
+                            bounded(diagnostics),
+                            "Load flow failed; security analysis aborted"));
+                    return;
+                }
+                latestLoadFlowState = AnalysisStepState.DONE;
+                latestSecurityAnalysisState = AnalysisStepState.STARTED;
+                contingencies = contingencies(merged, selectedSecurityAnalysisParameters, diagnostics);
+                SecurityAnalysisReport report = runPowSyBlSecurityAnalysis(
+                        merged,
+                        contingencies,
+                        selectedLoadFlowParameters,
+                        selectedSecurityAnalysisParameters,
+                        securityAnalysisDcMode,
+                        computationManager,
+                        diagnostics);
+                computationResult = toComputationResult(report, contingencies.size());
+                violations = computationResult.postContingencyViolations();
+                latestSecurityAnalysisState = computationResult.succeeded() ? AnalysisStepState.DONE : AnalysisStepState.FAILED;
+            }
+            diagnostics.add("Security analysis evaluated " + contingencies.size() + " contingency(ies)");
+            boolean securityAnalysisSucceeded = computationResult.succeeded();
             SecurityAnalysisRunDocument done = new SecurityAnalysisRunDocument(
                     current.id(),
                     current.fileImportId(),
-                    SecurityAnalysisRunState.DONE,
+                    securityAnalysisSucceeded ? SecurityAnalysisRunState.DONE : SecurityAnalysisRunState.FAILED,
                     current.startedAt(),
-                    Instant.now(),
-                    null,
+                    securityAnalysisSucceeded ? Instant.now() : null,
+                    securityAnalysisSucceeded ? null : Instant.now(),
+                    latestLoadFlowState,
+                    latestSecurityAnalysisState,
+                    current.parameterConfigurationId(),
+                    current.parameterConfigurationName(),
+                    selectedStrategy,
+                    selectedLoadFlowParameters,
+                    selectedSecurityAnalysisParameters,
+                    loadFlowResult,
+                    computationResult,
                     documents.stream().map(IidmNetworkReadDocument::id).toList(),
                     counts,
                     lineFlows,
                     violations,
                     bounded(diagnostics),
-                    "Security analysis completed");
+                    securityAnalysisSucceeded ? "Load flow and security analysis completed" : "Security analysis failed");
             runRepository.save(done);
         } catch (Exception exception) {
             diagnostics.add(rootMessage(exception));
@@ -210,6 +387,18 @@ public class LfSaService extends RestServiceSupport {
                     current.startedAt(),
                     null,
                     Instant.now(),
+                    latestLoadFlowState == AnalysisStepState.DONE ? AnalysisStepState.DONE : AnalysisStepState.FAILED,
+                    latestSecurityAnalysisState == AnalysisStepState.STARTED
+                            || latestSecurityAnalysisState == AnalysisStepState.DONE
+                            ? AnalysisStepState.FAILED
+                            : AnalysisStepState.NOT_STARTED,
+                    current.parameterConfigurationId(),
+                    current.parameterConfigurationName(),
+                    current.loadFlowStrategy(),
+                    current.loadFlowParameters(),
+                    current.securityAnalysisParameters(),
+                    latestLoadFlowResult,
+                    current.computationResult(),
                     current.iidmNetworkIds(),
                     current.networkElementCounts(),
                     current.lineFlows(),
@@ -221,7 +410,7 @@ public class LfSaService extends RestServiceSupport {
 
     public CommonPage<SecurityAnalysisRunSummary> searchRuns(String runId, String runDate, String runTime, int page, int size) {
         List<SecurityAnalysisRunSummary> rows = runRepository
-                .findAll(MAX_SEARCH_RUNS, DocumentSort.descending("startedAt"))
+                .findAll(defaultsService.load().maxSearchRuns(), DocumentSort.descending("startedAt"))
                 .stream()
                 .map(this::toSummary)
                 .filter(summary -> matches(runId, summary.runId()))
@@ -236,6 +425,9 @@ public class LfSaService extends RestServiceSupport {
                 .orElseThrow(() -> new IllegalArgumentException("Security analysis run not found: " + runId));
         return new SecurityAnalysisRunDetail(
                 toSummary(document),
+                document.parameterConfiguration(),
+                document.loadFlowResult(),
+                document.computationResult(),
                 document.lineFlows(),
                 document.violations(),
                 document.networkElementCounts(),
@@ -255,7 +447,10 @@ public class LfSaService extends RestServiceSupport {
                 return documents;
             }
         }
-        return iidmNetworkRepository.findByField("importId", event.fileImportId(), 500);
+        return iidmNetworkRepository.findByField(
+                "importId",
+                event.fileImportId(),
+                defaultsService.load().maxIidmNetworks());
     }
 
     private Network readNetwork(IidmNetworkReadDocument document) {
@@ -308,7 +503,7 @@ public class LfSaService extends RestServiceSupport {
     private List<LineFlow> lineFlows(Network network) {
         return network.getLineStream()
                 .sorted(Comparator.comparing(Line::getId))
-                .limit(500)
+                .limit(defaultsService.load().maxLineFlows())
                 .map(line -> {
                     double p1 = finite(line.getTerminal1().getP());
                     double q1 = finite(line.getTerminal1().getQ());
@@ -324,6 +519,177 @@ public class LfSaService extends RestServiceSupport {
                 .toList();
     }
 
+    private List<Contingency> contingencies(
+            Network network,
+            SecurityAnalysisParametersDto parameters,
+            List<String> diagnostics) {
+        int max = parameters == null
+                ? defaultsService.load().securityAnalysisParameters().maxGeneratedContingencies()
+                : parameters.maxGeneratedContingencies();
+        String elementType = parameters == null ? "LINE" : parameters.contingencyElementType();
+        List<Contingency> contingencies = network.getLineStream()
+                .sorted(Comparator.comparing(Line::getId))
+                .limit(max)
+                .map(line -> "BRANCH".equalsIgnoreCase(elementType)
+                        ? Contingency.branch(line.getId(), "N-1-" + line.getId())
+                        : Contingency.line(line.getId(), "N-1-" + line.getId()))
+                .filter(contingency -> contingency.isValid(network))
+                .toList();
+        diagnostics.add("Generated " + contingencies.size() + " " + elementType + " contingency(ies)");
+        return contingencies;
+    }
+
+    private SecurityAnalysisReport runPowSyBlSecurityAnalysis(
+            Network network,
+            List<Contingency> contingencies,
+            LoadFlowParametersDto loadFlowParameters,
+            SecurityAnalysisParametersDto securityAnalysisParameters,
+            boolean dc,
+            LocalComputationManager computationManager,
+            List<String> diagnostics) throws IOException {
+        SecurityAnalysisRunParameters runParameters = new SecurityAnalysisRunParameters()
+                .setSecurityAnalysisParameters(toPowSyBlParameters(loadFlowParameters, securityAnalysisParameters, dc));
+        runParameters.setComputationManager(computationManager);
+        diagnostics.add("Invoking PowSyBl SecurityAnalysis.run with " + (dc ? "DC" : "AC") + " load-flow parameters");
+        return SecurityAnalysis.run(network, contingencies, runParameters);
+    }
+
+    private LoadFlowExecution runPowSyBlLoadFlow(
+            Network network,
+            LoadFlowStrategy strategy,
+            LoadFlowParametersDto parameters,
+            LocalComputationManager computationManager,
+            List<String> diagnostics) {
+        LoadFlowStrategy selectedStrategy = strategy == null ? defaultsService.load().loadFlowStrategy() : strategy;
+        if (selectedStrategy == LoadFlowStrategy.AC_WITH_DC_FAILOVER) {
+            LoadFlowExecution ac = runSinglePowSyBlLoadFlow(network, parameters, false, computationManager, diagnostics);
+            if (ac.result().succeeded()) {
+                return ac;
+            }
+            diagnostics.add("AC load flow failed; retrying with DC load flow");
+            return runSinglePowSyBlLoadFlow(network, parameters, true, computationManager, diagnostics);
+        }
+        return runSinglePowSyBlLoadFlow(
+                network,
+                parameters,
+                selectedStrategy == LoadFlowStrategy.DC_ONLY,
+                computationManager,
+                diagnostics);
+    }
+
+    private LoadFlowExecution runSinglePowSyBlLoadFlow(
+            Network network,
+            LoadFlowParametersDto parameters,
+            boolean dc,
+            LocalComputationManager computationManager,
+            List<String> diagnostics) {
+        diagnostics.add("Invoking PowSyBl LoadFlow.run in " + (dc ? "DC" : "AC") + " mode");
+        LoadFlowRunParameters runParameters = new LoadFlowRunParameters()
+                .setComputationManager(computationManager)
+                .setParameters(toLoadFlowParameters(parameters, dc));
+        com.powsybl.loadflow.LoadFlowResult result = LoadFlow.run(network, runParameters);
+        List<String> componentStatuses = result.getComponentResults().stream()
+                .map(component -> "component=" + component.getConnectedComponentNum()
+                        + ", synchronous=" + component.getSynchronousComponentNum()
+                        + ", status=" + component.getStatus()
+                        + ", iterations=" + component.getIterationCount())
+                .toList();
+        String logs = result.getLogs();
+        LoadFlowComputationResult computationResult = new LoadFlowComputationResult(
+                result.isOk(),
+                String.valueOf(result.getStatus()),
+                result.getComponentResults().size(),
+                componentStatuses,
+                result.getMetrics(),
+                logs == null ? "" : logs);
+        return new LoadFlowExecution(computationResult, dc);
+    }
+
+    private SecurityAnalysisParameters toPowSyBlParameters(
+            LoadFlowParametersDto loadFlowDto,
+            SecurityAnalysisParametersDto dto,
+            boolean dc) {
+        SecurityAnalysisParameters parameters = new SecurityAnalysisParameters();
+        SecurityAnalysisParametersDto values = dto == null ? defaultsService.load().securityAnalysisParameters() : dto;
+        LoadFlowParameters loadFlowParameters = toLoadFlowParameters(loadFlowDto, dc);
+        parameters
+                .setLoadFlowParameters(loadFlowParameters)
+                .setIntermediateResultsInOperatorStrategy(values.intermediateResultsInOperatorStrategy());
+        if (!values.debugDir().isBlank()) {
+            parameters.setDebugDir(values.debugDir());
+        }
+        return parameters;
+    }
+
+    private LoadFlowParameters toLoadFlowParameters(LoadFlowParametersDto dto, boolean dc) {
+        LoadFlowParametersDto values = dto == null ? defaultsService.load().loadFlowParameters() : dto;
+        return new LoadFlowParameters()
+                .setDc(dc)
+                .setDistributedSlack(values.distributedSlack())
+                .setUseReactiveLimits(values.useReactiveLimits())
+                .setTransformerVoltageControlOn(values.transformerVoltageControlOn())
+                .setPhaseShifterRegulationOn(values.phaseShifterRegulationOn())
+                .setShuntCompensatorVoltageControlOn(values.shuntCompensatorVoltageControlOn())
+                .setReadSlackBus(values.readSlackBus())
+                .setWriteSlackBus(values.writeSlackBus())
+                .setHvdcAcEmulation(values.hvdcAcEmulation())
+                .setDcPowerFactor(values.dcPowerFactor())
+                .setVoltageInitMode(enumValue(
+                        LoadFlowParameters.VoltageInitMode.class,
+                        values.voltageInitMode(),
+                        LoadFlowParameters.VoltageInitMode.PREVIOUS_VALUES))
+                .setBalanceType(enumValue(
+                        LoadFlowParameters.BalanceType.class,
+                        values.balanceType(),
+                        LoadFlowParameters.BalanceType.PROPORTIONAL_TO_GENERATION_P))
+                .setComponentMode(enumValue(
+                        LoadFlowParameters.ComponentMode.class,
+                        values.componentMode(),
+                        LoadFlowParameters.ComponentMode.MAIN_CONNECTED));
+    }
+
+    private record LoadFlowExecution(LoadFlowComputationResult result, boolean dc) {
+    }
+
+    private SecurityAnalysisComputationResult toComputationResult(SecurityAnalysisReport report, int contingencyCount) {
+        com.powsybl.security.SecurityAnalysisResult result = report.getResult();
+        List<ContingencyViolation> preViolations = result.getPreContingencyLimitViolationsResult()
+                .getLimitViolations()
+                .stream()
+                .map(violation -> toViolation("BASE", violation))
+                .toList();
+        List<String> postStatuses = result.getPostContingencyResults().stream()
+                .map(post -> post.getContingency().getId() + "=" + post.getStatus())
+                .toList();
+        List<ContingencyViolation> postViolations = result.getPostContingencyResults().stream()
+                .flatMap(post -> post.getLimitViolationsResult().getLimitViolations().stream()
+                        .map(violation -> toViolation(post.getContingency().getId(), violation)))
+                .toList();
+        boolean succeeded = result.getPreContingencyLimitViolationsResult().isComputationOk()
+                && result.getPostContingencyResults().stream()
+                        .allMatch(post -> post.getStatus() == com.powsybl.security.PostContingencyComputationStatus.CONVERGED
+                                || post.getStatus() == com.powsybl.security.PostContingencyComputationStatus.NO_IMPACT);
+        String preStatus = result.getPreContingencyResult() == null ? "" : String.valueOf(result.getPreContingencyResult().getStatus());
+        return new SecurityAnalysisComputationResult(
+                succeeded,
+                preStatus,
+                contingencyCount,
+                postStatuses,
+                preViolations,
+                postViolations);
+    }
+
+    private ContingencyViolation toViolation(String contingencyId, LimitViolation violation) {
+        return new ContingencyViolation(
+                contingencyId,
+                violation.getSubjectId(),
+                violationType(violation.getLimitType().name()),
+                finite(violation.getValue()),
+                finite(violation.getLimit()),
+                unit(violation.getLimitType().name()),
+                severity(violation.getValue(), violation.getLimit()));
+    }
+
     private List<ContingencyViolation> violations(List<LineFlow> lineFlows) {
         return lineFlows.stream()
                 .filter(flow -> flow.loadingPercent() > 100.0)
@@ -336,6 +702,32 @@ public class LfSaService extends RestServiceSupport {
                         "%",
                         flow.loadingPercent() > 120.0 ? "HIGH" : "MEDIUM"))
                 .toList();
+    }
+
+    private LfSaParameterConfiguration resolveParameterConfiguration(String id) {
+        if (id == null || id.isBlank()) {
+            return defaultParameterConfiguration();
+        }
+        return parameterRepository.findByField("id", id, 1).stream()
+                .findFirst()
+                .map(this::toParameterConfiguration)
+                .orElse(defaultParameterConfiguration());
+    }
+
+    private LfSaParameterConfiguration toParameterConfiguration(
+            SecurityAnalysisParameterConfigurationDocument document) {
+        LfSaDefaults defaults = defaultsService.load();
+        return new LfSaParameterConfiguration(
+                document.id(),
+                document.name(),
+                document.source(),
+                instantString(document.createdAt()),
+                instantString(document.updatedAt()),
+                document.loadFlowStrategy() == null ? defaults.loadFlowStrategy() : document.loadFlowStrategy(),
+                document.loadFlowParameters() == null ? defaults.loadFlowParameters() : document.loadFlowParameters(),
+                document.securityAnalysisParameters() == null
+                        ? defaults.securityAnalysisParameters()
+                        : document.securityAnalysisParameters());
     }
 
     private String busId(Bus bus) {
@@ -369,6 +761,8 @@ public class LfSaService extends RestServiceSupport {
                 document.id(),
                 document.fileImportId(),
                 document.state(),
+                document.loadFlowState(),
+                document.securityAnalysisState(),
                 DATE.format(startedAt.atZone(ZoneOffset.UTC)),
                 TIME.format(startedAt.atZone(ZoneOffset.UTC)),
                 document.iidmNetworkIds().size(),
@@ -384,6 +778,35 @@ public class LfSaService extends RestServiceSupport {
         int from = Math.min(rows.size(), safePage * safeSize);
         int to = Math.min(rows.size(), from + safeSize);
         return new CommonPage<>(rows.subList(from, to), rows.size(), safePage, safeSize);
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value, E fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Enum.valueOf(type, value.trim());
+        } catch (IllegalArgumentException exception) {
+            return fallback;
+        }
+    }
+
+    private ViolationType violationType(String limitType) {
+        return switch (limitType) {
+            case "LOW_VOLTAGE" -> ViolationType.VOLTAGE_LOW;
+            case "HIGH_VOLTAGE" -> ViolationType.VOLTAGE_HIGH;
+            default -> ViolationType.OVERLOAD;
+        };
+    }
+
+    private String unit(String limitType) {
+        return limitType.contains("VOLTAGE") ? "kV" : "%";
+    }
+
+    private String severity(double value, double limit) {
+        double denominator = Math.abs(limit) < 0.0001 ? 1.0 : Math.abs(limit);
+        double ratio = Math.abs(value - limit) / denominator;
+        return ratio > 0.2 ? "HIGH" : "MEDIUM";
     }
 
     private boolean matches(String filter, String value) {
@@ -423,10 +846,11 @@ public class LfSaService extends RestServiceSupport {
     }
 
     private List<String> bounded(List<String> diagnostics) {
-        if (diagnostics.size() <= MAX_DIAGNOSTICS) {
+        int maxDiagnostics = defaultsService.load().maxDiagnostics();
+        if (diagnostics.size() <= maxDiagnostics) {
             return List.copyOf(diagnostics);
         }
-        return List.copyOf(diagnostics.subList(0, MAX_DIAGNOSTICS));
+        return List.copyOf(diagnostics.subList(0, maxDiagnostics));
     }
 
     private String rootMessage(Throwable throwable) {

@@ -1,6 +1,8 @@
 package eu.egm.srv.common.lfsa.api;
 
 import eu.egm.data.common.CommonPage;
+import eu.egm.data.common.LfSaParameterConfiguration;
+import eu.egm.data.common.LfSaParameterConfigurationSaveRequest;
 import eu.egm.data.common.LoadFlowRequest;
 import eu.egm.data.common.LoadFlowResult;
 import eu.egm.data.common.SecurityAnalysisImportCandidate;
@@ -51,6 +53,24 @@ public class LfSaController {
     @PostMapping(value = "/security-analysis/runs", consumes = MediaType.APPLICATION_JSON_VALUE)
     public SecurityAnalysisRunSummary startSecurityAnalysis(@RequestBody SecurityAnalysisRunStartRequest request) {
         return service.startSecurityAnalysis(request);
+    }
+
+    @GetMapping("/security-analysis/parameters/default")
+    public LfSaParameterConfiguration defaultSecurityAnalysisParameters() {
+        return service.defaultParameterConfiguration();
+    }
+
+    @GetMapping("/security-analysis/parameters")
+    public CommonPage<LfSaParameterConfiguration> securityAnalysisParameters(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        return service.parameterConfigurations(page, size);
+    }
+
+    @PostMapping(value = "/security-analysis/parameters", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public LfSaParameterConfiguration saveSecurityAnalysisParameters(
+            @RequestBody LfSaParameterConfigurationSaveRequest request) {
+        return service.saveParameterConfiguration(request);
     }
 
     @GetMapping("/security-analysis/runs")

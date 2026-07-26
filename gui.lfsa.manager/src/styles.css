@@ -82,12 +82,83 @@
   padding: 10px 12px;
 }
 
+.run-action {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.parameter-header,
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.parameter-header h3 {
+  margin: 0;
+}
+
+.parameter-section {
+  border-top: 1px solid var(--border-color);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.parameter-section .eyebrow {
+  margin-bottom: 8px;
+}
+
+.parameter-header button,
+.form-actions button,
+.link-button {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border: 1px solid color-mix(in srgb, var(--primary), transparent 45%);
+  border-radius: 6px;
+  color: var(--button-text);
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.link-button {
+  background: transparent;
+  border: 0;
+  color: var(--primary);
+  min-height: auto;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.check-grid label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  font-weight: 700;
+}
+
 .detail-tables {
   margin-top: 16px;
 }
 
 @media (max-width: 900px) {
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .check-grid,
+  .run-action {
     grid-template-columns: 1fr;
   }
 }

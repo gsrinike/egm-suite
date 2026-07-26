@@ -137,7 +137,7 @@ const optimizeRemedialActions = ref(true);
 const navigation: NavigationItem[] = [
   { id: 'cgm', label: 'CGM', children: [
     { id: 'cgm-import', label: 'Import Manager' },
-    { id: 'cgm-security-analysis', label: 'Security Analysis' },
+    { id: 'cgm-security-analysis', label: 'Load Flow & Security Analysis' },
     { id: 'cgm-sensitivity-analysis', label: 'Sensitivity Analysis', disabled: true }
   ] },
   { id: 'csa', label: 'CSA' },
@@ -148,7 +148,7 @@ const navigation: NavigationItem[] = [
 
 const titles: Record<string, string> = {
   'cgm-import': 'Import Manager',
-  'cgm-security-analysis': 'Security Analysis',
+  'cgm-security-analysis': 'Load Flow & Security Analysis',
   'cgm-sensitivity-analysis': 'Sensitivity Analysis',
   csa: 'CSA Workspace',
   cc: 'Capacity Calculation',
