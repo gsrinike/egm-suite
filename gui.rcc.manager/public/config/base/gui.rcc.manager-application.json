@@ -1,7 +1,6 @@
 {
   "environment": "base",
   "apis": {
-    "csaBaseUrl": "",
     "cnmBaseUrl": "",
     "iidmBaseUrl": "",
     "lfsaBaseUrl": ""

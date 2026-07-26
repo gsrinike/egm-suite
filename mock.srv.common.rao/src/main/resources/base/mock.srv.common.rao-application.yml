@@ -1,8 +1,0 @@
-spring:
-  application:
-    name: mock.srv.common.rao
-server:
-  port: ${MOCK_RAO_SERVICES_PORT:8094}
-springdoc:
-  swagger-ui:
-    url: /openapi/rao-services.yaml

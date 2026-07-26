@@ -396,10 +396,26 @@ async function loadRuns() {
   try {
     const page = await searchRuns({ ...runSearch.value, page: 0, size: 100 });
     runRows.value = page.items.map(formatRow);
+    await refreshSelectedRunDetail(page.items);
   } catch (error) {
     message.value = 'Unable to load security-analysis runs';
     logClientError('Unable to load LFSA runs', error);
   }
+}
+
+async function refreshSelectedRunDetail(runs: SecurityAnalysisRunSummary[]) {
+  const selectedRunId = selectedDetail.value?.summary.runId;
+  const searchRunId = runSearch.value.runId.trim();
+  const runToOpen = runs.find((run) => selectedRunId && run.runId === selectedRunId)
+    ?? runs.find((run) => searchRunId && run.runId === searchRunId)
+    ?? (runs.length === 1 ? runs[0] : undefined);
+  if (!runToOpen) {
+    if (selectedRunId && !runs.some((run) => run.runId === selectedRunId)) {
+      selectedDetail.value = null;
+    }
+    return;
+  }
+  await openRun(runToOpen.runId);
 }
 
 async function openRun(runId: string) {

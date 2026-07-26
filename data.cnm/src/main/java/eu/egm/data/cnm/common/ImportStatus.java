@@ -13,8 +13,31 @@ public record ImportStatus(
         ImportState state,
         List<ImportFileStatus> files,
         Instant createdAt,
-        String message) {
+        String message,
+        IidmTransformationStatus iidmTransformationStatus) {
+    public ImportStatus(
+            String importId,
+            CnmServiceType serviceType,
+            TimeFrame timeFrame,
+            ImportState state,
+            List<ImportFileStatus> files,
+            Instant createdAt,
+            String message) {
+        this(
+                importId,
+                serviceType,
+                timeFrame,
+                state,
+                files,
+                createdAt,
+                message,
+                IidmTransformationStatus.NOT_STARTED);
+    }
+
     public ImportStatus {
         files = files == null ? List.of() : List.copyOf(files);
+        iidmTransformationStatus = iidmTransformationStatus == null
+                ? IidmTransformationStatus.NOT_STARTED
+                : iidmTransformationStatus;
     }
 }

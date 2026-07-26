@@ -18,11 +18,6 @@ The active Maven reactor contains:
 - `srv.iidm.transformer`
 - `srv.common.lfsa`
 - `mock.srv.common.lfsa`
-- `srv.common.rao`
-- `mock.srv.common.rao`
-- `srv.csa.services`
-- `mock.srv.csa.services`
-- `bpm.csa.service`
 - `mock.srv.cnm.services`
 - `gui.common`
 - `gui.cnm.manager`
@@ -36,13 +31,13 @@ Keep `pom.xml` and `modules.yml` synchronized.
 - `com.vault` depends on `com.utils`; `com.auth` does not depend on `com.vault`.
 - `com.infra` owns Elasticsearch, MinIO, RabbitMQ, and BPM adapter dependencies.
 - `data.cnm` and `data.common` stay storage-neutral and framework-neutral.
+- `data.common` groups LF/SA contracts by capability package:
+  `lfsa.common` and `lfsa.sensitivity`.
 - `data.iidm` is the PowSyBl DTO boundary and may depend on PowSyBl.
 - `map.cnm.iidm` depends on data/mapping modules, not Spring or infrastructure.
 - `srv.cnm.services` may publish `data.iidm` events but does not import
   `srv.iidm.transformer`.
 - `srv.iidm.transformer` owns IIDM transform and network documents.
-- `srv.csa.services` uses common services and BPM contracts; it does not import
-  `bpm.csa.service`.
 - Feature GUIs consume `gui.common`.
 
 ## Configuration Rules

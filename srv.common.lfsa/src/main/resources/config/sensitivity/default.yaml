@@ -1,0 +1,24 @@
+limits:
+  maxSearchRuns: 1000
+  maxDiagnostics: 50
+  maxResultRows: 500
+
+parameters:
+  dc: true
+  functionType: BRANCH_ACTIVE_POWER_1
+  variableType: INJECTION_ACTIVE_POWER
+  contingencyContext: ALL
+  maxMonitoredBranches: 25
+  maxVariables: 25
+  maxGeneratedContingencies: 25
+  flowFlowSensitivityValueThreshold: 0.0
+  voltageVoltageSensitivityValueThreshold: 0.0
+  flowVoltageSensitivityValueThreshold: 0.0
+  angleFlowSensitivityValueThreshold: 0.0
+  operatorStrategiesCalculationMode: NONE
+  debugDir: ""
+
+inputs:
+  defaultPtdfObjectId: ""
+  defaultLodfObjectId: ""
+  defaultGlskObjectId: ""

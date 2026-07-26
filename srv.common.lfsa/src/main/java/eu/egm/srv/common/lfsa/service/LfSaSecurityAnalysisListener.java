@@ -1,6 +1,6 @@
 package eu.egm.srv.common.lfsa.service;
 
-import eu.egm.data.common.SecurityAnalysisRequested;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRequested;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 

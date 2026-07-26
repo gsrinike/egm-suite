@@ -9,12 +9,12 @@
   URLs configurable.
 - CGM > Security Analysis embeds `gui.lfsa.manager` for searching successful
   imports, starting LFSA runs, and viewing persisted run results.
-- CGM > Sensitivity Analysis is present as a disabled placeholder for a later
-  increment.
+- CGM > Sensitivity Analysis embeds the LFSA sensitivity manager for
+  configuration, run execution, uploaded PTDF/LODF/GLSK inputs, and result
+  browsing.
 - The embedded CNM view includes file-level IIDM aggregate status and links to
   the IIDM transformation view.
-- CSA screens call CSA/common service APIs.
-- Workflow Monitor visualizes workflow instances.
+- CSA and Workflow Monitor are placeholders for later increments.
 - CC and OPC are displayed as inactive placeholders.
 
 The UI uses `gui.common` for shared components, theme persistence, refresh
@@ -30,7 +30,7 @@ public/config/<env>/gui.rcc.manager-application.json
 ```
 
 `VITE_APP_ENV` selects the environment and defaults to `local`. The config
-contains CNM, IIDM, CSA, LF/SA, and RAO base URLs.
+contains CNM, IIDM, and LF/SA base URLs.
 
 ## Developer Commands
 

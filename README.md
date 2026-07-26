@@ -3,8 +3,8 @@
 Energy Grid Management Suite is a Maven multi-module workspace for grid model
 management and regional coordination applications. The current codebase provides
 shared platform capabilities, Common Network Model import, PowSyBl IIDM
-transformation, RCC/CSA orchestration, reusable analysis service boundaries, and
-Vue-based management screens.
+transformation, reusable LF/SA and sensitivity analysis services, and Vue-based
+management screens.
 
 ## Current Module Families
 
@@ -38,19 +38,16 @@ Vue-based management screens.
   logging helpers.
 - `gui.cnm.manager`: CNM import and exploration UI.
 
-### RCC, CSA, and common analysis
+### RCC and common analysis
 
-- `data.common`: DTOs shared by RCC, CSA, load-flow/security-analysis, RAO,
-  BPM, GUI, and mocks.
-- `srv.common.lfsa`: reusable load-flow and security-analysis service boundary.
+- `data.common`: DTOs shared by RCC, load-flow/security-analysis, sensitivity
+  analysis, GUI, and mocks. DTOs are grouped under `lfsa.common` and
+  `lfsa.sensitivity` packages.
+- `srv.common.lfsa`: reusable load-flow, security-analysis, and
+  sensitivity-analysis service boundary.
 - `mock.srv.common.lfsa`: mock LF/SA service.
-- `srv.common.rao`: reusable remedial-action optimization service boundary.
-- `mock.srv.common.rao`: mock RAO service.
-- `srv.csa.services`: CSA orchestration service.
-- `mock.srv.csa.services`: mock CSA orchestration service.
-- `bpm.csa.service`: Camunda-backed CSA workflow service.
 - `gui.rcc.manager`: RCC manager UI with CGM import integration, CSA screens,
-  and workflow monitoring.
+  LF/SA screens, sensitivity analysis, and workflow monitoring placeholders.
 
 ## Build And Run
 

@@ -1,8 +1,8 @@
 package eu.egm.srv.common.lfsa.config;
 
-import eu.egm.data.common.LoadFlowParametersDto;
-import eu.egm.data.common.LoadFlowStrategy;
-import eu.egm.data.common.SecurityAnalysisParametersDto;
+import eu.egm.data.common.lfsa.common.LoadFlowParametersDto;
+import eu.egm.data.common.lfsa.common.LoadFlowStrategy;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisParametersDto;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedHashMap;

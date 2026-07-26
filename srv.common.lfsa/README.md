@@ -28,6 +28,15 @@ contingencies from the converged network, maps the stored DTOs to PowSyBl
 `LoadFlowParameters` and `SecurityAnalysisParameters`, and invokes
 `SecurityAnalysis.run(...)`.
 
+Sensitivity Analysis is handled in the same module under the sensitivity
+package. It searches completed IIDM networks for a selected import, saves named
+configuration sets in `sensitivity-configurations`, publishes asynchronous
+requests on `lfsa.sensitivity.requested`, and stores table-ready factors,
+matrix rows, diagnostics, and input references in `sensitivity-runs`. Optional
+PTDF, LODF, and GLSK files are uploaded to object storage first, then referenced
+by object id in the run document. Defaults are loaded and cached from
+`src/main/resources/config/sensitivity/default.yaml`.
+
 ## Developer Command
 
 ```bash

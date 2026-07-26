@@ -18,9 +18,14 @@ import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
 import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ImportStatus;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
+import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
+import eu.egm.data.iidm.common.IidmTransformState;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
+import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocument;
+import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmMridIndexDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocument;
 import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotDocumentAdapter;
@@ -375,6 +380,165 @@ class CnmImportRestServiceTest {
         });
     }
 
+    @Test
+    void keepsIidmStatusStartedUntilWholeImportAndAllTransformsComplete() {
+        CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
+        CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
+        CapturingIidmTransformRepository iidmTransformRepository = new CapturingIidmTransformRepository();
+        CnmImportRestService service = new CnmImportRestService(
+                new StandardEnvironment(),
+                ObservationRegistry.NOOP,
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        iidmTransformRepository,
+                        new CapturingEventPublisher()),
+                new RdfMetadataExtractor(),
+                "cnm-rdf-models",
+                "cnm.events",
+                "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
+        String importId = "partial-import";
+        CnmImportDocument.CnmImportFileDocument parsedFile = importFile(
+                "file-1",
+                "20241202T2330Z_1D_TSO-A_EQ_001.xml",
+                ImportFileState.PARSED);
+        CnmImportDocument.CnmImportFileDocument storedFile = importFile(
+                "file-2",
+                "20241202T2330Z_1D_TSO-B_EQ_001.xml",
+                ImportFileState.STORED);
+        documentRepository.save(new CnmImportDocument(
+                importId,
+                CnmServiceType.CGM,
+                TimeFrame.DAY_AHEAD,
+                ImportState.STORED,
+                List.of(parsedFile, storedFile),
+                1L,
+                "Metadata processing queued",
+                IidmTransformationStatus.DONE));
+        iidmTransformRepository.save(iidmTransform(importId, "file-1", IidmTransformState.DONE));
+
+        ImportStatus staleStatus = service.findImport(importId);
+        service.updateIidmTransformProgress(new IidmProfileTransformCompleted(
+                importId,
+                "file-1",
+                "transform-1",
+                List.of("file-1"),
+                List.of(parsedFile.fileName()),
+                "network-1",
+                "IIDM transformation completed"));
+        ImportStatus afterFirstTransform = service.findImport(importId);
+        ImportStatus afterSecondFileParsed = service.updateFileStatus(
+                importId,
+                "file-2",
+                new ImportFileStatusUpdateRequest(ImportFileState.PARSED, "RDF metadata parsed"));
+        iidmTransformRepository.save(iidmTransform(importId, "file-2", IidmTransformState.DONE));
+        service.updateIidmTransformProgress(new IidmProfileTransformCompleted(
+                importId,
+                "file-2",
+                "transform-2",
+                List.of("file-2"),
+                List.of(storedFile.fileName()),
+                "network-2",
+                "IIDM transformation completed"));
+        ImportStatus afterAllTransforms = service.findImport(importId);
+
+        assertThat(staleStatus.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
+        assertThat(afterFirstTransform.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
+        assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(afterSecondFileParsed.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
+        assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
+    }
+
+    @Test
+    void ignoresPersistedIidmDoneWithoutTransformEvidence() {
+        CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
+        CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
+        CnmImportRestService service = new CnmImportRestService(
+                new StandardEnvironment(),
+                ObservationRegistry.NOOP,
+                infrastructureUtils(objectStorageService, documentRepository),
+                new RdfMetadataExtractor(),
+                "cnm-rdf-models",
+                "cnm.events",
+                "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
+        String importId = "stale-done-import";
+        documentRepository.save(new CnmImportDocument(
+                importId,
+                CnmServiceType.CGM,
+                TimeFrame.DAY_AHEAD,
+                ImportState.SUCCESS,
+                List.of(importFile("file-1", "20241202T2330Z_1D_TSO-A_EQ_001.xml", ImportFileState.PARSED)),
+                1L,
+                "All CNM files processed successfully",
+                IidmTransformationStatus.DONE));
+
+        ImportStatus status = service.findImport(importId);
+
+        assertThat(status.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.NOT_STARTED);
+    }
+
+    @Test
+    void requeuesStaleStoredFilesWhenImportIsRead() {
+        CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
+        CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
+        CnmImportRestService service = new CnmImportRestService(
+                new StandardEnvironment(),
+                ObservationRegistry.NOOP,
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        eventPublisher),
+                new RdfMetadataExtractor(),
+                "cnm-rdf-models",
+                "cnm.events",
+                "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
+        String importId = "dangling-import";
+        CnmImportDocument.CnmImportFileDocument staleFile = importFile(
+                "file-1",
+                "20241202T2330Z_1D_TSO-A_EQ_001.xml",
+                ImportFileState.STORED);
+        documentRepository.save(new CnmImportDocument(
+                importId,
+                CnmServiceType.CGM,
+                TimeFrame.DAY_AHEAD,
+                ImportState.STORED,
+                List.of(staleFile),
+                1L,
+                "Stored RDF/XML model files; metadata processing queued"));
+
+        ImportStatus status = service.findImport(importId);
+        service.findImport(importId);
+
+        assertThat(status.state()).isEqualTo(ImportState.STORED);
+        assertThat(eventPublisher.processingEvents()).hasSize(1);
+        assertThat(eventPublisher.processingEvents().getFirst()).satisfies(event -> {
+            assertThat(event.importId()).isEqualTo(importId);
+            assertThat(event.fileId()).isEqualTo("file-1");
+            assertThat(event.retryCount()).isEqualTo(1);
+        });
+    }
+
     private static InfrastructureUtils infrastructureUtils(
             ObjectStorageService objectStorageService,
             DocumentRepositoryService<CnmImportDocument> documentRepository) {
@@ -406,6 +570,8 @@ class CnmImportRestServiceTest {
                 profilePayloadRepository,
                 new NoopDocumentRepository<>(),
                 new NoopDocumentRepository<>(),
+                new NoopDocumentRepository<>(),
+                new NoopDocumentRepository<>(),
                 eventPublisher);
     }
 
@@ -425,6 +591,7 @@ class CnmImportRestServiceTest {
                 profileFragmentRepository,
                 networkSnapshotRepository,
                 new NoopDocumentRepository<>(),
+                new NoopDocumentRepository<>(),
                 eventPublisher);
     }
 
@@ -436,6 +603,28 @@ class CnmImportRestServiceTest {
             DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository,
             DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository,
             DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository,
+            EventPublisherService eventPublisher) {
+        return infrastructureUtils(
+                objectStorageService,
+                documentRepository,
+                profileRepository,
+                profilePayloadRepository,
+                profileFragmentRepository,
+                networkSnapshotRepository,
+                networkSnapshotPayloadRepository,
+                new NoopDocumentRepository<>(),
+                eventPublisher);
+    }
+
+    private static InfrastructureUtils infrastructureUtils(
+            ObjectStorageService objectStorageService,
+            DocumentRepositoryService<CnmImportDocument> documentRepository,
+            DocumentRepositoryService<CnmProfileDocument> profileRepository,
+            DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository,
+            DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository,
+            DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository,
+            DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository,
+            DocumentRepositoryService<IidmProfileTransformReadDocument> iidmTransformRepository,
             EventPublisherService eventPublisher) {
         return new InfrastructureUtils() {
             @Override
@@ -459,6 +648,9 @@ class CnmImportRestServiceTest {
                 if (adapter instanceof CnmMridIndexDocumentAdapter) {
                     return new NoopDocumentRepository<>();
                 }
+                if (adapter instanceof IidmProfileTransformReadDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) iidmTransformRepository;
+                }
                 return (DocumentRepositoryService<T>) documentRepository;
             }
 
@@ -477,6 +669,50 @@ class CnmImportRestServiceTest {
                 return null;
             }
         };
+    }
+
+    private static CnmImportDocument.CnmImportFileDocument importFile(
+            String fileId,
+            String fileName,
+            ImportFileState state) {
+        String tsoName = fileName.contains("TSO-A") ? "TSO-A" : "TSO-B";
+        return new CnmImportDocument.CnmImportFileDocument(
+                fileId,
+                fileName,
+                "partial-import/" + fileName,
+                state,
+                ProfileFamily.CGMES,
+                "2024-12-02",
+                "23:30",
+                "1D",
+                tsoName,
+                "EQ",
+                "001",
+                List.of(),
+                state == ImportFileState.PARSED ? "RDF metadata parsed" : "Raw model stored",
+                1L);
+    }
+
+    private static IidmProfileTransformReadDocument iidmTransform(
+            String importId,
+            String fileId,
+            IidmTransformState state) {
+        return new IidmProfileTransformReadDocument(
+                importId + ":" + fileId,
+                importId,
+                fileId,
+                List.of(fileId),
+                List.of(fileId + ".xml"),
+                "CGMES_SOURCE",
+                ProfileFamily.CGMES,
+                "",
+                state,
+                "IIDM transformation " + state,
+                List.of(),
+                "network-" + fileId,
+                1L,
+                state == IidmTransformState.DONE ? 2L : null,
+                state == IidmTransformState.FAILED ? 2L : null);
     }
 
     private static byte[] rdf(String profileName) {
@@ -598,6 +834,41 @@ class CnmImportRestServiceTest {
         @Override
         public DocumentPage<CnmImportDocument> search(DocumentSearchRequest request) {
             return new DocumentPage<>(List.of(), 0, 0, 0);
+        }
+    }
+
+    private static class CapturingIidmTransformRepository
+            implements DocumentRepositoryService<IidmProfileTransformReadDocument> {
+        private final List<IidmProfileTransformReadDocument> saved = new ArrayList<>();
+
+        @Override
+        public void save(IidmProfileTransformReadDocument document) {
+            saved.removeIf(current -> current.id().equals(document.id()));
+            saved.add(document);
+        }
+
+        @Override
+        public void saveAll(List<IidmProfileTransformReadDocument> documents) {
+            documents.forEach(this::save);
+        }
+
+        @Override
+        public List<IidmProfileTransformReadDocument> findByField(String fieldName, Object value, int maxResults) {
+            return saved.stream()
+                    .filter(document -> ("importId".equals(fieldName) && document.importId().equals(value))
+                            || ("id".equals(fieldName) && document.id().equals(value)))
+                    .limit(maxResults)
+                    .toList();
+        }
+
+        @Override
+        public List<IidmProfileTransformReadDocument> findAll(int maxResults, DocumentSort sort) {
+            return saved.stream().limit(maxResults).toList();
+        }
+
+        @Override
+        public DocumentPage<IidmProfileTransformReadDocument> search(DocumentSearchRequest request) {
+            return new DocumentPage<>(saved, saved.size(), request.page(), request.size());
         }
     }
 

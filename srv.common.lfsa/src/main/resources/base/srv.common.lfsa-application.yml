@@ -15,3 +15,6 @@ lfsa:
       requested-queue: ${LFSA_SECURITY_ANALYSIS_REQUESTED_QUEUE:lfsa.security-analysis}
       requested-dlq: ${LFSA_SECURITY_ANALYSIS_REQUESTED_DLQ:lfsa.security-analysis.dlq}
       requested-dead-letter-routing-key: ${LFSA_SECURITY_ANALYSIS_REQUESTED_DLX_ROUTING_KEY:lfsa.security-analysis.failed.dlq}
+  sensitivity:
+    inputs:
+      bucket: ${LFSA_SENSITIVITY_INPUT_BUCKET:lfsa-inputs}

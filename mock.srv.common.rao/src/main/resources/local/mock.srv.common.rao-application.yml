@@ -1,2 +1,0 @@
-server:
-  port: ${MOCK_RAO_SERVICES_PORT:8094}

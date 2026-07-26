@@ -6,7 +6,7 @@ changes. It is written as current state, not as chronological change history.
 ## Module Families
 
 The active reactor contains shared `com.*` modules, CNM/IIDM modules,
-RCC/common-analysis modules, BPM, mocks, and GUI modules. Root `pom.xml` and
+RCC/common-analysis modules, mocks, and GUI modules. Root `pom.xml` and
 `modules.yml` are the active inventory and must stay synchronized.
 
 ## Shared Capability Boundary
@@ -63,9 +63,9 @@ payloads, and GUI-oriented JSON table projections.
 
 ## RCC And CSA
 
-CSA orchestration is separated from common analysis capabilities. LF/SA and RAO
-are common services. `bpm.csa.service` owns the Camunda process. `srv.csa.services`
-interacts with BPM through `com.infra` contracts or remote BPM endpoints.
+RCC analysis screens are separated from common analysis capabilities. LF/SA is a
+common service and owns load-flow, security-analysis, and sensitivity-analysis
+REST/event processing.
 
 ## Frontend
 

@@ -86,3 +86,100 @@ paths:
         - { name: runId, in: path, required: true, schema: { type: string } }
       responses:
         '200': { description: Load-flow and security-analysis run detail with table-ready results }
+  /api/common/lfsa/sensitivity/iidm-networks:
+    get:
+      summary: List completed IIDM networks for a CNM import
+      parameters:
+        - { name: importId, in: query, required: true, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+      responses:
+        '200': { description: Paged IIDM network documents eligible for sensitivity analysis }
+  /api/common/lfsa/sensitivity/configurations/default:
+    get:
+      summary: Get YAML-backed default sensitivity-analysis configuration
+      responses:
+        '200': { description: Default sensitivity-analysis configuration }
+  /api/common/lfsa/sensitivity/configurations:
+    get:
+      summary: List saved sensitivity-analysis configurations
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+      responses:
+        '200': { description: Paged saved sensitivity-analysis configurations }
+    post:
+      summary: Save a named sensitivity-analysis configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                parameters: { type: object }
+      responses:
+        '200': { description: Saved sensitivity-analysis configuration }
+  /api/common/lfsa/sensitivity/inputs:
+    post:
+      summary: Upload a PTDF, LODF, or GLSK input file for sensitivity analysis
+      parameters:
+        - { name: kind, in: query, required: true, schema: { type: string, enum: [PTDF, LODF, GLSK] } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: Uploaded input object-storage reference }
+  /api/common/lfsa/sensitivity/runs:
+    post:
+      summary: Start asynchronous sensitivity analysis for selected IIDM networks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileImportId]
+              properties:
+                fileImportId: { type: string }
+                iidmNetworkIds:
+                  type: array
+                  items: { type: string }
+                configurationId: { type: string }
+                ptdfObjectId: { type: string }
+                lodfObjectId: { type: string }
+                glskObjectId: { type: string }
+      responses:
+        '200': { description: Sensitivity-analysis run summary }
+    get:
+      summary: Search sensitivity-analysis runs
+      parameters:
+        - { name: runId, in: query, required: false, schema: { type: string } }
+        - { name: runDate, in: query, required: false, schema: { type: string, format: date } }
+        - { name: runTime, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+      responses:
+        '200': { description: Paged sensitivity-analysis run summaries }
+  /api/common/lfsa/sensitivity/runs/{runId}:
+    get:
+      summary: Get sensitivity-analysis run detail
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Sensitivity-analysis run detail with table-ready results }
+  /api/common/lfsa/sensitivity/runs/{runId}/inputs/{kind}/table:
+    get:
+      summary: Load a PTDF, LODF, or GLSK input file as table rows
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [PTDF, LODF, GLSK] } }
+      responses:
+        '200': { description: Table-ready sensitivity input content }

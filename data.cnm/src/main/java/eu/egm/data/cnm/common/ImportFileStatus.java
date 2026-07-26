@@ -22,6 +22,8 @@ public record ImportFileStatus(
         String message,
         IidmTransformationStatus iidmTransformationStatus,
         int iidmTransformationCount,
+        int iidmTransformationCompletedCount,
+        int iidmTransformationFailedCount,
         Instant uploadedAt) {
     public ImportFileStatus {
         profiles = profiles == null ? List.of() : List.copyOf(profiles);
@@ -29,5 +31,7 @@ public record ImportFileStatus(
                 ? IidmTransformationStatus.NOT_STARTED
                 : iidmTransformationStatus;
         iidmTransformationCount = Math.max(iidmTransformationCount, 0);
+        iidmTransformationCompletedCount = Math.max(iidmTransformationCompletedCount, 0);
+        iidmTransformationFailedCount = Math.max(iidmTransformationFailedCount, 0);
     }
 }

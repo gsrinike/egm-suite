@@ -12,6 +12,8 @@ public record IidmProfileTransformDocument(
         String id,
         String importId,
         String fileId,
+        String transformCorrelationKey,
+        String objectId,
         List<String> sourceFileIds,
         List<String> sourceFileNames,
         String profileType,

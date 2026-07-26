@@ -29,6 +29,12 @@ cnm:
       iidm-transform-queue: iidm.profile.transform
       iidm-transform-dlq: iidm.profile.transform.dlq
       iidm-transform-dead-letter-routing-key: iidm.profile.transform.failed.dlq
+      iidm-transform-started-routing-key: iidm.profile.transform.started
+      iidm-transform-started-queue: iidm.profile.transform.started.cnm
+      iidm-transform-completed-routing-key: iidm.profile.transform.completed
+      iidm-transform-completed-queue: iidm.profile.transform.completed.cnm
+      iidm-transform-failed-routing-key: iidm.profile.transform.failed
+      iidm-transform-failed-queue: iidm.profile.transform.failed.cnm
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

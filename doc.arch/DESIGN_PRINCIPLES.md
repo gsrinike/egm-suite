@@ -15,7 +15,8 @@ Each module owns one kind of responsibility.
 - `srv.*` modules own runnable REST services and workers.
 - `mock.srv.*` modules mirror service contracts with deterministic in-memory
   behavior.
-- `bpm.*` modules own process definitions and process runtime endpoints.
+- `bpm.*` modules own process definitions and process runtime endpoints when a
+  workflow runtime module is active.
 - `gui.*` modules own Vue applications or shared Vue components.
 
 ## Dependency Direction
@@ -29,8 +30,8 @@ Dependencies point from applications toward stable shared contracts.
   `srv.iidm.transformer`.
 - `srv.iidm.transformer` owns IIDM persistence and may use PowSyBl through
   `data.iidm` and `map.cnm.iidm`.
-- CSA orchestration uses common LF/SA and RAO service contracts and does not
-  depend directly on `bpm.csa.service`.
+- Feature orchestration uses common LF/SA contracts instead of embedding
+  reusable analysis logic in GUI or workflow modules.
 - `com.vault` depends on `com.utils` for bootstrap secret authorization.
   `com.auth` does not depend on `com.vault`.
 

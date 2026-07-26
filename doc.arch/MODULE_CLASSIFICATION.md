@@ -37,18 +37,16 @@ conversion outside the import service boundary.
 
 ## RCC And Common Analysis Modules
 
-- `data.common`: shared RCC/CSA/LFSA/RAO/BPM transport DTOs.
-- `srv.common.lfsa`: common load-flow and security-analysis API.
+- `data.common`: shared RCC and LF/SA transport DTOs, organized by capability:
+  `lfsa.common` for load-flow/security-analysis contracts and `lfsa.sensitivity`
+  for sensitivity-analysis contracts.
+- `srv.common.lfsa`: common load-flow, security-analysis, and
+  sensitivity-analysis API.
 - `mock.srv.common.lfsa`: LF/SA mock API.
-- `srv.common.rao`: common remedial-action optimization API.
-- `mock.srv.common.rao`: RAO mock API.
-- `srv.csa.services`: CSA orchestration API.
-- `mock.srv.csa.services`: CSA mock API.
-- `bpm.csa.service`: Camunda CSA workflow runtime.
 - `gui.rcc.manager`: RCC manager UI.
 
-LF/SA and RAO stay outside CSA because CSA, capacity calculation, and
-operational planning workflows can reuse them.
+LF/SA stays outside feature-specific workflows because CSA, capacity
+calculation, and operational planning workflows can reuse the same contracts.
 
 ## GUI Module
 

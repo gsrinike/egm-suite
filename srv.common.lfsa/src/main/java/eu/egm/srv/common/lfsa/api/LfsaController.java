@@ -1,16 +1,16 @@
 package eu.egm.srv.common.lfsa.api;
 
-import eu.egm.data.common.CommonPage;
-import eu.egm.data.common.LfSaParameterConfiguration;
-import eu.egm.data.common.LfSaParameterConfigurationSaveRequest;
-import eu.egm.data.common.LoadFlowRequest;
-import eu.egm.data.common.LoadFlowResult;
-import eu.egm.data.common.SecurityAnalysisImportCandidate;
-import eu.egm.data.common.SecurityAnalysisRequest;
-import eu.egm.data.common.SecurityAnalysisResult;
-import eu.egm.data.common.SecurityAnalysisRunDetail;
-import eu.egm.data.common.SecurityAnalysisRunStartRequest;
-import eu.egm.data.common.SecurityAnalysisRunSummary;
+import eu.egm.data.common.lfsa.common.CommonPage;
+import eu.egm.data.common.lfsa.common.LfSaParameterConfiguration;
+import eu.egm.data.common.lfsa.common.LfSaParameterConfigurationSaveRequest;
+import eu.egm.data.common.lfsa.common.LoadFlowRequest;
+import eu.egm.data.common.lfsa.common.LoadFlowResult;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisImportCandidate;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRequest;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisResult;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRunDetail;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRunStartRequest;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRunSummary;
 import eu.egm.srv.common.lfsa.service.LfSaService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;

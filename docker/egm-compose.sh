@@ -219,7 +219,6 @@ expand_runtime_dependencies() {
     append_runtime_dependency "srv-cnm-services"
     append_runtime_dependency "srv-iidm-transformer"
     append_runtime_dependency "srv-common-lfsa"
-    append_runtime_dependency "srv-csa-services"
   fi
   if contains_requested_service "gui-lfsa-manager"; then
     append_runtime_dependency "srv-common-lfsa"

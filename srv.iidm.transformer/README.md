@@ -12,6 +12,9 @@ network results for GUI exploration and downstream analysis.
 - Preserve compatibility conversion from CNM profile payloads or snapshots.
 - Capture bounded PowSyBl conversion diagnostics.
 - Persist transform state in `iidm-profile-transforms`.
+- Scope each transform document by a transform correlation key that includes the
+  file import context. This keeps retries idempotent while allowing a reupload
+  of the same source files to create a new transform set.
 - Persist XIIDM and JSON table projection in `iidm-networks`.
 - Store source file IDs for correlation and source file names for display.
 - Declare the IIDM request queue with a dead-letter queue and three retry

@@ -1,8 +1,8 @@
 package eu.egm.srv.common.lfsa.domain;
 
-import eu.egm.data.common.LoadFlowParametersDto;
-import eu.egm.data.common.LoadFlowStrategy;
-import eu.egm.data.common.SecurityAnalysisParametersDto;
+import eu.egm.data.common.lfsa.common.LoadFlowParametersDto;
+import eu.egm.data.common.lfsa.common.LoadFlowStrategy;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisParametersDto;
 
 /**
  * LFSA-owned document for named PowSyBl security-analysis parameter sets.

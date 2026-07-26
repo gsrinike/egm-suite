@@ -13,6 +13,7 @@ iidm:
       requested-queue: iidm.profile.transform
       requested-dlq: iidm.profile.transform.dlq
       requested-dead-letter-routing-key: iidm.profile.transform.failed.dlq
+      started-routing-key: iidm.profile.transform.started
       completed-routing-key: iidm.profile.transform.completed
       failed-routing-key: iidm.profile.transform.failed
 springdoc:

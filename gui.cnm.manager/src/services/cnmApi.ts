@@ -22,6 +22,8 @@ export interface ImportFileStatus {
   message: string;
   iidmTransformationStatus: IidmTransformationStatus;
   iidmTransformationCount: number;
+  iidmTransformationCompletedCount: number;
+  iidmTransformationFailedCount: number;
   uploadedAt: string;
 }
 
@@ -32,6 +34,7 @@ export interface ImportStatus {
   state: ImportState;
   message: string;
   createdAt: string;
+  iidmTransformationStatus: IidmTransformationStatus;
   files: ImportFileStatus[];
 }
 

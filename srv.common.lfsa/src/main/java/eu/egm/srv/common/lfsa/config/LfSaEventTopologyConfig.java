@@ -34,4 +34,24 @@ public class LfSaEventTopologyConfig {
         Binding deadLetterBinding = BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(deadLetterRoutingKey);
         return new Declarables(exchange, deadLetterExchange, queue, deadLetterQueue, binding, deadLetterBinding);
     }
+
+    @Bean
+    Declarables lfsaSensitivityAnalysisTopology(
+            @Value("${lfsa.sensitivity.event.exchange:lfsa.events}") String exchangeName,
+            @Value("${lfsa.sensitivity.event.dead-letter-exchange:lfsa.events.dlx}") String deadLetterExchangeName,
+            @Value("${lfsa.sensitivity.event.requested-routing-key:lfsa.sensitivity.requested}") String routingKey,
+            @Value("${lfsa.sensitivity.event.requested-queue:lfsa.sensitivity}") String queueName,
+            @Value("${lfsa.sensitivity.event.requested-dlq:lfsa.sensitivity.dlq}") String deadLetterQueueName,
+            @Value("${lfsa.sensitivity.event.requested-dead-letter-routing-key:lfsa.sensitivity.failed.dlq}") String deadLetterRoutingKey) {
+        TopicExchange exchange = new TopicExchange(exchangeName, true, false);
+        TopicExchange deadLetterExchange = new TopicExchange(deadLetterExchangeName, true, false);
+        Queue queue = QueueBuilder.durable(queueName)
+                .deadLetterExchange(deadLetterExchangeName)
+                .deadLetterRoutingKey(deadLetterRoutingKey)
+                .build();
+        Queue deadLetterQueue = QueueBuilder.durable(deadLetterQueueName).build();
+        Binding binding = BindingBuilder.bind(queue).to(exchange).with(routingKey);
+        Binding deadLetterBinding = BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(deadLetterRoutingKey);
+        return new Declarables(exchange, deadLetterExchange, queue, deadLetterQueue, binding, deadLetterBinding);
+    }
 }

@@ -50,8 +50,8 @@ public/config/<env>/<module>-application.json
 ```
 
 `VITE_APP_ENV` selects the frontend environment and defaults to `local`.
-Runtime configuration contains API base URLs such as CNM, IIDM, CSA, LF/SA, and
-RAO endpoints.
+Runtime configuration contains API base URLs such as CNM, IIDM, and LF/SA
+endpoints.
 
 ## Docker Compose
 

@@ -7,10 +7,6 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/api/csa': {
-        target: process.env.VITE_CSA_API_PROXY ?? 'http://localhost:8096',
-        changeOrigin: true
-      },
       '/api/cnm': {
         target: process.env.VITE_CNM_API_PROXY ?? 'http://localhost:8084',
         changeOrigin: true

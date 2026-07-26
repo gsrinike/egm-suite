@@ -118,6 +118,83 @@ export interface SecurityAnalysisRunDetail {
   diagnostics: string[];
 }
 
+export interface IidmNetworkOption {
+  id: string;
+  importId: string;
+  sourceFileIds: string[];
+  sourceFileNames: string[];
+  businessDay: string;
+  businessTime: string;
+  timeFrame: string;
+  tsoName: string;
+  networkFormat: string;
+}
+
+export interface SensitivityAnalysisParametersDto {
+  dc: boolean;
+  functionType: string;
+  variableType: string;
+  contingencyContext: string;
+  maxMonitoredBranches: number;
+  maxVariables: number;
+  maxGeneratedContingencies: number;
+  flowFlowSensitivityValueThreshold: number;
+  voltageVoltageSensitivityValueThreshold: number;
+  flowVoltageSensitivityValueThreshold: number;
+  angleFlowSensitivityValueThreshold: number;
+  operatorStrategiesCalculationMode: string;
+  debugDir: string;
+}
+
+export interface SensitivityAnalysisConfiguration {
+  id: string;
+  name: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  parameters: SensitivityAnalysisParametersDto;
+}
+
+export interface SensitivityAnalysisRunSummary {
+  runId: string;
+  fileImportId: string;
+  state: string;
+  runDate: string;
+  runTime: string;
+  networkCount: number;
+  factorCount: number;
+  resultCount: number;
+  diagnosticCount: number;
+  ptdfObjectId: string;
+  lodfObjectId: string;
+  glskObjectId: string;
+  message: string;
+}
+
+export interface SensitivityAnalysisRunDetail {
+  summary: SensitivityAnalysisRunSummary;
+  configuration: SensitivityAnalysisConfiguration;
+  iidmNetworkIds: string[];
+  inputReferences: Record<string, string>;
+  factors: Record<string, unknown>[];
+  matrixRows: Record<string, unknown>[];
+  networkElementCounts: Record<string, number>;
+  diagnostics: string[];
+}
+
+export interface SensitivityInputUploadResponse {
+  kind: string;
+  fileName: string;
+  objectId: string;
+  size: number;
+}
+
+export interface SensitivityInputTable {
+  kind: string;
+  objectId: string;
+  rows: Record<string, unknown>[];
+}
+
 export interface LfsaApiOptions {
   baseUrl?: string;
 }
@@ -197,6 +274,107 @@ export async function searchRuns(params: {
 
 export async function getRunDetail(runId: string, options: LfsaApiOptions = {}): Promise<SecurityAnalysisRunDetail> {
   return getJson<SecurityAnalysisRunDetail>(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/security-analysis/runs/${encodeURIComponent(runId)}`);
+}
+
+export async function listSensitivityIidmNetworks(params: {
+  importId: string;
+  page?: number;
+  size?: number;
+}, options: LfsaApiOptions = {}): Promise<Page<IidmNetworkOption>> {
+  return getJson<Page<IidmNetworkOption>>(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/iidm-networks${query(params)}`);
+}
+
+export async function getDefaultSensitivityConfiguration(options: LfsaApiOptions = {}): Promise<SensitivityAnalysisConfiguration> {
+  return getJson<SensitivityAnalysisConfiguration>(
+    `${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/configurations/default`
+  );
+}
+
+export async function listSensitivityConfigurations(params: {
+  page?: number;
+  size?: number;
+}, options: LfsaApiOptions = {}): Promise<Page<SensitivityAnalysisConfiguration>> {
+  return getJson<Page<SensitivityAnalysisConfiguration>>(
+    `${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/configurations${query(params)}`
+  );
+}
+
+export async function saveSensitivityConfiguration(
+  name: string,
+  parameters: SensitivityAnalysisParametersDto,
+  options: LfsaApiOptions = {}
+): Promise<SensitivityAnalysisConfiguration> {
+  const response = await fetch(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/configurations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, parameters })
+  });
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to save sensitivity configuration', response.url, response);
+  }
+  return response.json();
+}
+
+export async function uploadSensitivityInput(
+  kind: 'PTDF' | 'LODF' | 'GLSK',
+  file: File,
+  options: LfsaApiOptions = {}
+): Promise<SensitivityInputUploadResponse> {
+  const formData = new FormData();
+  formData.append('kind', kind);
+  formData.append('file', file);
+  const response = await fetch(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/inputs`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse(`Unable to upload ${kind} input`, response.url, response);
+  }
+  return response.json();
+}
+
+export async function startSensitivityAnalysis(
+  fileImportId: string,
+  iidmNetworkIds: string[],
+  configurationId = '',
+  ptdfObjectId = '',
+  lodfObjectId = '',
+  glskObjectId = '',
+  options: LfsaApiOptions = {}
+): Promise<SensitivityAnalysisRunSummary> {
+  const response = await fetch(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileImportId, iidmNetworkIds, configurationId, ptdfObjectId, lodfObjectId, glskObjectId })
+  });
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to start sensitivity analysis', response.url, response);
+  }
+  return response.json();
+}
+
+export async function searchSensitivityRuns(params: {
+  runId?: string;
+  runDate?: string;
+  runTime?: string;
+  page?: number;
+  size?: number;
+}, options: LfsaApiOptions = {}): Promise<Page<SensitivityAnalysisRunSummary>> {
+  return getJson<Page<SensitivityAnalysisRunSummary>>(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/runs${query(params)}`);
+}
+
+export async function getSensitivityRunDetail(runId: string, options: LfsaApiOptions = {}): Promise<SensitivityAnalysisRunDetail> {
+  return getJson<SensitivityAnalysisRunDetail>(`${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/runs/${encodeURIComponent(runId)}`);
+}
+
+export async function getSensitivityInputTable(
+  runId: string,
+  kind: 'PTDF' | 'LODF' | 'GLSK',
+  options: LfsaApiOptions = {}
+): Promise<SensitivityInputTable> {
+  return getJson<SensitivityInputTable>(
+    `${options.baseUrl ?? lfsaBaseUrl()}/api/common/lfsa/sensitivity/runs/${encodeURIComponent(runId)}/inputs/${kind}/table`
+  );
 }
 
 async function getJson<T>(url: string): Promise<T> {

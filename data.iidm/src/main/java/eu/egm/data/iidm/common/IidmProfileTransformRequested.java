@@ -10,6 +10,7 @@ import java.util.Map;
 public record IidmProfileTransformRequested(
         String importId,
         String fileId,
+        String transformCorrelationKey,
         String sourceProfilePayloadId,
         String sourceSnapshotId,
         String profileType,
@@ -36,6 +37,7 @@ public record IidmProfileTransformRequested(
         this(
                 importId,
                 fileId,
+                "",
                 sourceProfilePayloadId,
                 sourceSnapshotId,
                 profileType,
@@ -50,8 +52,30 @@ public record IidmProfileTransformRequested(
     }
 
     public IidmProfileTransformRequested {
+        transformCorrelationKey = transformCorrelationKey == null || transformCorrelationKey.isBlank()
+                ? defaultCorrelationKey(importId, fileId, objectId, profileFamily, profileType)
+                : transformCorrelationKey;
         sourceFiles = sourceFiles == null ? List.of() : List.copyOf(sourceFiles);
         importOptions = importOptions == null ? new CgmesIidmImportOptions(Map.of()) : importOptions;
+    }
+
+    private static String defaultCorrelationKey(
+            String importId,
+            String fileId,
+            String objectId,
+            ProfileFamily profileFamily,
+            String profileType) {
+        return String.join(
+                ":",
+                value(importId),
+                value(fileId),
+                value(objectId),
+                value(profileFamily),
+                value(profileType));
+    }
+
+    private static String value(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     private static List<CgmesIidmSourceFile> sourceFile(

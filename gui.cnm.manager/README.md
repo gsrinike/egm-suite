@@ -5,7 +5,7 @@
 ## Screens
 
 - Imports: create imports, upload RDF/XML or ZIP files, provide an import
-  message, view aggregate status, and open file details.
+  message, view aggregate status, RDF parsing progress, and open file details.
 - File details: view per-file status, profile type, TSO, business day/time,
   aggregate IIDM transformation status, IIDM transform counts, and retry
   options where applicable.

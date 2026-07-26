@@ -1,15 +1,15 @@
 package eu.egm.srv.common.lfsa.domain;
 
-import eu.egm.data.common.ContingencyViolation;
-import eu.egm.data.common.AnalysisStepState;
-import eu.egm.data.common.LfSaParameterConfiguration;
-import eu.egm.data.common.LineFlow;
-import eu.egm.data.common.LoadFlowComputationResult;
-import eu.egm.data.common.LoadFlowParametersDto;
-import eu.egm.data.common.LoadFlowStrategy;
-import eu.egm.data.common.SecurityAnalysisComputationResult;
-import eu.egm.data.common.SecurityAnalysisParametersDto;
-import eu.egm.data.common.SecurityAnalysisRunState;
+import eu.egm.data.common.lfsa.common.ContingencyViolation;
+import eu.egm.data.common.lfsa.common.AnalysisStepState;
+import eu.egm.data.common.lfsa.common.LfSaParameterConfiguration;
+import eu.egm.data.common.lfsa.common.LineFlow;
+import eu.egm.data.common.lfsa.common.LoadFlowComputationResult;
+import eu.egm.data.common.lfsa.common.LoadFlowParametersDto;
+import eu.egm.data.common.lfsa.common.LoadFlowStrategy;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisComputationResult;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisParametersDto;
+import eu.egm.data.common.lfsa.common.SecurityAnalysisRunState;
 import java.util.List;
 import java.util.Map;
 

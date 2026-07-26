@@ -1,2 +1,0 @@
-server:
-  port: ${CSA_BPM_PORT:8097}

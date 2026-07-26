@@ -86,6 +86,8 @@ public class MockCnmImportController {
                         request.message(),
                         IidmTransformationStatus.NOT_STARTED,
                         0,
+                        0,
+                        0,
                         now))
                 .toList();
         ImportStatus status = new ImportStatus(
@@ -252,6 +254,8 @@ public class MockCnmImportController {
                                         : request.message(),
                                 file.iidmTransformationStatus(),
                                 file.iidmTransformationCount(),
+                                file.iidmTransformationCompletedCount(),
+                                file.iidmTransformationFailedCount(),
                                 file.uploadedAt())
                         : file)
                 .toList();
@@ -305,6 +309,8 @@ public class MockCnmImportController {
                 "RDF metadata parsed and raw model stored",
                 IidmTransformationStatus.DONE,
                 1,
+                1,
+                0,
                 now);
         String statusMessage = message == null || message.isBlank() ? "Mock import ready" : message.trim();
         return new ImportStatus(id, serviceType, timeFrame, ImportState.SUCCESS, List.of(file), now, statusMessage);

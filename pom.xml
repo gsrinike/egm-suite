@@ -32,11 +32,6 @@
         <module>srv.iidm.transformer</module>
         <module>srv.common.lfsa</module>
         <module>mock.srv.common.lfsa</module>
-        <module>srv.common.rao</module>
-        <module>mock.srv.common.rao</module>
-        <module>srv.csa.services</module>
-        <module>mock.srv.csa.services</module>
-        <module>bpm.csa.service</module>
         <module>mock.srv.cnm.services</module>
         <module>gui.common</module>
         <module>gui.cnm.manager</module>

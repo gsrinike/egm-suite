@@ -91,7 +91,7 @@ sequenceDiagram
   participant ES as Elasticsearch
   participant GUI as GUI
 
-  CNM->>MQ: IidmProfileTransformRequested(sourceFiles)
+  CNM->>MQ: IidmProfileTransformRequested(fileImportId, fileId, transformCorrelationKey, sourceFiles)
   MQ->>IIDM: Consume transform request
   IIDM->>MinIO: Read raw CGMES objects
   IIDM->>IIDM: Stage files in temp directory

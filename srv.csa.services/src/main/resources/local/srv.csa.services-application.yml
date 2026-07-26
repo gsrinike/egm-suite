@@ -1,2 +1,0 @@
-server:
-  port: ${CSA_SERVICES_PORT:8095}

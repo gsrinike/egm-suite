@@ -111,13 +111,13 @@
       </template>
       <template #cell-iidmLink="{ row }">
         <Link
-          v-if="Number(row.iidmTransformationCount) > 0"
+          v-if="row.iidmTransformationStatus === 'DONE'"
           @click="openIidmFromImport(String(row.importId))"
         >
-          {{ row.iidmTransformationCount }} transformation{{ Number(row.iidmTransformationCount) === 1 ? '' : 's' }}
+          View transformations
         </Link>
-        <span v-else class="disabled-profile-link" title="IIDM transformation has not started">
-          0 transformations
+        <span v-else class="disabled-profile-link" title="IIDM transformations are available after completion">
+          Not available
         </span>
       </template>
       <template #cell-action="{ row }">
@@ -288,13 +288,10 @@ const selectedIidmTableId = ref('');
 const iidmTablePage = ref(0);
 const iidmTablePageSize = 100;
 const iidmTableSearch = ref('');
-const iidmImportSummaries = ref<Record<string, { count: number; status: IidmTransformationStatus }>>({});
 const lightTheme = ref(false);
 let importRefreshTimer: number | undefined;
 let importRefreshInFlight = false;
 let requestedImportRefreshInterval: number | null = null;
-let iidmSummaryRefreshTimer: number | undefined;
-const iidmSummaryRefreshAttempts = new Map<string, number>();
 
 const menuItems = [
   { id: 'imports', label: 'Imports' },
@@ -319,6 +316,7 @@ const columns = [
   { key: 'serviceType', label: 'Service' },
   { key: 'timeFrame', label: 'Timeframe' },
   { key: 'state', label: 'State' },
+  { key: 'fileProgress', label: 'File progress' },
   { key: 'iidmTransformationStatus', label: 'IIDM status' },
   { key: 'iidmLink', label: 'IIDM' },
   { key: 'file', label: 'File' },
@@ -381,17 +379,20 @@ const snapshotColumns = [
   { key: 'message', label: 'Message' }
 ];
 
-const rows = computed(() => imports.value.map((item) => ({
-  importId: item.importId,
-  serviceType: item.serviceType,
-  timeFrame: displayTimeFrame(item.timeFrame),
-  state: item.state,
-  iidmTransformationStatus: displayIidmTransformationStatus(importIidmTransformationSummary(item).status),
-  iidmTransformationCount: importIidmTransformationSummary(item).count,
-  fileCount: item.files?.length ?? 0,
-  createdAt: formatDateTime(item.createdAt),
-  message: item.message
-})));
+const rows = computed(() => imports.value.map((item) => {
+  const fileSummary = importFileSummary(item);
+  return {
+    importId: item.importId,
+    serviceType: item.serviceType,
+    timeFrame: displayTimeFrame(item.timeFrame),
+    state: item.state,
+    fileProgress: displayFileProgress(fileSummary),
+    iidmTransformationStatus: displayIidmTransformationStatus(item.iidmTransformationStatus),
+    fileCount: item.files?.length ?? 0,
+    createdAt: formatDateTime(item.createdAt),
+    message: item.message
+  };
+}));
 const fileRows = computed(() => (selectedImport.value?.files ?? []).map((file) => ({
   ...file,
   modelTimeFrame: displayModelTimeFrame(file.modelTimeFrame),
@@ -444,7 +445,6 @@ onUnmounted(() => {
   if (importRefreshTimer !== undefined) {
     window.clearInterval(importRefreshTimer);
   }
-  clearIidmSummaryRefreshTimer();
 });
 watch(activeView, (view) => {
   emit('viewChange', view);
@@ -632,72 +632,6 @@ async function applyImportSnapshot(nextImports: ImportStatus[]) {
     }
   }
   alignSelectedMetadataSelections();
-  await refreshIidmImportSummaries(nextImports);
-}
-
-async function refreshIidmImportSummaries(nextImports: ImportStatus[]) {
-  const candidates = nextImports.filter((item) => item.state === 'SUCCESS');
-  if (candidates.length === 0) {
-    iidmImportSummaries.value = {};
-    return;
-  }
-  const entries = await Promise.all(candidates.map(async (item) => {
-    try {
-      const page = await listIidmTransforms({
-        importId: item.importId,
-        page: 0,
-        size: 500
-      });
-      return [item.importId, {
-        count: page.total,
-        status: transformPageStatus(page.items)
-      }] as const;
-    } catch (error) {
-      logClientError('refreshIidmImportSummaries failed', error, { importId: item.importId });
-      return [item.importId, {
-        count: 0,
-        status: 'NOT_STARTED' as IidmTransformationStatus
-      }] as const;
-    }
-  }));
-  iidmImportSummaries.value = Object.fromEntries(entries);
-  scheduleIidmSummaryFollowUp(candidates);
-}
-
-function scheduleIidmSummaryFollowUp(candidates: ImportStatus[]) {
-  clearIidmSummaryRefreshTimer();
-  if (activeView.value !== 'imports') {
-    return;
-  }
-  const needsFollowUp = candidates.some((item) => {
-    const summary = iidmImportSummaries.value[item.importId];
-    if (!summary || summary.count === 0) {
-      return incrementIidmSummaryAttempt(item.importId);
-    }
-    if (summary.status === 'STARTED') {
-      return true;
-    }
-    iidmSummaryRefreshAttempts.delete(item.importId);
-    return false;
-  });
-  if (needsFollowUp) {
-    iidmSummaryRefreshTimer = window.setTimeout(() => {
-      void refreshIidmImportSummaries(imports.value);
-    }, 2000);
-  }
-}
-
-function incrementIidmSummaryAttempt(importId: string) {
-  const attempts = (iidmSummaryRefreshAttempts.get(importId) ?? 0) + 1;
-  iidmSummaryRefreshAttempts.set(importId, attempts);
-  return attempts <= 60;
-}
-
-function clearIidmSummaryRefreshTimer() {
-  if (iidmSummaryRefreshTimer !== undefined) {
-    window.clearTimeout(iidmSummaryRefreshTimer);
-    iidmSummaryRefreshTimer = undefined;
-  }
 }
 
 async function refreshProfiles() {
@@ -888,24 +822,21 @@ function displayIidmTransformationStatus(value: string) {
   return value === 'NOT_STARTED' ? 'NOT STARTED' : value;
 }
 
-function importIidmTransformationSummary(importStatus: ImportStatus) {
-  return iidmImportSummaries.value[importStatus.importId] ?? {
-    count: 0,
-    status: 'NOT_STARTED' as IidmTransformationStatus
+function importFileSummary(importStatus: ImportStatus) {
+  const files = importStatus.files ?? [];
+  return {
+    count: files.length,
+    parsedCount: files.filter((file) => file.state === 'PARSED').length,
+    failedCount: files.filter((file) => file.state === 'FAILED').length
   };
 }
 
-function transformPageStatus(transforms: IidmTransformSummary[]): IidmTransformationStatus {
-  if (transforms.length === 0) {
-    return 'NOT_STARTED';
+function displayFileProgress(summary: { count: number; parsedCount: number; failedCount: number }) {
+  if (summary.count === 0) {
+    return '0/0 parsed';
   }
-  if (transforms.some((transform) => transform.transformState === 'FAILED')) {
-    return 'FAILED';
-  }
-  if (transforms.every((transform) => transform.transformState === 'DONE')) {
-    return 'DONE';
-  }
-  return 'STARTED';
+  const failed = summary.failedCount > 0 ? `, ${summary.failedCount} failed` : '';
+  return `${summary.parsedCount}/${summary.count} parsed${failed}`;
 }
 
 function clearMessage() {

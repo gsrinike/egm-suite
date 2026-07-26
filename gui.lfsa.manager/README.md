@@ -13,3 +13,8 @@ The Load Flow & Security Analysis screen has three tabs:
   Security Analysis configurations. The load-flow strategy controls whether
   the pre-check runs in DC mode, AC mode, or AC with DC failover.
 - LFnSA Results for run lookup and table-based result inspection.
+
+The package also exports `SensitivityManagerView`, used by `gui.rcc.manager`
+for CGM Sensitivity Analysis. It provides successful import search, completed
+IIDM network selection, named sensitivity configuration, optional PTDF/LODF/GLSK
+uploads, and table-based run results.

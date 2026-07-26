@@ -1,2 +1,0 @@
-server:
-  port: ${MOCK_CSA_SERVICES_PORT:8096}

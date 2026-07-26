@@ -32,7 +32,10 @@ import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
 import eu.egm.data.iidm.common.CgmesIidmImportOptions;
 import eu.egm.data.iidm.common.CgmesIidmSourceFile;
+import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
+import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
+import eu.egm.data.iidm.common.IidmProfileTransformStarted;
 import eu.egm.mapping.JacksonJsonMappingService;
 import eu.egm.mapping.JsonMappingService;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
@@ -103,6 +106,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
     private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
+    private static final long STORED_FILE_REQUEUE_AFTER_MILLIS = 30_000L;
+    private static final long STORED_FILE_REQUEUE_THROTTLE_MILLIS = 30_000L;
     private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
 
     private final ObjectStorageService objectStorageService;
@@ -126,6 +131,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String iidmTransformRoutingKey;
     private final ConcurrentMap<String, Object> processingLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> snapshotLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Object> importStatusLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Long> fileProcessingRequeueTimes = new ConcurrentHashMap<>();
 
     public CnmImportRestService(
             Environment environment,
@@ -443,18 +450,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 continue;
             }
             try {
-                eventPublisher.publish(
-                        eventExchange,
-                        fileProcessingRoutingKey,
-                        new CnmFileProcessingRequested(
-                                document.id(),
-                                file.fileId(),
-                                file.objectId(),
-                                file.fileName(),
-                                document.serviceType(),
-                                document.timeFrame(),
-                                0,
-                                Instant.now()));
+                publishFileProcessingRequested(document, file, 0);
                 updatedFiles.add(file);
             } catch (RuntimeException exception) {
                 changed = true;
@@ -475,7 +471,26 @@ public class CnmImportRestService extends RestServiceSupport {
                 aggregateState(updatedFiles),
                 updatedFiles,
                 document.createdAt(),
-                "One or more files could not be queued for metadata processing");
+                "One or more files could not be queued for metadata processing",
+                document.iidmTransformationStatus());
+    }
+
+    private void publishFileProcessingRequested(
+            CnmImportDocument document,
+            CnmImportFileDocument file,
+            int retryCount) {
+        eventPublisher.publish(
+                eventExchange,
+                fileProcessingRoutingKey,
+                new CnmFileProcessingRequested(
+                        document.id(),
+                        file.fileId(),
+                        file.objectId(),
+                        file.fileName(),
+                        document.serviceType(),
+                        document.timeFrame(),
+                        retryCount,
+                        Instant.now()));
     }
 
     private void collectRdfPayloads(String sourceName, byte[] payload, List<RdfPayload> payloads) throws IOException {
@@ -691,24 +706,40 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private ImportStatus completeProcessedFile(CnmImportDocument current, CnmImportFileDocument processed) {
-        CnmImportFileDocument processedFile = processed;
-        List<CnmImportFileDocument> files = replaceFile(current.files(), processedFile);
-        CnmImportDocument updated = new CnmImportDocument(
-                current.id(),
-                current.serviceType(),
-                current.timeFrame(),
-                aggregateState(files),
-                files,
-                current.createdAt(),
-                aggregateMessage(current.message(), files));
-        if (processed.state() != ImportFileState.FAILED) {
-            publishSnapshotAssemblyIfComplete(updated, processed);
+        synchronized (importStatusLock(current.id())) {
+            CnmImportDocument latest = findImportDocument(current.id());
+            CnmImportFileDocument latestFile = latest.files().stream()
+                    .filter(file -> file.fileId().equals(processed.fileId()))
+                    .findFirst()
+                    .orElse(processed);
+            CnmImportFileDocument processedFile = mergeIidmStatus(processed, latestFile);
+            List<CnmImportFileDocument> files = replaceFile(latest.files(), processedFile);
+            CnmImportDocument updated = new CnmImportDocument(
+                    latest.id(),
+                    latest.serviceType(),
+                    latest.timeFrame(),
+                    aggregateState(files),
+                    files,
+                    latest.createdAt(),
+                    aggregateMessage(latest.message(), files),
+                    latest.iidmTransformationStatus());
+            if (processed.state() != ImportFileState.FAILED) {
+                publishSnapshotAssemblyIfComplete(updated, processed);
+            }
+            documentRepository.save(updated);
+            if (processedFile.state() == ImportFileState.FAILED && !isSnapshotAssemblyFailure(processedFile)) {
+                updateProfileStatus(processedFile.fileId(), ImportFileState.FAILED);
+            }
+            return toStatus(updated);
         }
-        documentRepository.save(updated);
-        if (processedFile.state() == ImportFileState.FAILED && !isSnapshotAssemblyFailure(processedFile)) {
-            updateProfileStatus(processedFile.fileId(), ImportFileState.FAILED);
-        }
-        return toStatus(updated);
+    }
+
+    private CnmImportFileDocument mergeIidmStatus(
+            CnmImportFileDocument processed,
+            CnmImportFileDocument latestFile) {
+        return latestFile.iidmTransformationStatus() == IidmTransformationStatus.NOT_STARTED
+                ? processed
+                : withIidmTransformStatus(processed, latestFile.iidmTransformationStatus());
     }
 
     private boolean isSnapshotAssemblyFailure(CnmImportFileDocument file) {
@@ -1128,6 +1159,7 @@ public class CnmImportRestService extends RestServiceSupport {
                     new IidmProfileTransformRequested(
                             importId,
                             directTransformFileId(groupFiles),
+                            directTransformCorrelationKey(importId, groupFiles),
                             "",
                             "",
                             "CGMES_SOURCE",
@@ -1166,6 +1198,13 @@ public class CnmImportRestService extends RestServiceSupport {
                 + representative.modelTimeFrame();
     }
 
+    private String directTransformCorrelationKey(String importId, List<CnmImportFileDocument> groupFiles) {
+        return importId + ":" + directTransformFileId(groupFiles) + ":" + groupFiles.stream()
+                .map(file -> file.fileId() + "=" + file.objectId())
+                .sorted()
+                .collect(java.util.stream.Collectors.joining("|"));
+    }
+
     private void publishIidmSnapshotTransformRequested(
             String importId,
             CgmNetworkSnapshot snapshot) {
@@ -1198,6 +1237,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 .stream()
                 .skip((long) Math.max(page, 0) * boundedSize)
                 .limit(boundedSize)
+                .map(this::recoverStaleStoredFiles)
                 .map(this::toStatus)
                 .toList();
         return new CnmPage<>(imports, imports.size(), Math.max(page, 0), boundedSize);
@@ -1207,11 +1247,62 @@ public class CnmImportRestService extends RestServiceSupport {
         return documentRepository.findByField("id", importId, 1)
                 .stream()
                 .findFirst()
+                .map(this::recoverStaleStoredFiles)
                 .map(this::toStatus)
                 .orElseThrow(() -> new IllegalArgumentException("Import not found: " + importId));
     }
 
-    public synchronized ImportStatus updateFileStatus(
+    private CnmImportDocument recoverStaleStoredFiles(CnmImportDocument document) {
+        if (document.state() == ImportState.SUCCESS || document.state() == ImportState.FAILED) {
+            return document;
+        }
+        long now = Instant.now().toEpochMilli();
+        for (CnmImportFileDocument file : document.files()) {
+            if (file.state() == ImportFileState.STORED
+                    && isStaleStoredFile(file, now)
+                    && shouldRequeueFileProcessing(document.id(), file.fileId(), now)) {
+                try {
+                    publishFileProcessingRequested(document, file, 1);
+                    logger.info(
+                            "Re-queued stale CNM file-processing event for import {} file {}",
+                            document.id(),
+                            file.fileId());
+                } catch (RuntimeException exception) {
+                    logger.warn(
+                            "Unable to re-queue stale CNM file-processing event for import {} file {}",
+                            document.id(),
+                            file.fileId(),
+                            exception);
+                }
+            }
+        }
+        return document;
+    }
+
+    private boolean isStaleStoredFile(CnmImportFileDocument file, long now) {
+        return now - instant(file.uploadedAt()).toEpochMilli() >= STORED_FILE_REQUEUE_AFTER_MILLIS;
+    }
+
+    private boolean shouldRequeueFileProcessing(String importId, String fileId, long now) {
+        String key = importId + ":" + fileId;
+        Long lastRequeuedAt = fileProcessingRequeueTimes.get(key);
+        if (lastRequeuedAt != null && now - lastRequeuedAt < STORED_FILE_REQUEUE_THROTTLE_MILLIS) {
+            return false;
+        }
+        fileProcessingRequeueTimes.put(key, now);
+        return true;
+    }
+
+    public ImportStatus updateFileStatus(
+            String importId,
+            String fileId,
+            ImportFileStatusUpdateRequest request) {
+        synchronized (importStatusLock(importId)) {
+            return updateFileStatusLocked(importId, fileId, request);
+        }
+    }
+
+    private ImportStatus updateFileStatusLocked(
             String importId,
             String fileId,
             ImportFileStatusUpdateRequest request) {
@@ -1236,10 +1327,161 @@ public class CnmImportRestService extends RestServiceSupport {
                 aggregateState,
                 files,
                 current.createdAt(),
-                current.message());
+                current.message(),
+                current.iidmTransformationStatus());
         documentRepository.save(updated);
         updateProfileStatus(fileId, request.state());
         return toStatus(updated);
+    }
+
+    public void updateIidmTransformProgress(IidmProfileTransformStarted event) {
+        if (event == null) {
+            return;
+        }
+        updateIidmTransformProgress(
+                event.importId(),
+                event.fileId(),
+                event.sourceFileIds(),
+                IidmTransformationStatus.STARTED);
+    }
+
+    public void updateIidmTransformProgress(IidmProfileTransformCompleted event) {
+        if (event == null) {
+            return;
+        }
+        updateIidmTransformProgress(
+                event.importId(),
+                event.fileId(),
+                event.sourceFileIds(),
+                IidmTransformationStatus.DONE);
+    }
+
+    public void updateIidmTransformProgress(IidmProfileTransformFailed event) {
+        if (event == null) {
+            return;
+        }
+        updateIidmTransformProgress(
+                event.importId(),
+                event.fileId(),
+                event.sourceFileIds(),
+                IidmTransformationStatus.FAILED);
+    }
+
+    private void updateIidmTransformProgress(
+            String importId,
+            String fileId,
+            List<String> sourceFileIds,
+            IidmTransformationStatus eventStatus) {
+        if (importId == null || importId.isBlank()) {
+            return;
+        }
+        try {
+            CnmImportDocument current = findImportDocument(importId);
+            List<String> affectedFileIds = affectedFileIds(fileId, sourceFileIds);
+            List<CnmImportFileDocument> files = current.files().stream()
+                    .map(file -> affectedFileIds.contains(file.fileId())
+                            ? withIidmTransformStatus(file, eventStatus)
+                            : file)
+                    .toList();
+            CnmImportDocument updated = new CnmImportDocument(
+                    current.id(),
+                    current.serviceType(),
+                    current.timeFrame(),
+                    current.state(),
+                    files,
+                    current.createdAt(),
+                    current.message(),
+                    current.iidmTransformationStatus());
+            IidmTransformationStatus nextStatus = aggregateIidmStatus(updated, eventStatus);
+            IidmTransformationStatus persistedStatus = nextStatus == IidmTransformationStatus.DONE
+                    ? IidmTransformationStatus.STARTED
+                    : nextStatus;
+            documentRepository.save(new CnmImportDocument(
+                    updated.id(),
+                    updated.serviceType(),
+                    updated.timeFrame(),
+                    updated.state(),
+                    files,
+                    updated.createdAt(),
+                    updated.message(),
+                    persistedStatus));
+            logger.info("Updated IIDM transform status for import {} to {}", importId, nextStatus);
+        } catch (Exception exception) {
+            logger.warn("Unable to update IIDM transform status for import {}", importId, exception);
+        }
+    }
+
+    private IidmTransformationStatus aggregateIidmStatus(
+            CnmImportDocument document,
+            IidmTransformationStatus eventStatus) {
+        if (eventStatus == IidmTransformationStatus.FAILED
+                || document.iidmTransformationStatus() == IidmTransformationStatus.FAILED) {
+            return IidmTransformationStatus.FAILED;
+        }
+        List<IidmProfileTransformReadDocument> transforms = iidmTransforms(document.id());
+        if (transforms.stream().anyMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.FAILED)) {
+            return IidmTransformationStatus.FAILED;
+        }
+        boolean importReadyForIidmCompletion = document.state() == ImportState.SUCCESS
+                && document.files().stream()
+                        .filter(file -> !isBoundaryProfile(file))
+                        .allMatch(file -> file.state() == ImportFileState.PARSED);
+        int expectedCount = expectedIidmTransformCount(document);
+        boolean complete = importReadyForIidmCompletion
+                && expectedCount > 0
+                && transforms.size() >= expectedCount
+                && transforms.stream().allMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE);
+        if (complete) {
+            return IidmTransformationStatus.DONE;
+        }
+        if (eventStatus == IidmTransformationStatus.STARTED
+                || eventStatus == IidmTransformationStatus.DONE
+                || !transforms.isEmpty()) {
+            return IidmTransformationStatus.STARTED;
+        }
+        return document.iidmTransformationStatus() == IidmTransformationStatus.STARTED
+                ? IidmTransformationStatus.STARTED
+                : IidmTransformationStatus.NOT_STARTED;
+    }
+
+    private List<IidmProfileTransformReadDocument> iidmTransforms(String importId) {
+        try {
+            return iidmTransformRepository.findByField("importId", importId, 10_000);
+        } catch (Exception exception) {
+            logger.warn("Unable to read IIDM transform status for import {}", importId, exception);
+            return List.of();
+        }
+    }
+
+    private int expectedIidmTransformCount(CnmImportDocument document) {
+        return (int) document.files().stream()
+                .filter(file -> !isBoundaryProfile(file))
+                .collect(java.util.stream.Collectors.groupingBy(
+                        this::modelGroupKey,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()))
+                .values()
+                .stream()
+                .filter(files -> files.stream().allMatch(file -> file.state() == ImportFileState.PARSED))
+                .count();
+    }
+
+    private Object importStatusLock(String importId) {
+        String key = importId == null || importId.isBlank() ? "__unknown__" : importId;
+        return importStatusLocks.computeIfAbsent(key, ignored -> new Object());
+    }
+
+    private List<String> affectedFileIds(String fileId, List<String> sourceFileIds) {
+        List<String> ids = new ArrayList<>();
+        if (sourceFileIds != null) {
+            sourceFileIds.stream()
+                    .filter(value -> value != null && !value.isBlank())
+                    .forEach(ids::add);
+        }
+        if (ids.isEmpty() && fileId != null && !fileId.isBlank()) {
+            ids.add(fileId);
+        }
+        return ids;
     }
 
     private void updateProfileStatus(String fileId, ImportFileState state) {
@@ -1295,7 +1537,35 @@ public class CnmImportRestService extends RestServiceSupport {
                 file.modelVersion(),
                 file.profiles(),
                 statusMessage == null || statusMessage.isBlank() ? file.message() : statusMessage.trim(),
-                file.uploadedAt());
+                file.uploadedAt(),
+                file.iidmTransformationStatus(),
+                file.iidmTransformationCount(),
+                file.iidmTransformationCompletedCount(),
+                file.iidmTransformationFailedCount());
+    }
+
+    private CnmImportFileDocument withIidmTransformStatus(
+            CnmImportFileDocument file,
+            IidmTransformationStatus status) {
+        return new CnmImportFileDocument(
+                file.fileId(),
+                file.fileName(),
+                file.objectId(),
+                file.state(),
+                file.profileFamily(),
+                file.businessDay(),
+                file.businessTime(),
+                file.modelTimeFrame(),
+                file.tsoName(),
+                file.profileType(),
+                file.modelVersion(),
+                file.profiles(),
+                file.message(),
+                file.uploadedAt(),
+                status,
+                file.iidmTransformationCount(),
+                file.iidmTransformationCompletedCount(),
+                file.iidmTransformationFailedCount());
     }
 
     private ImportState aggregateState(List<CnmImportFileDocument> files) {
@@ -1343,7 +1613,11 @@ public class CnmImportRestService extends RestServiceSupport {
                 file.modelVersion(),
                 metadata.profiles(),
                 "RDF metadata parsed",
-                file.uploadedAt());
+                file.uploadedAt(),
+                file.iidmTransformationStatus(),
+                file.iidmTransformationCount(),
+                file.iidmTransformationCompletedCount(),
+                file.iidmTransformationFailedCount());
     }
 
     public CnmPage<CnmProfileMetadata> searchProfiles(
@@ -1661,9 +1935,8 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private ImportStatus toStatus(CnmImportDocument document) {
-        Map<String, IidmTransformAggregate> iidmTransforms = iidmTransformAggregates(document.id());
         List<ImportFileStatus> files = document.files().stream()
-                .map(file -> toFileStatus(file, iidmTransforms.getOrDefault(file.fileId(), IidmTransformAggregate.empty())))
+                .map(this::toFileStatus)
                 .toList();
         return new ImportStatus(
                 document.id(),
@@ -1672,10 +1945,15 @@ public class CnmImportRestService extends RestServiceSupport {
                 document.state(),
                 files,
                 instant(document.createdAt()),
-                document.message());
+                document.message(),
+                effectiveIidmStatus(document));
     }
 
-    private ImportFileStatus toFileStatus(CnmImportFileDocument file, IidmTransformAggregate iidmTransformAggregate) {
+    private IidmTransformationStatus effectiveIidmStatus(CnmImportDocument document) {
+        return aggregateIidmStatus(document, IidmTransformationStatus.NOT_STARTED);
+    }
+
+    private ImportFileStatus toFileStatus(CnmImportFileDocument file) {
         ModelFileName fileNameMetadata = parseModelFileName(file.fileName());
         ProfileFamily family = file.profileFamily() == null || file.profileFamily() == ProfileFamily.Unknown
                 ? fileNameMetadata.profileFamily()
@@ -1694,51 +1972,11 @@ public class CnmImportRestService extends RestServiceSupport {
                 valueOr(file.modelVersion(), fileNameMetadata.version()),
                 file.profiles(),
                 file.message(),
-                iidmTransformAggregate.status(),
-                iidmTransformAggregate.count(),
+                file.iidmTransformationStatus(),
+                number(file.iidmTransformationCount()),
+                number(file.iidmTransformationCompletedCount()),
+                number(file.iidmTransformationFailedCount()),
                 instant(file.uploadedAt()));
-    }
-
-    private Map<String, IidmTransformAggregate> iidmTransformAggregates(String importId) {
-        try {
-            List<IidmProfileTransformReadDocument> transforms = iidmTransformRepository.findByField("importId", importId, 10_000);
-            Map<String, List<IidmProfileTransformReadDocument>> byFileId = new LinkedHashMap<>();
-            for (IidmProfileTransformReadDocument transform : transforms) {
-                List<String> sourceFileIds = transform.sourceFileIds().isEmpty()
-                        ? List.of(transform.fileId())
-                        : transform.sourceFileIds();
-                for (String fileId : sourceFileIds) {
-                    if (fileId != null && !fileId.isBlank()) {
-                        byFileId.computeIfAbsent(fileId, ignored -> new ArrayList<>()).add(transform);
-                    }
-                }
-            }
-            Map<String, IidmTransformAggregate> aggregates = new LinkedHashMap<>();
-            byFileId.forEach((fileId, values) -> aggregates.put(fileId, IidmTransformAggregate.from(values)));
-            return aggregates;
-        } catch (Exception exception) {
-            logger.warn("Unable to aggregate IIDM transform status for import {}", importId, exception);
-            return Map.of();
-        }
-    }
-
-    private record IidmTransformAggregate(IidmTransformationStatus status, int count) {
-        private static IidmTransformAggregate empty() {
-            return new IidmTransformAggregate(IidmTransformationStatus.NOT_STARTED, 0);
-        }
-
-        private static IidmTransformAggregate from(List<IidmProfileTransformReadDocument> transforms) {
-            if (transforms == null || transforms.isEmpty()) {
-                return empty();
-            }
-            if (transforms.stream().anyMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.FAILED)) {
-                return new IidmTransformAggregate(IidmTransformationStatus.FAILED, transforms.size());
-            }
-            if (transforms.stream().allMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE)) {
-                return new IidmTransformAggregate(IidmTransformationStatus.DONE, transforms.size());
-            }
-            return new IidmTransformAggregate(IidmTransformationStatus.STARTED, transforms.size());
-        }
     }
 
     private String valueOr(String value, String fallback) {

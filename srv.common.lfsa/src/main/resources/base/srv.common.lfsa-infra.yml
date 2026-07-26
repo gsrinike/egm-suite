@@ -2,6 +2,11 @@ spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
 utility:
+  object-storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    buckets: ${LFSA_OBJECT_STORAGE_BUCKETS:lfsa-inputs}
   messaging:
     listener:
       retry:

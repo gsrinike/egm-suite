@@ -35,6 +35,7 @@ import eu.egm.data.cnm.topology.StaticTopologyModel;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
+import eu.egm.data.iidm.common.IidmProfileTransformStarted;
 import eu.egm.data.iidm.common.IidmDiagnostic;
 import eu.egm.data.iidm.common.IidmTransformState;
 import eu.egm.data.iidm.common.CgmesIidmSourceFile;
@@ -65,10 +66,14 @@ import eu.egm.srv.iidm.transformer.api.IidmTableBundle;
 import eu.egm.srv.iidm.transformer.api.IidmTransformSummaryResponse;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -96,6 +101,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final IidmNetworkJsonProjection networkJsonProjection = new IidmNetworkJsonProjection();
     private final String rawBucket;
     private final String eventExchange;
+    private final String startedRoutingKey;
     private final String completedRoutingKey;
     private final String failedRoutingKey;
 
@@ -106,6 +112,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
             JsonMappingService jsonMappingService,
             @Value("${iidm.transform.raw-bucket:cnm-rdf-models}") String rawBucket,
             @Value("${iidm.transform.event.exchange:iidm.events}") String eventExchange,
+            @Value("${iidm.transform.event.started-routing-key:iidm.profile.transform.started}") String startedRoutingKey,
             @Value("${iidm.transform.event.completed-routing-key:iidm.profile.transform.completed}") String completedRoutingKey,
             @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey) {
         super(environment, observationRegistry);
@@ -121,6 +128,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
         this.sourceTransformer = new CgmesSourceToIidmTransformer(new ReflectionMappingService(), cgmesSourceMappingConfiguration());
         this.rawBucket = rawBucket;
         this.eventExchange = eventExchange;
+        this.startedRoutingKey = startedRoutingKey;
         this.completedRoutingKey = completedRoutingKey;
         this.failedRoutingKey = failedRoutingKey;
     }
@@ -154,13 +162,18 @@ public class IidmProfileTransformService extends RestServiceSupport {
             throw new IllegalArgumentException("IIDM transform request is required");
         }
         long startedAt = Instant.now().toEpochMilli();
+        String transformId = transformId(request);
         String networkId = networkId(request.importId(), request.fileId());
+        List<String> sourceFileIds = sourceFileIds(request);
+        List<String> sourceFileNames = sourceFileNames(request);
         transformRepository.save(new IidmProfileTransformDocument(
-                request.fileId(),
+                transformId,
                 request.importId(),
                 request.fileId(),
-                sourceFileIds(request),
-                sourceFileNames(request),
+                request.transformCorrelationKey(),
+                request.objectId(),
+                sourceFileIds,
+                sourceFileNames,
                 request.profileType(),
                 request.profileFamily(),
                 request.sourceProfilePayloadId(),
@@ -171,6 +184,15 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 startedAt,
                 null,
                 null));
+        eventPublisher.publish(eventExchange, startedRoutingKey,
+                new IidmProfileTransformStarted(
+                        request.importId(),
+                        request.fileId(),
+                        transformId,
+                        sourceFileIds,
+                        sourceFileNames,
+                        networkId,
+                        "STARTED"));
         IidmTransformDiagnosticsCollector diagnosticsCollector = new IidmTransformDiagnosticsCollector(networkId);
         try {
             IidmNetworkModel network = transformNetwork(request);
@@ -178,11 +200,13 @@ public class IidmProfileTransformService extends RestServiceSupport {
             long completedAt = Instant.now().toEpochMilli();
             List<IidmDiagnostic> diagnostics = diagnosticsCollector.successDiagnostics(network.diagnostics());
             transformRepository.save(new IidmProfileTransformDocument(
-                    request.fileId(),
+                    transformId,
                     request.importId(),
                     request.fileId(),
-                    sourceFileIds(request),
-                    sourceFileNames(request),
+                    request.transformCorrelationKey(),
+                    request.objectId(),
+                    sourceFileIds,
+                    sourceFileNames,
                     request.profileType(),
                     request.profileFamily(),
                     request.sourceProfilePayloadId(),
@@ -194,17 +218,26 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     completedAt,
                     null));
             eventPublisher.publish(eventExchange, completedRoutingKey,
-                    new IidmProfileTransformCompleted(request.importId(), request.fileId(), network.id(), "DONE"));
+                    new IidmProfileTransformCompleted(
+                            request.importId(),
+                            request.fileId(),
+                            transformId,
+                            sourceFileIds,
+                            sourceFileNames,
+                            network.id(),
+                            "DONE"));
         } catch (Exception exception) {
             long failedAt = Instant.now().toEpochMilli();
             String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
             List<IidmDiagnostic> diagnostics = diagnosticsCollector.failureDiagnostics(exception, networkId);
             transformRepository.save(new IidmProfileTransformDocument(
-                    request.fileId(),
+                    transformId,
                     request.importId(),
                     request.fileId(),
-                    sourceFileIds(request),
-                    sourceFileNames(request),
+                    request.transformCorrelationKey(),
+                    request.objectId(),
+                    sourceFileIds,
+                    sourceFileNames,
                     request.profileType(),
                     request.profileFamily(),
                     request.sourceProfilePayloadId(),
@@ -216,7 +249,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     null,
                     failedAt));
             eventPublisher.publish(eventExchange, failedRoutingKey,
-                    new IidmProfileTransformFailed(request.importId(), request.fileId(), message));
+                    new IidmProfileTransformFailed(request.importId(), request.fileId(), transformId, sourceFileIds, sourceFileNames, message));
         } finally {
             diagnosticsCollector.close();
         }
@@ -340,6 +373,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
         return transformRepository.findByField("id", fileId, 1)
                 .stream()
                 .findFirst()
+                .or(() -> transformRepository.findByField("fileId", fileId, 1).stream().findFirst())
+                .or(() -> transformRepository.findByField("transformCorrelationKey", fileId, 1).stream().findFirst())
+                .or(() -> transformRepository.findByField("sourceFileIds", fileId, 10).stream().findFirst())
                 .orElseThrow(() -> new IllegalArgumentException("IIDM transform not found: " + fileId));
     }
 
@@ -514,6 +550,22 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private String networkId(String importId, String fileId) {
         return importId + ":" + fileId;
+    }
+
+    private String transformId(IidmProfileTransformRequested request) {
+        String correlationKey = request.transformCorrelationKey() == null || request.transformCorrelationKey().isBlank()
+                ? networkId(request.importId(), request.fileId())
+                : request.transformCorrelationKey();
+        return request.importId() + ":" + sha256(correlationKey);
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
     }
 
     private int number(Integer value) {
