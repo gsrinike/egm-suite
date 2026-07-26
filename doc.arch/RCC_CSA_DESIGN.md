@@ -14,7 +14,10 @@ monitoring, and placeholders for future CC and OPC capabilities.
 - `srv.csa.services`: CSA orchestration service that coordinates common
   services and starts BPM through `com.infra`.
 - `bpm.csa.service`: Camunda runtime that owns the `csa-end-to-end` process.
-- `gui.rcc.manager`: Vue RCC manager UI.
+- `gui.lfsa.manager`: Vue LFSA manager UI for import search, run start, and
+  security-analysis result browsing.
+- `gui.rcc.manager`: Vue RCC manager UI that embeds CGM import and LFSA
+  capability screens.
 - `mock.srv.*`: in-memory service alternatives for frontend and orchestration
   development.
 
@@ -46,5 +49,32 @@ remote BPM endpoint.
 
 `gui.rcc.manager` has a sidebar with CGM, CSA, CC, OPC, and workflow monitoring.
 CGM > Import Manager renders the CNM manager view while preserving configurable
-CNM and IIDM backend URLs. CSA screens use the CSA/common service APIs. CC and
-OPC are shown as inactive placeholders until their services are introduced.
+CNM and IIDM backend URLs. CGM > Security Analysis renders the LFSA manager,
+which searches successful imports, starts an asynchronous run, and lists stored
+run results. CGM > Sensitivity Analysis, CC, and OPC are shown as inactive
+placeholders until their services are introduced.
+
+## CGM Security Analysis Flow
+
+```mermaid
+sequenceDiagram
+  participant GUI as gui.rcc.manager / gui.lfsa.manager
+  participant LFSA as srv.common.lfsa
+  participant ES as Document Store
+  participant MQ as RabbitMQ
+  participant PS as PowSyBl Network APIs
+
+  GUI->>LFSA: GET /api/common/lfsa/imports
+  LFSA->>ES: Read successful cnm-imports
+  LFSA-->>GUI: Import candidates
+  GUI->>LFSA: POST /api/common/lfsa/security-analysis/runs
+  LFSA->>ES: Save STARTED run
+  LFSA->>MQ: Publish SecurityAnalysisRequested
+  MQ->>LFSA: Consume requested event
+  LFSA->>ES: Load iidm-networks for import
+  LFSA->>PS: Reconstruct Network from XIIDM
+  LFSA->>PS: Merge/bind networks in memory
+  LFSA->>ES: Save DONE or FAILED run with diagnostics
+  GUI->>LFSA: GET /api/common/lfsa/security-analysis/runs
+  GUI->>LFSA: GET /api/common/lfsa/security-analysis/runs/{runId}
+```

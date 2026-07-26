@@ -1,0 +1,6 @@
+{
+  "environment": "base",
+  "apis": {
+    "lfsaBaseUrl": ""
+  }
+}

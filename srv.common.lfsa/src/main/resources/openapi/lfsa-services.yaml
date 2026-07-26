@@ -13,3 +13,45 @@ paths:
       summary: Run security analysis
       responses:
         '200': { description: Security-analysis result }
+  /api/common/lfsa/imports:
+    get:
+      summary: Search successful CNM imports eligible for security analysis
+      parameters:
+        - { name: service, in: query, required: false, schema: { type: string } }
+        - { name: timeFrame, in: query, required: false, schema: { type: string } }
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+      responses:
+        '200': { description: Paged successful import candidates }
+  /api/common/lfsa/security-analysis/runs:
+    post:
+      summary: Start asynchronous security analysis for a CNM import
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileImportId]
+              properties:
+                fileImportId: { type: string }
+      responses:
+        '200': { description: Security-analysis run summary }
+    get:
+      summary: Search security-analysis runs
+      parameters:
+        - { name: runId, in: query, required: false, schema: { type: string } }
+        - { name: runDate, in: query, required: false, schema: { type: string, format: date } }
+        - { name: runTime, in: query, required: false, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+      responses:
+        '200': { description: Paged security-analysis run summaries }
+  /api/common/lfsa/security-analysis/runs/{runId}:
+    get:
+      summary: Get security-analysis run detail
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Security-analysis run detail with table-ready results }

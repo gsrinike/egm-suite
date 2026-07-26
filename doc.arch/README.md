@@ -16,8 +16,8 @@ deployment, and repository rules.
   Elasticsearch persistence, and dynamic profile tables.
 - `IIDM_TRANSFORMATION_DESIGN.md`: PowSyBl CGMES-to-IIDM transformation,
   boundary data handling, diagnostics, and IIDM document/table storage.
-- `RCC_CSA_DESIGN.md`: RCC manager, CSA orchestration, common LF/SA and RAO
-  services, and Camunda workflow ownership.
+- `RCC_CSA_DESIGN.md`: RCC manager, CGM security-analysis flow, CSA
+  orchestration, common LF/SA and RAO services, and Camunda workflow ownership.
 - `LOCAL_DEPLOYMENT_AND_ENVIRONMENT.md`: Maven, Docker Compose, local
   infrastructure, environment selection, and YAML configuration layout.
 - `codegen/codex`: repository rules and workflow guidance that apply to future

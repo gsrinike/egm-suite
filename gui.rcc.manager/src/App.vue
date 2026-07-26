@@ -55,6 +55,10 @@
         <CnmManagerView ref="cnmManager" embedded @view-change="cnmActiveView = $event" />
       </section>
 
+      <section v-if="activeView === 'cgm-security-analysis'" class="lfsa-embed">
+        <LfsaManagerView embedded />
+      </section>
+
       <section v-if="activeView === 'csa'" class="panel">
         <h2>CSA Case Setup</h2>
         <div class="form-grid">
@@ -97,7 +101,7 @@
         <DataTable :columns="caseColumns" :rows="caseRows" id-key="csaCaseId" />
       </section>
 
-      <section v-if="!['cgm-import', 'csa', 'workflow'].includes(activeView)" class="panel muted">
+      <section v-if="!['cgm-import', 'cgm-security-analysis', 'csa', 'workflow'].includes(activeView)" class="panel muted">
         <h2>{{ activeTitle }}</h2>
         <p>This capability is reserved for a later RCC increment.</p>
       </section>
@@ -109,6 +113,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { applyThemePreference, AutoRefreshControl, Button, DataTable, logClientError, toggleThemePreference } from '@egm/gui.common/src';
 import CnmManagerView from '@egm/gui.cnm.manager/src/components/CnmManagerView.vue';
+import { LfsaManagerView } from '@egm/gui.lfsa.manager';
 import { listCsaCases, startCsaCase, type CsaCaseStatus } from './services/csaApi';
 
 const activeView = ref('cgm-import');
@@ -130,7 +135,11 @@ const contingencies = ref('N-1-LINE-1,N-1-GEN-2');
 const optimizeRemedialActions = ref(true);
 
 const navigation: NavigationItem[] = [
-  { id: 'cgm', label: 'CGM', children: [{ id: 'cgm-import', label: 'Import Manager' }] },
+  { id: 'cgm', label: 'CGM', children: [
+    { id: 'cgm-import', label: 'Import Manager' },
+    { id: 'cgm-security-analysis', label: 'Security Analysis' },
+    { id: 'cgm-sensitivity-analysis', label: 'Sensitivity Analysis', disabled: true }
+  ] },
   { id: 'csa', label: 'CSA' },
   { id: 'cc', label: 'CC', disabled: true },
   { id: 'opc', label: 'OPC', disabled: true },
@@ -139,6 +148,8 @@ const navigation: NavigationItem[] = [
 
 const titles: Record<string, string> = {
   'cgm-import': 'Import Manager',
+  'cgm-security-analysis': 'Security Analysis',
+  'cgm-sensitivity-analysis': 'Sensitivity Analysis',
   csa: 'CSA Workspace',
   cc: 'Capacity Calculation',
   opc: 'Operational Planning Coordination',
@@ -146,6 +157,8 @@ const titles: Record<string, string> = {
 };
 const capabilities: Record<string, string> = {
   'cgm-import': 'Common Grid Model',
+  'cgm-security-analysis': 'Common Grid Model',
+  'cgm-sensitivity-analysis': 'Common Grid Model',
   csa: 'Coordinated Security Analysis',
   cc: 'Capacity Calculation',
   opc: 'Operational Planning Coordination',

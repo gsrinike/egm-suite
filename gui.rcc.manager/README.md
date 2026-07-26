@@ -7,6 +7,10 @@
 - Sidebar navigation for CGM, CSA, CC, OPC, and workflow monitoring.
 - CGM > Import Manager embeds the CNM manager view and keeps CNM/IIDM backend
   URLs configurable.
+- CGM > Security Analysis embeds `gui.lfsa.manager` for searching successful
+  imports, starting LFSA runs, and viewing persisted run results.
+- CGM > Sensitivity Analysis is present as a disabled placeholder for a later
+  increment.
 - The embedded CNM view includes file-level IIDM aggregate status and links to
   the IIDM transformation view.
 - CSA screens call CSA/common service APIs.

@@ -3,6 +3,7 @@
   "apis": {
     "csaBaseUrl": "",
     "cnmBaseUrl": "",
-    "iidmBaseUrl": ""
+    "iidmBaseUrl": "",
+    "lfsaBaseUrl": ""
   }
 }

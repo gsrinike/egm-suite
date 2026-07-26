@@ -11,6 +11,7 @@
   "dependencies": {
     "@egm/gui.cnm.manager": "file:../gui.cnm.manager",
     "@egm/gui.common": "file:../gui.common",
+    "@egm/gui.lfsa.manager": "file:../gui.lfsa.manager",
     "@vitejs/plugin-vue": "^5.2.1",
     "vite": "^6.0.7",
     "vue": "^3.5.13"

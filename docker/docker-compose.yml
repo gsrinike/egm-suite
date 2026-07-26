@@ -135,10 +135,16 @@ services:
     environment:
       ENV: local
       LFSA_SERVICES_PORT: 8091
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     ports:
       - "8091:8091"
     depends_on:
+      elasticsearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
       otel-collector:
         condition: service_started
 
@@ -231,6 +237,16 @@ services:
       srv-iidm-transformer:
         condition: service_started
 
+  gui-lfsa-manager:
+    build:
+      context: ..
+      dockerfile: gui.lfsa.manager/Dockerfile
+    ports:
+      - "5176:80"
+    depends_on:
+      srv-common-lfsa:
+        condition: service_started
+
   gui-rcc-manager:
     build:
       context: ..
@@ -241,6 +257,8 @@ services:
       srv-cnm-services:
         condition: service_started
       srv-iidm-transformer:
+        condition: service_started
+      srv-common-lfsa:
         condition: service_started
       srv-csa-services:
         condition: service_started

@@ -199,6 +199,33 @@ validate_requested_services() {
   done
 }
 
+contains_requested_service() {
+  local expected="$1"
+  local service
+  for service in "${REQUESTED_SERVICES[@]}"; do
+    [[ "${service}" != "${expected}" ]] || return 0
+  done
+  return 1
+}
+
+append_runtime_dependency() {
+  local dependency="$1"
+  service_exists "${dependency}" || return 0
+  append_unique_service "${dependency}"
+}
+
+expand_runtime_dependencies() {
+  if contains_requested_service "gui-rcc-manager"; then
+    append_runtime_dependency "srv-cnm-services"
+    append_runtime_dependency "srv-iidm-transformer"
+    append_runtime_dependency "srv-common-lfsa"
+    append_runtime_dependency "srv-csa-services"
+  fi
+  if contains_requested_service "gui-lfsa-manager"; then
+    append_runtime_dependency "srv-common-lfsa"
+  fi
+}
+
 load_resolved_services() {
   local service
   REQUESTED_SERVICES=()
@@ -237,6 +264,7 @@ case "${COMMAND}" in
     if ((${#REQUESTED_SERVICES[@]} == 0)); then
       load_resolved_services
     fi
+    expand_runtime_dependencies
     compose up "${PASSTHROUGH_ARGS[@]}" --no-deps "${REQUESTED_SERVICES[@]}"
     ;;
   config)
@@ -244,6 +272,7 @@ case "${COMMAND}" in
     if ((${#REQUESTED_SERVICES[@]} == 0)); then
       load_resolved_services
     fi
+    expand_runtime_dependencies
     printf '%s\n' "${REQUESTED_SERVICES[@]}"
     ;;
   down|ps|logs)

@@ -13,3 +13,24 @@ paths:
       summary: Run mocked security analysis
       responses:
         '200': { description: Mock security-analysis result }
+  /api/common/lfsa/imports:
+    get:
+      summary: Search mocked successful CNM imports
+      responses:
+        '200': { description: Mock import candidates }
+  /api/common/lfsa/security-analysis/runs:
+    post:
+      summary: Start mocked asynchronous security analysis
+      responses:
+        '200': { description: Mock run summary }
+    get:
+      summary: Search mocked security-analysis runs
+      responses:
+        '200': { description: Mock run summaries }
+  /api/common/lfsa/security-analysis/runs/{runId}:
+    get:
+      summary: Get mocked security-analysis run detail
+      parameters:
+        - { name: runId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Mock run detail }

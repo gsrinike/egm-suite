@@ -2,6 +2,7 @@ FROM node:22-alpine AS build
 WORKDIR /workspace
 COPY gui.common ./gui.common
 COPY gui.cnm.manager ./gui.cnm.manager
+COPY gui.lfsa.manager ./gui.lfsa.manager
 COPY gui.rcc.manager ./gui.rcc.manager
 WORKDIR /workspace/gui.rcc.manager
 RUN npm install && npm run build

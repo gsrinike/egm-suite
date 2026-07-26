@@ -7,9 +7,9 @@ import org.springframework.context.annotation.Import;
 
 @SpringBootApplication
 @Import(RestServiceConfiguration.class)
-public class MockCommonLfsaApplication {
+public class MockCommonLfSaApplication {
     public static void main(String[] args) {
         System.setProperty("module", "mock.srv.common.lfsa");
-        SpringApplication.run(MockCommonLfsaApplication.class, args);
+        SpringApplication.run(MockCommonLfSaApplication.class, args);
     }
 }

@@ -1,11 +1,17 @@
 # srv.common.lfsa
 
-`srv.common.lfsa` is the reusable load-flow and security-analysis REST service
+`srv.common.lfsa` is the reusable load-flow and security-analysis service
 boundary for CSA, capacity calculation, and operational planning workflows.
 
-The current implementation returns deterministic results through the shared
-`data.common` contracts. A calculation-engine implementation can replace the
-service internals without changing the CSA orchestration API shape.
+It exposes compatibility REST endpoints for direct load-flow/security-analysis
+requests and a CNM-driven asynchronous security-analysis run API. A run is
+created for a successful CNM import, published as a RabbitMQ event, processed
+against persisted IIDM network documents, and stored in the
+`lfsa-security-analysis-runs` document index.
+
+The processing path reconstructs PowSyBl `Network` objects from stored XIIDM,
+uses an in-memory merge hook when a compatible PowSyBl merger is available, and
+persists bounded diagnostics with the run result.
 
 ## Developer Command
 

@@ -1,0 +1,10 @@
+spring:
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+utility:
+  messaging:
+    listener:
+      retry:
+        max-attempts: 3
+    topic-exchange:
+      name: ${LFSA_EVENT_EXCHANGE:lfsa.events}

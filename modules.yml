@@ -23,4 +23,5 @@ modules:
   - mock.srv.cnm.services
   - gui.common
   - gui.cnm.manager
+  - gui.lfsa.manager
   - gui.rcc.manager
