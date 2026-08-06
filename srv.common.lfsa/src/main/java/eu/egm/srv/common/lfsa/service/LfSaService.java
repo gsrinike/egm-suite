@@ -149,8 +149,8 @@ public class LfSaService extends RestServiceSupport {
                 .filter(this::isAnalysisReadyImport)
                 .filter(importDocument -> matches(service, value(importDocument.serviceType())))
                 .filter(importDocument -> matches(normalizedTimeFrame, value(importDocument.timeFrame())))
+                .filter(importDocument -> matchesImportDate(date, importDocument))
                 .map(this::toCandidate)
-                .filter(candidate -> matchesDate(date, candidate))
                 .toList();
         return page(rows, page, size);
     }
@@ -742,10 +742,16 @@ public class LfSaService extends RestServiceSupport {
 
     private SecurityAnalysisImportCandidate toCandidate(CnmImportReadDocument document) {
         String businessDay = document.files().stream()
+                .filter(file -> !isBoundaryProfile(file))
                 .map(CnmImportReadDocument.CnmImportFileReadDocument::businessDay)
                 .filter(Objects::nonNull)
                 .filter(value -> !value.isBlank())
                 .findFirst()
+                .or(() -> document.files().stream()
+                        .map(CnmImportReadDocument.CnmImportFileReadDocument::businessDay)
+                        .filter(Objects::nonNull)
+                        .filter(value -> !value.isBlank())
+                        .findFirst())
                 .orElse("");
         return new SecurityAnalysisImportCandidate(
                 document.id(),
@@ -822,11 +828,22 @@ public class LfSaService extends RestServiceSupport {
                 || (value != null && value.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT)));
     }
 
-    private boolean matchesDate(String date, SecurityAnalysisImportCandidate candidate) {
+    private boolean matchesImportDate(String date, CnmImportReadDocument document) {
         return date == null
                 || date.isBlank()
-                || date.equals(candidate.businessDay())
-                || candidate.createdAt().startsWith(date);
+                || document.files().stream()
+                        .map(CnmImportReadDocument.CnmImportFileReadDocument::businessDay)
+                        .filter(Objects::nonNull)
+                        .anyMatch(date::equals)
+                || instantString(document.createdAt()).startsWith(date);
+    }
+
+    private boolean isBoundaryProfile(CnmImportReadDocument.CnmImportFileReadDocument file) {
+        String profileType = value(file.profileType()).toUpperCase(Locale.ROOT);
+        return "EQBD".equals(profileType)
+                || "EQ_BD".equals(profileType)
+                || "TPBD".equals(profileType)
+                || "TP_BD".equals(profileType);
     }
 
     private String displayTimeFrame(String timeFrame) {

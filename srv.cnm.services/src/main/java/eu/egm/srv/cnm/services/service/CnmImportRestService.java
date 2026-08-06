@@ -1618,9 +1618,6 @@ public class CnmImportRestService extends RestServiceSupport {
                     current.message(),
                     current.iidmTransformationStatus());
             IidmTransformationStatus nextStatus = aggregateIidmStatus(updated, eventStatus);
-            IidmTransformationStatus persistedStatus = nextStatus == IidmTransformationStatus.DONE
-                    ? IidmTransformationStatus.STARTED
-                    : nextStatus;
             documentRepository.save(new CnmImportDocument(
                     updated.id(),
                     updated.serviceType(),
@@ -1629,7 +1626,7 @@ public class CnmImportRestService extends RestServiceSupport {
                     files,
                     updated.createdAt(),
                     updated.message(),
-                    persistedStatus));
+                    nextStatus));
             logger.info("Updated IIDM transform status for import {} to {}", importId, nextStatus);
         } catch (Exception exception) {
             logger.warn("Unable to update IIDM transform status for import {}", importId, exception);

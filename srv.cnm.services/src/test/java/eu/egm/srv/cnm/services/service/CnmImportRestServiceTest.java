@@ -506,6 +506,7 @@ class CnmImportRestServiceTest {
         assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(afterSecondFileParsed.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
+        assertThat(documentRepository.saved.getLast().iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
     }
 
     @Test

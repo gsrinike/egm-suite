@@ -62,6 +62,29 @@ class LfSaServiceTest {
                 .containsExactly("two-days");
     }
 
+    @Test
+    void dateSearchMatchesAnyImportFileAndDisplaysNonBoundaryBusinessDay() {
+        CapturingImportRepository importRepository = new CapturingImportRepository();
+        importRepository.save(importDocumentWithFiles(
+                "with-boundary",
+                TimeFrame.DAY_AHEAD,
+                ImportState.SUCCESS,
+                IidmTransformationStatus.DONE,
+                1L,
+                List.of(
+                        importFile("boundary", "2024-11-22", TimeFrame.DAY_AHEAD, "EQBD"),
+                        importFile("model", "2024-12-03", TimeFrame.DAY_AHEAD, "EQ"))));
+        LfSaService service = service(importRepository);
+
+        CommonPage<SecurityAnalysisImportCandidate> page =
+                service.searchSuccessfulImports("CGM", "DAY_AHEAD", "2024-12-03", 0, 100);
+
+        assertThat(page.items()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.importId()).isEqualTo("with-boundary");
+            assertThat(candidate.businessDay()).isEqualTo("2024-12-03");
+        });
+    }
+
     private static LfSaService service(CapturingImportRepository importRepository) {
         return new LfSaService(
                 new StandardEnvironment(),
@@ -78,29 +101,53 @@ class LfSaServiceTest {
             ImportState state,
             IidmTransformationStatus iidmTransformationStatus,
             long createdAt) {
+        return importDocumentWithFiles(
+                id,
+                timeFrame,
+                state,
+                iidmTransformationStatus,
+                createdAt,
+                List.of(importFile(id + "-file", "2024-12-03", timeFrame, "EQ")));
+    }
+
+    private static CnmImportReadDocument importDocumentWithFiles(
+            String id,
+            TimeFrame timeFrame,
+            ImportState state,
+            IidmTransformationStatus iidmTransformationStatus,
+            long createdAt,
+            List<CnmImportReadDocument.CnmImportFileReadDocument> files) {
         return new CnmImportReadDocument(
                 id,
                 CnmServiceType.CGM,
                 timeFrame,
                 state,
-                List.of(new CnmImportReadDocument.CnmImportFileReadDocument(
-                        id + "-file",
-                        id + ".xml",
-                        id + "/object",
-                        null,
-                        null,
-                        "2024-12-03",
-                        "04:30",
-                        timeFrame.name(),
-                        "TSO-XYZ",
-                        "EQ",
-                        "001",
-                        null,
-                        "",
-                        createdAt)),
+                files,
                 createdAt,
                 "ready",
                 iidmTransformationStatus);
+    }
+
+    private static CnmImportReadDocument.CnmImportFileReadDocument importFile(
+            String id,
+            String businessDay,
+            TimeFrame timeFrame,
+            String profileType) {
+        return new CnmImportReadDocument.CnmImportFileReadDocument(
+                id,
+                id + ".xml",
+                id + "/object",
+                null,
+                null,
+                businessDay,
+                "04:30",
+                timeFrame.name(),
+                "TSO-XYZ",
+                profileType,
+                "001",
+                null,
+                "",
+                1L);
     }
 
     private static InfrastructureUtils infrastructureUtils(CapturingImportRepository importRepository) {
