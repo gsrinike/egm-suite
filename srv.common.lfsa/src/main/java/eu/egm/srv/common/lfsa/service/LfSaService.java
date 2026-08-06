@@ -142,12 +142,13 @@ public class LfSaService extends RestServiceSupport {
             int page,
             int size) {
         LfSaDefaults defaults = defaultsService.load();
+        String normalizedTimeFrame = normalizeTimeFrameFilter(timeFrame);
         List<SecurityAnalysisImportCandidate> rows = importRepository
                 .findAll(defaults.maxSearchImports(), DocumentSort.descending("createdAt"))
                 .stream()
                 .filter(this::isAnalysisReadyImport)
                 .filter(importDocument -> matches(service, value(importDocument.serviceType())))
-                .filter(importDocument -> matches(timeFrame, value(importDocument.timeFrame())))
+                .filter(importDocument -> matches(normalizedTimeFrame, value(importDocument.timeFrame())))
                 .map(this::toCandidate)
                 .filter(candidate -> matchesDate(date, candidate))
                 .toList();
@@ -830,6 +831,18 @@ public class LfSaService extends RestServiceSupport {
 
     private String displayTimeFrame(String timeFrame) {
         return "DAY_AHEAD".equals(timeFrame) ? "DAY AHEAD" : timeFrame.replace('_', ' ');
+    }
+
+    private String normalizeTimeFrameFilter(String timeFrame) {
+        if (timeFrame == null || timeFrame.isBlank()) {
+            return "";
+        }
+        return switch (timeFrame.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_')) {
+            case "DAY", "1D", "DAYAHEAD", "DAY_AHEAD" -> "DAY_AHEAD";
+            case "INTRA", "INTRADAY", "INTRA_DAY", "ID" -> "ID";
+            case "2D", "DAY_2", "TWO_DAYS", "TWO_DAYS_AHEAD" -> "TWO_DAYS_AHEAD";
+            default -> timeFrame;
+        };
     }
 
     private String value(Object value) {

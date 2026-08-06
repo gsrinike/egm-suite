@@ -897,6 +897,53 @@ public class CnmImportRestService extends RestServiceSupport {
         }
     }
 
+    private void logSnapshotAssemblyTimings(
+            CnmSnapshotAssemblyRequested event,
+            String snapshotId,
+            String result,
+            int fragmentCount,
+            int payloadSectionCount,
+            ProcessingTimings timings) {
+        long totalMs = timings.totalMs();
+        if (totalMs < slowMetadataProcessingThresholdMs && !logger.isDebugEnabled()) {
+            return;
+        }
+        String message = "CNM snapshot assembly timings import={} snapshot={} group={} result={} "
+                + "fragments={} payloadSections={} totalMs={} importReadMs={} groupNotReadyMs={} "
+                + "fragmentLoadMs={} claimMs={} alreadyClaimedMs={} assembleMs={} payloadBuildMs={} "
+                + "payloadSaveMs={} snapshotDoneSaveMs={} iidmPublishMs={} failedMs={}";
+        Object[] values = {
+                event.importId(),
+                snapshotId,
+                snapshotQueueKey(
+                        event.importId(),
+                        event.tsoName(),
+                        event.businessDay(),
+                        event.businessTime(),
+                        event.modelTimeFrame()),
+                result,
+                fragmentCount,
+                payloadSectionCount,
+                totalMs,
+                timings.elapsedMs("importRead"),
+                timings.elapsedMs("groupNotReady"),
+                timings.elapsedMs("fragmentLoad"),
+                timings.elapsedMs("claim"),
+                timings.elapsedMs("alreadyClaimed"),
+                timings.elapsedMs("assemble"),
+                timings.elapsedMs("payloadBuild"),
+                timings.elapsedMs("payloadSave"),
+                timings.elapsedMs("snapshotDoneSave"),
+                timings.elapsedMs("iidmPublish"),
+                timings.elapsedMs("failed")
+        };
+        if (totalMs >= slowMetadataProcessingThresholdMs) {
+            logger.warn(message, values);
+        } else {
+            logger.debug(message, values);
+        }
+    }
+
     private boolean isSnapshotAssemblyFailure(CnmImportFileDocument file) {
         return file.message() != null && file.message().contains("Unable to assemble CGM network snapshot");
     }
@@ -1005,63 +1052,98 @@ public class CnmImportRestService extends RestServiceSupport {
         if (event == null) {
             throw new IllegalArgumentException("Snapshot assembly event is required");
         }
-        String lockKey = snapshotQueueKey(event.importId(), event.tsoName(), event.businessDay(), event.businessTime(), event.modelTimeFrame());
-        Object lock = snapshotLocks.computeIfAbsent(lockKey, ignored -> new Object());
-        synchronized (lock) {
-            assembleSnapshotLocked(event);
-        }
-    }
-
-    private void assembleSnapshotLocked(CnmSnapshotAssemblyRequested event) {
-        if (snapshotDone(event)) {
-            return;
-        }
+        ProcessingTimings timings = new ProcessingTimings();
+        String snapshotId = snapshotId(
+                event.importId(),
+                event.tsoName(),
+                event.businessDay(),
+                event.businessTime(),
+                event.modelTimeFrame());
         CnmImportDocument document = findImportDocument(event.importId());
+        timings.mark("importRead");
         List<CnmImportFileDocument> groupFiles = document.files().stream()
                 .filter(file -> sameModelGroup(file, event))
                 .toList();
         if (groupFiles.isEmpty() || groupFiles.stream().anyMatch(file -> file.state() != ImportFileState.PARSED)) {
+            timings.mark("groupNotReady");
             logger.info(
                     "Skipping CGM snapshot assembly for {} because the model group is not fully parsed",
                     snapshotQueueKey(event.importId(), event.tsoName(), event.businessDay(), event.businessTime(), event.modelTimeFrame()));
+            logSnapshotAssemblyTimings(event, snapshotId, "GROUP_NOT_READY", 0, 0, timings);
             return;
         }
         List<ProfileFragment> fragments = groupFiles.stream()
                 .map(file -> profileFragment(document.id(), file.fileId()))
                 .flatMap(List::stream)
                 .toList();
+        timings.mark("fragmentLoad");
         if (fragments.isEmpty()) {
+            logSnapshotAssemblyTimings(event, snapshotId, "NO_FRAGMENTS", 0, 0, timings);
             return;
         }
-        CgmNetworkSnapshot snapshot = snapshotAssembler.assemble(document.serviceType(), fragments);
-        if (snapshotDone(snapshot.snapshotId(), snapshot.importId())) {
+        if (!claimSnapshotAssembly(event, snapshotId)) {
+            timings.mark("alreadyClaimed");
+            logSnapshotAssemblyTimings(event, snapshotId, "ALREADY_CLAIMED", fragments.size(), 0, timings);
             return;
         }
-        List<CnmNetworkSnapshotPayloadDocument> payloadSections = toNetworkSnapshotPayloadDocuments(snapshot);
-        networkSnapshotRepository.save(toNetworkSnapshotDocument(
-                snapshot,
-                payloadSections.size(),
-                CnmSnapshotState.STARTED,
-                "CGM network snapshot assembly started",
-                Instant.now().toEpochMilli()));
+        timings.mark("claim");
+        CgmNetworkSnapshot snapshot = null;
+        List<CnmNetworkSnapshotPayloadDocument> payloadSections = List.of();
         try {
+            snapshot = snapshotAssembler.assemble(document.serviceType(), fragments);
+            timings.mark("assemble");
+            payloadSections = toNetworkSnapshotPayloadDocuments(snapshot);
+            timings.mark("payloadBuild");
             networkSnapshotPayloadRepository.saveAll(payloadSections);
+            timings.mark("payloadSave");
             networkSnapshotRepository.save(toNetworkSnapshotDocument(
                     snapshot,
                     payloadSections.size(),
                     CnmSnapshotState.DONE,
                     "CGM network snapshot assembly completed",
                     Instant.now().toEpochMilli()));
+            timings.mark("snapshotDoneSave");
+            publishIidmSnapshotTransformRequested(document.id(), snapshot);
+            timings.mark("iidmPublish");
+            logSnapshotAssemblyTimings(event, snapshotId, "DONE", fragments.size(), payloadSections.size(), timings);
         } catch (Exception exception) {
-            networkSnapshotRepository.save(toNetworkSnapshotDocument(
-                    snapshot,
-                    payloadSections.size(),
-                    CnmSnapshotState.FAILED,
-                    message(exception),
-                    Instant.now().toEpochMilli()));
+            timings.mark("failed");
+            CgmNetworkSnapshot failedSnapshot = snapshot;
+            networkSnapshotRepository.save(failedSnapshot == null
+                    ? toStartedSnapshotDocument(event, CnmSnapshotState.FAILED, message(exception))
+                    : toNetworkSnapshotDocument(
+                            failedSnapshot,
+                            payloadSections.size(),
+                            CnmSnapshotState.FAILED,
+                            message(exception),
+                            Instant.now().toEpochMilli()));
+            logSnapshotAssemblyTimings(event, snapshotId, "FAILED", fragments.size(), payloadSections.size(), timings);
             throw exception;
         }
-        publishIidmSnapshotTransformRequested(document.id(), snapshot);
+    }
+
+    private boolean claimSnapshotAssembly(CnmSnapshotAssemblyRequested event, String snapshotId) {
+        String lockKey = snapshotQueueKey(
+                event.importId(),
+                event.tsoName(),
+                event.businessDay(),
+                event.businessTime(),
+                event.modelTimeFrame());
+        Object lock = snapshotLocks.computeIfAbsent(lockKey, ignored -> new Object());
+        try {
+            synchronized (lock) {
+                if (snapshotDone(snapshotId, event.importId())) {
+                    return false;
+                }
+                networkSnapshotRepository.save(toStartedSnapshotDocument(
+                        event,
+                        CnmSnapshotState.STARTED,
+                        "CGM network snapshot assembly started"));
+                return true;
+            }
+        } finally {
+            snapshotLocks.remove(lockKey, lock);
+        }
     }
 
     private boolean sameModelGroup(CnmImportFileDocument left, CnmImportFileDocument right) {
@@ -1222,6 +1304,34 @@ public class CnmImportRestService extends RestServiceSupport {
                 state,
                 statusMessage,
                 assembledAt == null ? Instant.now().toEpochMilli() : assembledAt);
+    }
+
+    private CnmNetworkSnapshotDocument toStartedSnapshotDocument(
+            CnmSnapshotAssemblyRequested event,
+            CnmSnapshotState state,
+            String statusMessage) {
+        return new CnmNetworkSnapshotDocument(
+                snapshotId(
+                        event.importId(),
+                        event.tsoName(),
+                        event.businessDay(),
+                        event.businessTime(),
+                        event.modelTimeFrame()),
+                event.importId(),
+                event.serviceType(),
+                event.tsoName(),
+                event.businessDay(),
+                event.businessTime(),
+                event.modelTimeFrame(),
+                List.of(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                state,
+                statusMessage,
+                Instant.now().toEpochMilli());
     }
 
     private List<CnmNetworkSnapshotPayloadDocument> toNetworkSnapshotPayloadDocuments(CgmNetworkSnapshot snapshot) {

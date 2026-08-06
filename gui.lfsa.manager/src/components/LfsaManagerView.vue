@@ -28,9 +28,9 @@
           Timeframe
           <select v-model="search.timeFrame">
             <option value="">Any timeframe</option>
-            <option value="DAY">Day Ahead</option>
-            <option value="INTRA">Intra-Day</option>
-            <option value="2D">Day-2</option>
+            <option value="DAY_AHEAD">Day Ahead</option>
+            <option value="ID">Intra-Day</option>
+            <option value="TWO_DAYS_AHEAD">Day-2</option>
           </select>
         </label>
         <label>
