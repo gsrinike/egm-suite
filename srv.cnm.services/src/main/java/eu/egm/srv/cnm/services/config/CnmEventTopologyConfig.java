@@ -16,6 +16,23 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class CnmEventTopologyConfig {
     @Bean
+    Declarables cnmTransformInitializationTopology(
+            @Value("${cnm.import.event.exchange:cnm.events}") String exchangeName,
+            @Value("${cnm.import.event.dead-letter-exchange:cnm.events.dlx}") String deadLetterExchangeName,
+            @Value("${cnm.import.event.transform-initialization-routing-key:cnm.transform.initialization.requested}") String routingKey,
+            @Value("${cnm.import.event.transform-initialization-queue:cnm.transform.initialize}") String queueName,
+            @Value("${cnm.import.event.transform-initialization-dlq:cnm.transform.initialize.dlq}") String deadLetterQueueName,
+            @Value("${cnm.import.event.transform-initialization-dead-letter-routing-key:cnm.transform.initialization.failed}") String deadLetterRoutingKey) {
+        return retryableQueueTopology(
+                exchangeName,
+                deadLetterExchangeName,
+                routingKey,
+                queueName,
+                deadLetterQueueName,
+                deadLetterRoutingKey);
+    }
+
+    @Bean
     Declarables cnmFileProcessingTopology(
             @Value("${cnm.import.event.exchange:cnm.events}") String exchangeName,
             @Value("${cnm.import.event.dead-letter-exchange:cnm.events.dlx}") String deadLetterExchangeName,

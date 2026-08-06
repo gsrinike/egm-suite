@@ -10,16 +10,16 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CnmFileProcessingListener {
-    private final CnmImportRestService importService;
+    private final CnmFileProcessingQueue processingQueue;
 
-    public CnmFileProcessingListener(CnmImportRestService importService) {
-        this.importService = importService;
+    public CnmFileProcessingListener(CnmFileProcessingQueue processingQueue) {
+        this.processingQueue = processingQueue;
     }
 
     @RabbitListener(
             queues = "${cnm.import.event.file-processing-queue:cnm.file.process}",
             containerFactory = "retryingRabbitListenerContainerFactory")
     public void process(CnmFileProcessingRequested event) {
-        importService.processFile(event);
+        processingQueue.enqueue(event);
     }
 }

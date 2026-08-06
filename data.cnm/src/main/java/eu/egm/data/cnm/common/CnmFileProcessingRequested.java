@@ -12,6 +12,19 @@ public record CnmFileProcessingRequested(
         String fileName,
         CnmServiceType serviceType,
         TimeFrame timeFrame,
+        String groupKey,
+        boolean commonBoundary,
         int retryCount,
         Instant requestedAt) {
+    public CnmFileProcessingRequested(
+            String importId,
+            String fileId,
+            String objectId,
+            String fileName,
+            CnmServiceType serviceType,
+            TimeFrame timeFrame,
+            int retryCount,
+            Instant requestedAt) {
+        this(importId, fileId, objectId, fileName, serviceType, timeFrame, "", false, retryCount, requestedAt);
+    }
 }

@@ -424,7 +424,9 @@ const profileImportOptions = computed(() => [
     value: item.importId
   }))
 ]);
-const iidmReadyImports = computed(() => profileCapableImports.value.filter((item) => item.state === 'SUCCESS'));
+const iidmReadyImports = computed(() =>
+  profileCapableImports.value.filter((item) => item.state === 'SUCCESS' || item.state === 'RDF_EXTRACTED')
+);
 const iidmImportOptions = computed(() => [
   {
     label: iidmReadyImports.value.length === 0 ? 'No successful imports available' : 'Select successful import',

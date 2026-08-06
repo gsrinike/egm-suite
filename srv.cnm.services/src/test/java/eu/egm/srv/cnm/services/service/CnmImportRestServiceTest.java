@@ -13,6 +13,7 @@ import eu.egm.data.cnm.common.CnmFileProcessingRequested;
 import eu.egm.data.cnm.common.CnmServiceType;
 import eu.egm.data.cnm.common.CnmSnapshotAssemblyRequested;
 import eu.egm.data.cnm.common.CnmSnapshotState;
+import eu.egm.data.cnm.common.CnmTransformInitializationRequested;
 import eu.egm.data.cnm.common.ImportFailureRequest;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportFileStatusUpdateRequest;
@@ -55,6 +56,54 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CnmImportRestServiceTest {
+    @Test
+    void ordersRdfProcessingByProfilePriorityThenCreationTime() {
+        java.time.Instant first = java.time.Instant.parse("2026-08-06T10:00:00Z");
+        java.time.Instant second = first.plusSeconds(1);
+        List<CnmFileProcessingPriority.PrioritizedRequest> requests = new ArrayList<>(List.of(
+                CnmFileProcessingPriority.prioritize(new CnmFileProcessingRequested(
+                        "import",
+                        "ssh",
+                        "object",
+                        "20241203T0430Z_1D_APG_SSH_000.xml",
+                        CnmServiceType.CGM,
+                        TimeFrame.DAY_AHEAD,
+                        0,
+                        first)),
+                CnmFileProcessingPriority.prioritize(new CnmFileProcessingRequested(
+                        "import",
+                        "eqbd",
+                        "object",
+                        "20241122T0000Z__ENTSOE_EQBD_031.xml",
+                        CnmServiceType.CGM,
+                        TimeFrame.DAY_AHEAD,
+                        0,
+                        second)),
+                CnmFileProcessingPriority.prioritize(new CnmFileProcessingRequested(
+                        "import",
+                        "tpbd",
+                        "object",
+                        "20241122T0000Z__ENTSOE_TPBD_031.xml",
+                        CnmServiceType.CGM,
+                        TimeFrame.DAY_AHEAD,
+                        0,
+                        first)),
+                CnmFileProcessingPriority.prioritize(new CnmFileProcessingRequested(
+                        "import",
+                        "eq",
+                        "object",
+                        "20241203T0430Z_1D_APG_EQ_000.xml",
+                        CnmServiceType.CGM,
+                        TimeFrame.DAY_AHEAD,
+                        0,
+                        first))));
+
+        requests.sort(CnmFileProcessingPriority.COMPARATOR);
+
+        assertThat(requests)
+                .extracting(request -> request.event().fileId())
+                .containsExactly("eqbd", "tpbd", "eq", "ssh");
+    }
 
     @Test
     void expandsNestedZipUploadsIntoImportedRdfXmlFiles() throws Exception {
@@ -97,7 +146,7 @@ class CnmImportRestServiceTest {
         assertThat(objectStorageService.storedObjects).hasSize(2);
         assertThat(documentRepository.saved).hasSize(2);
         assertThat(documentRepository.saved.get(0).state()).isEqualTo(ImportState.INIT);
-        assertThat(documentRepository.saved.get(1).state()).isEqualTo(ImportState.STORED);
+        assertThat(documentRepository.saved.get(1).state()).isEqualTo(ImportState.STARTED);
         assertThat(status.message()).isEqualTo("Day-ahead validation model");
         assertThat(status.files())
                 .extracting(file -> file.fileName())
@@ -115,7 +164,8 @@ class CnmImportRestServiceTest {
         assertThat(profileRepository.saved).isEmpty();
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
-                .containsExactly("cnm.file.processing.requested", "cnm.file.processing.requested");
+                .containsExactly("cnm.transform.initialization.requested");
+        service.initializeTransform(eventPublisher.initializationEvents().getFirst());
         assertThat(eventPublisher.processingEvents()).hasSize(2);
 
         ImportStatus processed = status;
@@ -129,7 +179,7 @@ class CnmImportRestServiceTest {
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
                 .contains("iidm.profile.transform.requested", "iidm.profile.transform.requested");
-        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(processed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
         assertThat(processed.message()).isEqualTo("All CNM files processed successfully");
         assertThat(processed.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
         assertThat(profileRepository.saved).hasSize(2);
@@ -202,12 +252,12 @@ class CnmImportRestServiceTest {
         assertThat(failed.state()).isEqualTo(ImportState.FAILED);
         assertThat(failed.files()).extracting(file -> file.fileName()).containsExactly("models.zip");
         assertThat(completed.importId()).isEqualTo(importId);
-        assertThat(completed.state()).isEqualTo(ImportState.STORED);
+        assertThat(completed.state()).isEqualTo(ImportState.STARTED);
         assertThat(documentRepository.saved)
                 .extracting(CnmImportDocument::state)
-                .containsExactly(ImportState.FAILED, ImportState.INIT, ImportState.STORED);
-        assertThat(eventPublisher.processingEvents()).singleElement()
-                .extracting(CnmFileProcessingRequested::importId)
+                .containsExactly(ImportState.FAILED, ImportState.INIT, ImportState.STARTED);
+        assertThat(eventPublisher.initializationEvents()).singleElement()
+                .extracting(CnmTransformInitializationRequested::importId)
                 .isEqualTo(importId);
     }
 
@@ -260,9 +310,9 @@ class CnmImportRestServiceTest {
 
         assertThat(initialized.state()).isEqualTo(ImportState.INIT);
         assertThat(initialized.files().get(0).state()).isEqualTo(ImportFileState.INIT);
-        assertThat(stored.state()).isEqualTo(ImportState.STORED);
+        assertThat(stored.state()).isEqualTo(ImportState.INIT_TRANSFORMATION);
         assertThat(stored.files().get(0).state()).isEqualTo(ImportFileState.STORED);
-        assertThat(parsed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(parsed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
         assertThat(parsed.files().get(0).state()).isEqualTo(ImportFileState.PARSED);
         assertThat(failed.state()).isEqualTo(ImportState.FAILED);
         assertThat(failed.files().get(0).state()).isEqualTo(ImportFileState.FAILED);
@@ -304,15 +354,16 @@ class CnmImportRestServiceTest {
                 "application/xml",
                 rdf("Equipment"));
         ImportStatus imported = service.importModels(List.of(upload), CnmServiceType.CGM, TimeFrame.DAY_AHEAD);
+        service.initializeTransform(eventPublisher.initializationEvents().getFirst());
 
         ImportStatus processed = service.processFile(eventPublisher.processingEvents().get(0));
 
-        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(processed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
         assertThat(processed.files()).singleElement().satisfies(file -> {
             assertThat(file.state()).isEqualTo(ImportFileState.PARSED);
             assertThat(file.message()).isEqualTo("RDF metadata parsed");
         });
-        assertThat(documentRepository.saved.get(documentRepository.saved.size() - 1).state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(documentRepository.saved.get(documentRepository.saved.size() - 1).state()).isEqualTo(ImportState.RDF_EXTRACTED);
         assertThat(eventPublisher.snapshotEvents()).hasSize(1);
 
         assertThatThrownBy(() -> service.assembleSnapshot(eventPublisher.snapshotEvents().getFirst()))
@@ -452,7 +503,7 @@ class CnmImportRestServiceTest {
 
         assertThat(staleStatus.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterFirstTransform.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
-        assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.SUCCESS);
+        assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
         assertThat(afterSecondFileParsed.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
     }
@@ -789,6 +840,14 @@ class CnmImportRestServiceTest {
                     .map(PublishedEvent::payload)
                     .filter(CnmFileProcessingRequested.class::isInstance)
                     .map(CnmFileProcessingRequested.class::cast)
+                    .toList();
+        }
+
+        private List<CnmTransformInitializationRequested> initializationEvents() {
+            return published.stream()
+                    .map(PublishedEvent::payload)
+                    .filter(CnmTransformInitializationRequested.class::isInstance)
+                    .map(CnmTransformInitializationRequested.class::cast)
                     .toList();
         }
 

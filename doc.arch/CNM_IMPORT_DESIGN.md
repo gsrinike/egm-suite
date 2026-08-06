@@ -46,8 +46,11 @@ also inspected to confirm profile information.
 The import aggregate uses `ImportState`:
 
 - `INIT`: import has been created or is being assembled.
-- `STORED`: raw files are stored and processing events are queued.
-- `SUCCESS`: every file in the import has been parsed successfully.
+- `STARTED`: raw files are stored and transform initialization is queued.
+- `INIT_TRANSFORMATION`: transform initialization has grouped files and queued
+  RDF metadata work.
+- `RDF_EXTRACTED`: every file in the import has been parsed successfully.
+- `STORED` and `SUCCESS`: legacy states still accepted for older documents.
 - `FAILED`: one or more files failed intake or processing.
 
 Each file uses `ImportFileState`:
@@ -58,7 +61,7 @@ Each file uses `ImportFileState`:
 - `FAILED`
 
 The aggregate state is derived from file states. A failed file makes the import
-`FAILED`; all parsed files make it `SUCCESS`.
+`FAILED`; all parsed files make it `RDF_EXTRACTED`.
 
 Each file also exposes aggregate IIDM transformation status. The status is
 `NOT_STARTED`, `STARTED`, `DONE`, or `FAILED`, with a count of related IIDM
@@ -99,10 +102,14 @@ sequenceDiagram
 
   GUI->>CNM: Create import / upload chunks
   CNM->>MinIO: Store raw payloads
-  CNM->>ES: Save import and file state STORED
-  CNM->>MQ: Publish cnm.file.processing.requested per file
+  CNM->>ES: Save import STARTED and file state STORED
+  CNM->>MQ: Publish cnm.transform.initialization.requested
   CNM-->>GUI: Import accepted
-  MQ->>Worker: Consume file-processing event
+  MQ->>CNM: Consume transform initialization
+  CNM->>CNM: Group by TSO and identify EQ_BD/TP_BD
+  CNM->>MQ: Publish cnm.file.processing.requested per file
+  MQ->>Worker: Enqueue file-processing event
+  Worker->>Worker: Priority queue by profile kind and requested time
   Worker->>MinIO: Read raw payload
   Worker->>Worker: Stream RDF and extract profile data
   Worker->>ES: Store metadata, payload, fragments, mRID index
@@ -117,11 +124,26 @@ DLQ.
 
 ## Grouping Rules
 
+Transform initialization loads the import file list, identifies common boundary
+profiles, groups model files by TSO, business day, business time, and timeframe,
+and publishes RDF metadata work. RDF work is accepted by the Rabbit listener and
+processed through an in-memory priority queue. The comparator sorts first by
+profile priority and then by request creation time:
+
+1. `EQ_BD`
+2. `TP_BD`
+3. `EQ`
+4. `TP`
+5. `SSH`
+6. `SV`
+7. other known profiles
+8. `UNKNOWN`
+
 RDF files are processed with a `ProfileProcessingContext` containing import ID,
 file ID, object ID, TSO, business day, business time, timeframe, profile family,
-and profile type. Processing is serialized per import, TSO, business day,
-business time, and timeframe so cross-referenced EQ, TP, SSH, and SV files are
-handled against a stable import state.
+and profile type. Existing profile metadata for the same import/file pair is
+treated as already processed so replayed events and repeated boundary references
+do not duplicate RDF extraction.
 
 Boundary profiles (`EQ_BD`, `TP_BD`) are parsed as CGMES profiles and included
 as support files in IIDM transform requests for every completed model group.

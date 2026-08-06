@@ -2,7 +2,7 @@ import { HttpClientError } from '@egm/gui.common/src';
 
 export type CnmServiceType = 'CGM' | 'CSA' | 'CC';
 export type TimeFrame = 'ID' | 'DAY_AHEAD' | 'TWO_DAYS_AHEAD';
-export type ImportState = 'INIT' | 'STORED' | 'SUCCESS' | 'FAILED';
+export type ImportState = 'INIT' | 'STARTED' | 'INIT_TRANSFORMATION' | 'STORED' | 'RDF_EXTRACTED' | 'SUCCESS' | 'FAILED';
 export type ImportFileState = 'INIT' | 'STORED' | 'PARSED' | 'FAILED';
 export type CnmSnapshotState = 'STARTED' | 'DONE' | 'FAILED';
 export type IidmTransformationStatus = 'NOT_STARTED' | 'STARTED' | 'DONE' | 'FAILED';
