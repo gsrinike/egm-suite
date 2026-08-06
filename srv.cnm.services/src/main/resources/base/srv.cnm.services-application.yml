@@ -12,6 +12,12 @@ server:
 cnm:
   import:
     raw-bucket: cnm-rdf-models
+    recovery:
+      enabled: ${CNM_IMPORT_RECOVERY_ENABLED:true}
+      fixed-delay-ms: ${CNM_IMPORT_RECOVERY_FIXED_DELAY_MS:30000}
+      stale-after-ms: ${CNM_IMPORT_RECOVERY_STALE_AFTER_MS:30000}
+      requeue-throttle-ms: ${CNM_IMPORT_RECOVERY_REQUEUE_THROTTLE_MS:30000}
+      scan-limit: ${CNM_IMPORT_RECOVERY_SCAN_LIMIT:500}
     metadata:
       slow-threshold-ms: ${CNM_METADATA_SLOW_THRESHOLD_MS:5000}
       mrid-index:

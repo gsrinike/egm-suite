@@ -107,8 +107,6 @@ public class CnmImportRestService extends RestServiceSupport {
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
     private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
-    private static final long STORED_FILE_REQUEUE_AFTER_MILLIS = 30_000L;
-    private static final long STORED_FILE_REQUEUE_THROTTLE_MILLIS = 30_000L;
     private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
 
     private final ObjectStorageService objectStorageService;
@@ -135,7 +133,6 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String iidmTransformRoutingKey;
     private final ConcurrentMap<String, Object> snapshotLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> importStatusLocks = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, Long> fileProcessingRequeueTimes = new ConcurrentHashMap<>();
 
     public CnmImportRestService(
             Environment environment,
@@ -381,8 +378,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private ImportFileState toFileState(ImportState state) {
         return switch (state) {
             case INIT -> ImportFileState.INIT;
-            case STARTED, INIT_TRANSFORMATION, STORED -> ImportFileState.STORED;
-            case RDF_EXTRACTED, SUCCESS -> ImportFileState.PARSED;
+            case STARTED, IN_PROGRESS -> ImportFileState.STORED;
+            case SUCCESS -> ImportFileState.PARSED;
             case FAILED -> ImportFileState.FAILED;
         };
     }
@@ -492,7 +489,6 @@ public class CnmImportRestService extends RestServiceSupport {
         }
         CnmImportDocument current = findImportDocument(event.importId());
         if (current.state() == ImportState.FAILED
-                || current.state() == ImportState.RDF_EXTRACTED
                 || current.state() == ImportState.SUCCESS) {
             return toStatus(current);
         }
@@ -500,7 +496,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 current.id(),
                 current.serviceType(),
                 current.timeFrame(),
-                ImportState.INIT_TRANSFORMATION,
+                ImportState.IN_PROGRESS,
                 current.files(),
                 current.createdAt(),
                 current.message(),
@@ -542,7 +538,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 document.id(),
                 document.serviceType(),
                 document.timeFrame(),
-                changed ? aggregateState(updatedFiles) : ImportState.INIT_TRANSFORMATION,
+                changed ? aggregateState(updatedFiles) : ImportState.IN_PROGRESS,
                 updatedFiles,
                 document.createdAt(),
                 "One or more files could not be queued for metadata processing",
@@ -1399,7 +1395,6 @@ public class CnmImportRestService extends RestServiceSupport {
                 .stream()
                 .skip((long) Math.max(page, 0) * boundedSize)
                 .limit(boundedSize)
-                .map(this::recoverStaleStoredFiles)
                 .map(this::toStatus)
                 .toList();
         return new CnmPage<>(imports, imports.size(), Math.max(page, 0), boundedSize);
@@ -1409,63 +1404,8 @@ public class CnmImportRestService extends RestServiceSupport {
         return documentRepository.findByField("id", importId, 1)
                 .stream()
                 .findFirst()
-                .map(this::recoverStaleStoredFiles)
                 .map(this::toStatus)
                 .orElseThrow(() -> new IllegalArgumentException("Import not found: " + importId));
-    }
-
-    private CnmImportDocument recoverStaleStoredFiles(CnmImportDocument document) {
-        if (document.state() == ImportState.SUCCESS
-                || document.state() == ImportState.RDF_EXTRACTED
-                || document.state() == ImportState.FAILED) {
-            return document;
-        }
-        long now = Instant.now().toEpochMilli();
-        if (document.state() == ImportState.STARTED
-                && document.files().stream().anyMatch(file -> file.state() == ImportFileState.STORED)
-                && shouldRequeueFileProcessing(document.id(), "__transform_init__", now)) {
-            try {
-                publishTransformInitializationEvent(document);
-                logger.info("Re-queued stale CNM transform-initialization event for import {}", document.id());
-            } catch (RuntimeException exception) {
-                logger.warn("Unable to re-queue stale CNM transform-initialization event for import {}", document.id(), exception);
-            }
-            return document;
-        }
-        for (CnmImportFileDocument file : document.files()) {
-            if (file.state() == ImportFileState.STORED
-                    && isStaleStoredFile(file, now)
-                    && shouldRequeueFileProcessing(document.id(), file.fileId(), now)) {
-                try {
-                    publishFileProcessingRequested(document, file, 1);
-                    logger.info(
-                            "Re-queued stale CNM file-processing event for import {} file {}",
-                            document.id(),
-                            file.fileId());
-                } catch (RuntimeException exception) {
-                    logger.warn(
-                            "Unable to re-queue stale CNM file-processing event for import {} file {}",
-                            document.id(),
-                            file.fileId(),
-                            exception);
-                }
-            }
-        }
-        return document;
-    }
-
-    private boolean isStaleStoredFile(CnmImportFileDocument file, long now) {
-        return now - instant(file.uploadedAt()).toEpochMilli() >= STORED_FILE_REQUEUE_AFTER_MILLIS;
-    }
-
-    private boolean shouldRequeueFileProcessing(String importId, String fileId, long now) {
-        String key = importId + ":" + fileId;
-        Long lastRequeuedAt = fileProcessingRequeueTimes.get(key);
-        if (lastRequeuedAt != null && now - lastRequeuedAt < STORED_FILE_REQUEUE_THROTTLE_MILLIS) {
-            return false;
-        }
-        fileProcessingRequeueTimes.put(key, now);
-        return true;
     }
 
     public ImportStatus updateFileStatus(
@@ -1597,8 +1537,7 @@ public class CnmImportRestService extends RestServiceSupport {
         if (transforms.stream().anyMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.FAILED)) {
             return IidmTransformationStatus.FAILED;
         }
-        boolean importReadyForIidmCompletion = (document.state() == ImportState.SUCCESS
-                || document.state() == ImportState.RDF_EXTRACTED)
+        boolean importReadyForIidmCompletion = document.state() == ImportState.SUCCESS
                 && document.files().stream()
                         .filter(file -> !isBoundaryProfile(file))
                         .allMatch(file -> file.state() == ImportFileState.PARSED);
@@ -1779,15 +1718,15 @@ public class CnmImportRestService extends RestServiceSupport {
             return ImportState.INIT;
         }
         if (files.stream().allMatch(file -> file.state() == ImportFileState.PARSED)) {
-            return ImportState.RDF_EXTRACTED;
+            return ImportState.SUCCESS;
         }
-        return ImportState.INIT_TRANSFORMATION;
+        return ImportState.IN_PROGRESS;
     }
 
     private String aggregateMessage(String currentMessage, List<CnmImportFileDocument> files) {
         ImportState state = aggregateState(files);
         return switch (state) {
-            case SUCCESS, RDF_EXTRACTED -> "All CNM files processed successfully";
+            case SUCCESS -> "All CNM files processed successfully";
             case FAILED -> files.stream()
                     .filter(file -> file.state() == ImportFileState.FAILED)
                     .map(CnmImportFileDocument::message)

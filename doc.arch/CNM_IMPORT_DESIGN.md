@@ -47,10 +47,9 @@ The import aggregate uses `ImportState`:
 
 - `INIT`: import has been created or is being assembled.
 - `STARTED`: raw files are stored and transform initialization is queued.
-- `INIT_TRANSFORMATION`: transform initialization has grouped files and queued
-  RDF metadata work.
-- `RDF_EXTRACTED`: every file in the import has been parsed successfully.
-- `STORED` and `SUCCESS`: legacy states still accepted for older documents.
+- `IN_PROGRESS`: transform initialization has grouped files and RDF metadata
+  work is running.
+- `SUCCESS`: every file in the import has been parsed successfully.
 - `FAILED`: one or more files failed intake or processing.
 
 Each file uses `ImportFileState`:
@@ -61,7 +60,8 @@ Each file uses `ImportFileState`:
 - `FAILED`
 
 The aggregate state is derived from file states. A failed file makes the import
-`FAILED`; all parsed files make it `RDF_EXTRACTED`.
+`FAILED`; all parsed files make it `SUCCESS`; otherwise stored or partially
+parsed files make it `IN_PROGRESS`.
 
 Each file also exposes aggregate IIDM transformation status. The status is
 `NOT_STARTED`, `STARTED`, `DONE`, or `FAILED`, with a count of related IIDM
@@ -121,6 +121,27 @@ sequenceDiagram
 CNM processing queues use three listener attempts. After retry exhaustion the
 message is rejected without requeue and RabbitMQ routes it to the configured
 DLQ.
+
+## Recovery
+
+Import read APIs are pure reads. `listImports` and `findImport` only load the
+stored document and map it to DTOs; they do not publish retry events or mutate
+state.
+
+Stale asynchronous work is recovered by `CnmImportRecoveryService`, a scheduled
+worker in `srv.cnm.services`. The worker scans recent non-terminal imports and
+requeues missing work without changing the stored import document:
+
+- `STARTED` imports with stale `STORED` files republish
+  `cnm.transform.initialization.requested`.
+- `IN_PROGRESS` imports with stale `STORED` files republish
+  `cnm.file.processing.requested` for each stale file.
+- `SUCCESS` and `FAILED` imports are ignored.
+
+The scheduler is guarded against overlapping runs and throttles repeated
+requeues per import/file key. Runtime behavior is configurable with
+`cnm.import.recovery.enabled`, `fixed-delay-ms`, `stale-after-ms`,
+`requeue-throttle-ms`, and `scan-limit`.
 
 ## Grouping Rules
 

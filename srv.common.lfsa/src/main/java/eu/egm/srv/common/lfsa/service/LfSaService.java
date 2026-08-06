@@ -18,6 +18,7 @@ import com.powsybl.security.SecurityAnalysisReport;
 import com.powsybl.security.SecurityAnalysisRunParameters;
 import com.utils.restservice.RestServiceSupport;
 import eu.egm.data.cnm.common.ImportState;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.common.lfsa.common.AnalysisStepState;
 import eu.egm.data.common.lfsa.common.CommonPage;
 import eu.egm.data.common.lfsa.common.ContingencyViolation;
@@ -144,7 +145,7 @@ public class LfSaService extends RestServiceSupport {
         List<SecurityAnalysisImportCandidate> rows = importRepository
                 .findAll(defaults.maxSearchImports(), DocumentSort.descending("createdAt"))
                 .stream()
-                .filter(importDocument -> importDocument.state() == ImportState.SUCCESS)
+                .filter(this::isAnalysisReadyImport)
                 .filter(importDocument -> matches(service, value(importDocument.serviceType())))
                 .filter(importDocument -> matches(timeFrame, value(importDocument.timeFrame())))
                 .map(this::toCandidate)
@@ -753,6 +754,11 @@ public class LfSaService extends RestServiceSupport {
                 instantString(document.createdAt()),
                 businessDay,
                 document.message());
+    }
+
+    private boolean isAnalysisReadyImport(CnmImportReadDocument document) {
+        return document.iidmTransformationStatus() == IidmTransformationStatus.DONE
+                && document.state() == ImportState.SUCCESS;
     }
 
     private SecurityAnalysisRunSummary toSummary(SecurityAnalysisRunDocument document) {

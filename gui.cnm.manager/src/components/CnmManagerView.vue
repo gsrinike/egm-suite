@@ -425,7 +425,9 @@ const profileImportOptions = computed(() => [
   }))
 ]);
 const iidmReadyImports = computed(() =>
-  profileCapableImports.value.filter((item) => item.state === 'SUCCESS' || item.state === 'RDF_EXTRACTED')
+  profileCapableImports.value.filter((item) =>
+    item.state === 'SUCCESS' && item.iidmTransformationStatus === 'DONE'
+  )
 );
 const iidmImportOptions = computed(() => [
   {

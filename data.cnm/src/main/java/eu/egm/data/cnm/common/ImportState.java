@@ -6,9 +6,7 @@ package eu.egm.data.cnm.common;
 public enum ImportState {
     INIT,
     STARTED,
-    INIT_TRANSFORMATION,
-    STORED,
-    RDF_EXTRACTED,
+    IN_PROGRESS,
     SUCCESS,
     FAILED
 }

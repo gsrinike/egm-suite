@@ -1,6 +1,7 @@
 package eu.egm.srv.cnm.services.domain;
 
 import eu.egm.data.cnm.common.ImportFileState;
+import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ProfileFamily;
 import java.time.Instant;
 import java.util.List;
@@ -28,7 +29,7 @@ class CnmDocumentMappingTest {
                 "id", "import-1",
                 "serviceType", "CGM",
                 "timeFrame", "DAY_AHEAD",
-                "state", "STORED",
+                "state", "IN_PROGRESS",
                 "files", List.of(Map.ofEntries(
                         Map.entry("fileId", "file-1"),
                         Map.entry("fileName", "20241202T2330Z_1D_TSO-XYZ_SV_002.xml"),
@@ -50,6 +51,7 @@ class CnmDocumentMappingTest {
         CnmImportDocument restored = converter.read(CnmImportDocument.class, source);
 
         assertThat(restored.createdAt()).isEqualTo(timestamp);
+        assertThat(restored.state()).isEqualTo(ImportState.IN_PROGRESS);
         assertThat(restored.files().get(0).uploadedAt()).isEqualTo(timestamp);
         assertThat(restored.files().get(0).state()).isEqualTo(ImportFileState.PARSED);
     }

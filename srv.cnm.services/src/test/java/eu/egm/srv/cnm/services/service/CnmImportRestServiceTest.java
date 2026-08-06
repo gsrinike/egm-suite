@@ -179,7 +179,7 @@ class CnmImportRestServiceTest {
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
                 .contains("iidm.profile.transform.requested", "iidm.profile.transform.requested");
-        assertThat(processed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
+        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(processed.message()).isEqualTo("All CNM files processed successfully");
         assertThat(processed.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
         assertThat(profileRepository.saved).hasSize(2);
@@ -310,9 +310,9 @@ class CnmImportRestServiceTest {
 
         assertThat(initialized.state()).isEqualTo(ImportState.INIT);
         assertThat(initialized.files().get(0).state()).isEqualTo(ImportFileState.INIT);
-        assertThat(stored.state()).isEqualTo(ImportState.INIT_TRANSFORMATION);
+        assertThat(stored.state()).isEqualTo(ImportState.IN_PROGRESS);
         assertThat(stored.files().get(0).state()).isEqualTo(ImportFileState.STORED);
-        assertThat(parsed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
+        assertThat(parsed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(parsed.files().get(0).state()).isEqualTo(ImportFileState.PARSED);
         assertThat(failed.state()).isEqualTo(ImportState.FAILED);
         assertThat(failed.files().get(0).state()).isEqualTo(ImportFileState.FAILED);
@@ -358,12 +358,12 @@ class CnmImportRestServiceTest {
 
         ImportStatus processed = service.processFile(eventPublisher.processingEvents().get(0));
 
-        assertThat(processed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
+        assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(processed.files()).singleElement().satisfies(file -> {
             assertThat(file.state()).isEqualTo(ImportFileState.PARSED);
             assertThat(file.message()).isEqualTo("RDF metadata parsed");
         });
-        assertThat(documentRepository.saved.get(documentRepository.saved.size() - 1).state()).isEqualTo(ImportState.RDF_EXTRACTED);
+        assertThat(documentRepository.saved.get(documentRepository.saved.size() - 1).state()).isEqualTo(ImportState.SUCCESS);
         assertThat(eventPublisher.snapshotEvents()).hasSize(1);
 
         assertThatThrownBy(() -> service.assembleSnapshot(eventPublisher.snapshotEvents().getFirst()))
@@ -398,7 +398,7 @@ class CnmImportRestServiceTest {
                 "legacy-import",
                 CnmServiceType.CGM,
                 TimeFrame.DAY_AHEAD,
-                ImportState.STORED,
+                ImportState.IN_PROGRESS,
                 List.of(new CnmImportDocument.CnmImportFileDocument(
                         "legacy-file",
                         "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
@@ -469,7 +469,7 @@ class CnmImportRestServiceTest {
                 importId,
                 CnmServiceType.CGM,
                 TimeFrame.DAY_AHEAD,
-                ImportState.STORED,
+                ImportState.IN_PROGRESS,
                 List.of(parsedFile, storedFile),
                 1L,
                 "Metadata processing queued",
@@ -503,7 +503,7 @@ class CnmImportRestServiceTest {
 
         assertThat(staleStatus.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterFirstTransform.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
-        assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.RDF_EXTRACTED);
+        assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(afterSecondFileParsed.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
     }
@@ -540,7 +540,7 @@ class CnmImportRestServiceTest {
     }
 
     @Test
-    void requeuesStaleStoredFilesWhenImportIsRead() {
+    void keepsImportReadsPureAndRequeuesStaleStoredFilesFromScheduler() {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
@@ -564,6 +564,23 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested");
+        CnmImportRecoveryService recoveryService = new CnmImportRecoveryService(
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        new NoopDocumentRepository<>(),
+                        eventPublisher),
+                "cnm.events",
+                "cnm.transform.initialization.requested",
+                "cnm.file.processing.requested",
+                0,
+                30_000,
+                500);
         String importId = "dangling-import";
         CnmImportDocument.CnmImportFileDocument staleFile = importFile(
                 "file-1",
@@ -573,15 +590,19 @@ class CnmImportRestServiceTest {
                 importId,
                 CnmServiceType.CGM,
                 TimeFrame.DAY_AHEAD,
-                ImportState.STORED,
+                ImportState.IN_PROGRESS,
                 List.of(staleFile),
                 1L,
                 "Stored RDF/XML model files; metadata processing queued"));
 
         ImportStatus status = service.findImport(importId);
         service.findImport(importId);
+        assertThat(eventPublisher.processingEvents()).isEmpty();
 
-        assertThat(status.state()).isEqualTo(ImportState.STORED);
+        recoveryService.recoverImport(documentRepository.saved.getLast());
+        recoveryService.recoverImport(documentRepository.saved.getLast());
+
+        assertThat(status.state()).isEqualTo(ImportState.IN_PROGRESS);
         assertThat(eventPublisher.processingEvents()).hasSize(1);
         assertThat(eventPublisher.processingEvents().getFirst()).satisfies(event -> {
             assertThat(event.importId()).isEqualTo(importId);

@@ -246,7 +246,7 @@ components:
       enum: [ID, DAY_AHEAD, TWO_DAYS_AHEAD]
     ImportState:
       type: string
-      enum: [INIT, STARTED, INIT_TRANSFORMATION, STORED, RDF_EXTRACTED, SUCCESS, FAILED]
+      enum: [INIT, STARTED, IN_PROGRESS, SUCCESS, FAILED]
     ImportFileState:
       type: string
       enum: [INIT, STORED, PARSED, FAILED]

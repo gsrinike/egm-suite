@@ -265,7 +265,7 @@ public class MockCnmImportController {
                         ? ImportState.INIT
                         : files.stream().allMatch(file -> file.state() == ImportFileState.PARSED)
                                 ? ImportState.SUCCESS
-                                : ImportState.STORED;
+                                : ImportState.IN_PROGRESS;
         ImportStatus updated = new ImportStatus(
                 current.importId(),
                 current.serviceType(),

@@ -14,8 +14,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableScheduling
 @Import({InfrastructureUtilityConfig.class, RestServiceConfiguration.class})
 public class CnmServicesApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(CnmServicesApplication.class);

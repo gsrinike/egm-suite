@@ -1,6 +1,7 @@
 package eu.egm.srv.common.lfsa.domain;
 
 import eu.egm.data.cnm.common.CnmServiceType;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ImportFileState;
 import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.cnm.common.ProfileFamily;
@@ -17,9 +18,13 @@ public record CnmImportReadDocument(
         ImportState state,
         List<CnmImportFileReadDocument> files,
         Object createdAt,
-        String message) {
+        String message,
+        IidmTransformationStatus iidmTransformationStatus) {
     public CnmImportReadDocument {
         files = files == null ? List.of() : List.copyOf(files);
+        iidmTransformationStatus = iidmTransformationStatus == null
+                ? IidmTransformationStatus.NOT_STARTED
+                : iidmTransformationStatus;
     }
 
     public record CnmImportFileReadDocument(

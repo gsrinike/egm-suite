@@ -21,6 +21,8 @@ import com.powsybl.sensitivity.SensitivityOperatorStrategiesCalculationMode;
 import com.powsybl.sensitivity.SensitivityValue;
 import com.powsybl.sensitivity.SensitivityVariableType;
 import com.utils.restservice.RestServiceSupport;
+import eu.egm.data.cnm.common.IidmTransformationStatus;
+import eu.egm.data.cnm.common.ImportState;
 import eu.egm.data.common.lfsa.common.CommonPage;
 import eu.egm.data.common.lfsa.sensitivity.SensitivityAnalysisConfiguration;
 import eu.egm.data.common.lfsa.sensitivity.SensitivityAnalysisConfigurationSaveRequest;
@@ -38,6 +40,8 @@ import eu.egm.data.common.lfsa.sensitivity.SensitivityMatrixRow;
 import eu.egm.data.iidm.network.IidmNetworkXiidm;
 import eu.egm.srv.common.lfsa.config.sensitivity.SensitivityDefaults;
 import eu.egm.srv.common.lfsa.config.sensitivity.SensitivityDefaultsService;
+import eu.egm.srv.common.lfsa.domain.CnmImportReadDocument;
+import eu.egm.srv.common.lfsa.domain.CnmImportReadDocumentAdapter;
 import eu.egm.srv.common.lfsa.domain.IidmNetworkReadDocument;
 import eu.egm.srv.common.lfsa.domain.IidmNetworkReadDocumentAdapter;
 import eu.egm.srv.common.lfsa.domain.sensitivity.SensitivityAnalysisConfigurationDocument;
@@ -74,6 +78,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
 
     private final InfrastructureUtils infrastructureUtils;
     private final SensitivityDefaultsService defaultsService;
+    private final DocumentRepositoryService<CnmImportReadDocument> importRepository;
     private final DocumentRepositoryService<IidmNetworkReadDocument> iidmNetworkRepository;
     private final DocumentRepositoryService<SensitivityAnalysisConfigurationDocument> configurationRepository;
     private final DocumentRepositoryService<SensitivityAnalysisRunDocument> runRepository;
@@ -96,6 +101,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
         this.exchange = exchange;
         this.routingKey = routingKey;
         this.inputBucket = inputBucket;
+        this.importRepository = infrastructureUtils.documentRepository(new CnmImportReadDocumentAdapter());
         this.iidmNetworkRepository = infrastructureUtils.documentRepository(new IidmNetworkReadDocumentAdapter());
         this.configurationRepository =
                 infrastructureUtils.documentRepository(new SensitivityAnalysisConfigurationDocumentAdapter());
@@ -104,6 +110,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
     }
 
     public CommonPage<SensitivityIidmNetworkSummary> completedIidmNetworks(String importId, int page, int size) {
+        requireIidmReadyImport(importId);
         List<SensitivityIidmNetworkSummary> rows = iidmNetworkRepository.findByField("importId", importId, 1000)
                 .stream()
                 .sorted(Comparator.comparing(IidmNetworkReadDocument::id))
@@ -173,6 +180,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
 
     public SensitivityAnalysisRunSummary startRun(SensitivityAnalysisRunStartRequest request) {
         String importId = requireValue(request.fileImportId(), "fileImportId");
+        requireIidmReadyImport(importId);
         SensitivityAnalysisConfiguration configuration = resolveConfiguration(request.configurationId());
         List<IidmNetworkReadDocument> networks = request.iidmNetworkIds().isEmpty()
                 ? iidmNetworkRepository.findByField("importId", importId, 1000)
@@ -343,6 +351,23 @@ public class SensitivityAnalysisService extends RestServiceSupport {
                 document.timeFrame(),
                 document.tsoName(),
                 document.networkFormat());
+    }
+
+    private void requireIidmReadyImport(String importId) {
+        CnmImportReadDocument document = importRepository.findByField("id", importId, 1)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Import not found: " + importId));
+        if (!isIidmReadyImport(document)) {
+            throw new IllegalStateException("Import " + importId
+                    + " is not ready for sensitivity analysis. IIDM status is "
+                    + document.iidmTransformationStatus());
+        }
+    }
+
+    private boolean isIidmReadyImport(CnmImportReadDocument document) {
+        return document.iidmTransformationStatus() == IidmTransformationStatus.DONE
+                && document.state() == ImportState.SUCCESS;
     }
 
     private Network mergeInMemory(List<Network> networks, List<String> diagnostics) {
