@@ -4,7 +4,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms2g -Xmx2g}
+      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms3g -Xmx3g}
       - indices.memory.index_buffer_size=${ELASTICSEARCH_INDEX_BUFFER_SIZE:-15%}
     mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-4g}
     ports:
@@ -83,6 +83,8 @@ services:
       MINIO_SECRET_KEY: minioadmin
       SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx2g"
+    mem_limit: 3g
     ports:
       - "8080:8080"
     depends_on:
@@ -108,6 +110,8 @@ services:
       SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       IIDM_TRANSFORMER_PORT: 8098
+      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx2g"
+      mem_limit: 3g
     ports:
       - "8098:8098"
     depends_on:
@@ -119,6 +123,7 @@ services:
         condition: service_started
       otel-collector:
         condition: service_started
+
 
   mock-srv-cnm-services:
     build:

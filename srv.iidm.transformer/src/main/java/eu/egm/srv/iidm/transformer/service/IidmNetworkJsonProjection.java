@@ -11,9 +11,13 @@ import com.powsybl.iidm.network.Substation;
 import com.powsybl.iidm.network.Switch;
 import com.powsybl.iidm.network.Terminal;
 import com.powsybl.iidm.network.VoltageLevel;
+import com.powsybl.commons.extensions.Extension;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.stream.StreamSupport;
 
 /**
@@ -36,6 +40,12 @@ public class IidmNetworkJsonProjection {
         projection.put("loads", stream(network.getLoads()).stream().map(this::loadRow).toList());
         projection.put("switches", stream(network.getSwitches()).stream().map(this::switchRow).toList());
         projection.put("busbar-sections", stream(network.getBusbarSections()).stream().map(this::busbarSectionRow).toList());
+        projection.put("substation-positions", stream(network.getSubstations()).stream()
+                .flatMap(substation -> extensionPositionRows(substation).stream())
+                .toList());
+        projection.put("line-positions", stream(network.getLines()).stream()
+                .flatMap(line -> extensionPositionRows(line).stream())
+                .toList());
         return projection;
     }
 
@@ -109,6 +119,69 @@ public class IidmNetworkJsonProjection {
                 "voltageLevelId", voltageLevelId(busbarSection.getTerminal()),
                 "v", busbarSection.getV(),
                 "angle", busbarSection.getAngle());
+    }
+
+    private List<Map<String, Object>> extensionPositionRows(Identifiable<?> identifiable) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Extension<?> extension : identifiable.getExtensions()) {
+            if (!extension.getClass().getSimpleName().toLowerCase().contains("position")) {
+                continue;
+            }
+            Object points = invoke(extension, "getPoints");
+            Collection<?> collection;
+            if (points instanceof Collection<?> pointCollection) {
+                collection = pointCollection;
+            } else {
+                points = invoke(extension, "getCoordinates");
+                collection = points instanceof Collection<?> coordinates ? coordinates : List.of();
+            }
+            if (collection.isEmpty()) {
+                rows.add(positionRow(identifiable, extension, null, 1));
+            } else {
+                int sequence = 1;
+                for (Object point : collection) {
+                    rows.add(positionRow(identifiable, extension, point, sequence++));
+                }
+            }
+        }
+        return rows;
+    }
+
+    private Map<String, Object> positionRow(Identifiable<?> identifiable, Extension<?> extension, Object point, int sequence) {
+        Object source = point == null ? extension : point;
+        Map<String, Object> row = identifiableRow(identifiable,
+                "elementType", identifiable.getType().name(),
+                "extensionType", extension.getClass().getSimpleName(),
+                "sequenceNumber", sequence,
+                "latitude", firstAvailable(source, "getLatitude", "getLat", "getY", "getYPosition"),
+                "longitude", firstAvailable(source, "getLongitude", "getLon", "getLng", "getX", "getXPosition"),
+                "xPosition", firstAvailable(source, "getXPosition", "getX"),
+                "yPosition", firstAvailable(source, "getYPosition", "getY"),
+                "zPosition", firstAvailable(source, "getZPosition", "getZ"));
+        row.put("rowId", identifiable.getId() + ":" + extension.getClass().getSimpleName() + ":" + sequence);
+        return row;
+    }
+
+    private Object firstAvailable(Object target, String... methodNames) {
+        for (String methodName : methodNames) {
+            Object value = invoke(target, methodName);
+            if (value != null) {
+                return displayValue(value);
+            }
+        }
+        return "";
+    }
+
+    private Object invoke(Object target, String methodName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            Method method = target.getClass().getMethod(methodName);
+            return method.invoke(target);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
     }
 
     private Map<String, Object> identifiableRow(Identifiable<?> identifiable, Object... values) {

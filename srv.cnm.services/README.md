@@ -11,7 +11,9 @@ model groups are complete.
 - Expand ZIP uploads and ignore platform metadata files.
 - Derive business day, business time, timeframe, TSO, profile type, and profile
   family from CGMES/NCP filenames.
-- Support CGMES boundary files such as `EQBD` and `TPBD`.
+- Support CGMES boundary files such as `EQBD` and `TPBD`, and GL files that use
+  the double-underscore no-timeframe form such as
+  `20241203T0030Z__CEPS_GL_001.xml.zip`.
 - Store raw payloads in MinIO through `com.infra`.
 - Persist import, profile, payload, fragment, mRID, and snapshot documents in
   Elasticsearch through `com.infra`.

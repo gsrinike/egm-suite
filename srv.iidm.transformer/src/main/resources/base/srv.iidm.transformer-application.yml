@@ -16,6 +16,10 @@ iidm:
       started-routing-key: iidm.profile.transform.started
       completed-routing-key: iidm.profile.transform.completed
       failed-routing-key: iidm.profile.transform.failed
+  grid-view:
+    bucket: ${IIDM_GRID_VIEW_BUCKET:iidm-grid-view}
+    output-format: svg
+    use-geographical-positions: true
 springdoc:
   swagger-ui:
     url: /openapi/iidm-transformer.yaml

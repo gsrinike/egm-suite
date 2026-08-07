@@ -169,6 +169,7 @@ public class ElasticsearchDocumentRepository<T> implements DocumentRepositorySer
         if (!indexOperations.exists()) {
             // Index creation is lazy to keep consuming services simple in local/docker setups.
             indexOperations.create();
+            indexOperations.putMapping(indexOperations.createMapping(adapter.documentType()));
             LOGGER.info("Created Elasticsearch index {}", adapter.indexName());
         }
     }

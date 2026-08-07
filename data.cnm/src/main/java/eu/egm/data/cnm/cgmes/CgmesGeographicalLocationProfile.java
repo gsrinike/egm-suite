@@ -6,9 +6,9 @@ import java.util.List;
  * CGMES Geographical Location profile DTO.
  */
 public record CgmesGeographicalLocationProfile(
-        List<CgmesProfileEntity> locations,
-        List<CgmesProfileEntity> positionPoints,
-        List<CgmesProfileEntity> coordinateSystems) {
+        List<CgmesLocation> locations,
+        List<CgmesPositionPoint> positionPoints,
+        List<CgmesCoordinateSystem> coordinateSystems) {
     public CgmesGeographicalLocationProfile {
         locations = locations == null ? List.of() : List.copyOf(locations);
         positionPoints = positionPoints == null ? List.of() : List.copyOf(positionPoints);

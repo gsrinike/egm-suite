@@ -23,6 +23,7 @@ import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
+import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.data.iidm.common.IidmTransformState;
 import eu.egm.srv.cnm.services.domain.CnmImportDocument;
 import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocument;
@@ -175,10 +176,10 @@ class CnmImportRestServiceTest {
 
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
-                .contains("cnm.snapshot.assembly.requested", "cnm.snapshot.assembly.requested");
+                .doesNotContain("cnm.snapshot.assembly.requested");
         assertThat(eventPublisher.published)
                 .extracting(event -> event.routingKey)
-                .contains("iidm.profile.transform.requested", "iidm.profile.transform.requested");
+                .doesNotContain("iidm.profile.transform.requested");
         assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(processed.message()).isEqualTo("All CNM files processed successfully");
         assertThat(processed.files()).allMatch(file -> file.state() == ImportFileState.PARSED);
@@ -350,16 +351,23 @@ class CnmImportRestServiceTest {
                 "iidm.profile.transform.requested");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
-                "20241202T2330Z_1D_TSO-XYZ_EQ_001.xml",
-                "application/xml",
-                rdf("Equipment"));
+                "models.zip",
+                "application/zip",
+                zip(
+                        new ZipItem("20241202T2330Z_1D_TSO-XYZ_EQ_001.xml", rdf("Equipment")),
+                        new ZipItem("20241202T2330Z_1D_TSO-XYZ_TP_001.xml", rdf("Topology")),
+                        new ZipItem("20241202T2330Z_1D_TSO-XYZ_SSH_001.xml", rdf("SteadyStateHypothesis")),
+                        new ZipItem("20241202T2330Z_1D_TSO-XYZ_SV_001.xml", rdf("StateVariables"))));
         ImportStatus imported = service.importModels(List.of(upload), CnmServiceType.CGM, TimeFrame.DAY_AHEAD);
         service.initializeTransform(eventPublisher.initializationEvents().getFirst());
 
-        ImportStatus processed = service.processFile(eventPublisher.processingEvents().get(0));
+        ImportStatus processed = imported;
+        for (CnmFileProcessingRequested event : eventPublisher.processingEvents()) {
+            processed = service.processFile(event);
+        }
 
         assertThat(processed.state()).isEqualTo(ImportState.SUCCESS);
-        assertThat(processed.files()).singleElement().satisfies(file -> {
+        assertThat(processed.files()).allSatisfy(file -> {
             assertThat(file.state()).isEqualTo(ImportFileState.PARSED);
             assertThat(file.message()).isEqualTo("RDF metadata parsed");
         });
@@ -372,10 +380,66 @@ class CnmImportRestServiceTest {
         assertThat(snapshotRepository.saved)
                 .extracting(CnmNetworkSnapshotDocument::state)
                 .containsExactly(CnmSnapshotState.STARTED, CnmSnapshotState.FAILED);
-        assertThat(profileRepository.saved).singleElement().satisfies(profile -> {
+        assertThat(profileRepository.saved).hasSize(4);
+        assertThat(profileRepository.saved).allSatisfy(profile -> {
             assertThat(profile.state()).isEqualTo(ImportFileState.PARSED);
             assertThat(profile.errorCount()).isZero();
         });
+    }
+
+    @Test
+    void includesParsedGlSidecarWhenPublishingDirectIidmTransform() throws Exception {
+        CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
+        CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
+        CapturingProfileRepository profileRepository = new CapturingProfileRepository();
+        CapturingProfilePayloadRepository profilePayloadRepository = new CapturingProfilePayloadRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
+        CnmImportRestService service = new CnmImportRestService(
+                new StandardEnvironment(),
+                ObservationRegistry.NOOP,
+                infrastructureUtils(
+                        objectStorageService,
+                        documentRepository,
+                        profileRepository,
+                        profilePayloadRepository,
+                        eventPublisher),
+                new RdfMetadataExtractor(),
+                "cnm-rdf-models",
+                "cnm.events",
+                "cnm.file.processing.requested",
+                "cnm.snapshot.assembly.requested",
+                "iidm.events",
+                "iidm.profile.transform.requested");
+        MockMultipartFile upload = new MockMultipartFile(
+                "file",
+                "models.zip",
+                "application/zip",
+                zip(
+                        new ZipItem("20241203T0430Z_1D_CEPS_EQ_000.xml", rdf("Equipment")),
+                        new ZipItem("20241203T0430Z_1D_CEPS_TP_000.xml", rdf("Topology")),
+                        new ZipItem("20241203T0430Z_1D_CEPS_SSH_000.xml", rdf("SteadyStateHypothesis")),
+                        new ZipItem("20241203T0430Z_1D_CEPS_SV_000.xml", rdf("StateVariables")),
+                        new ZipItem("20241203T0030Z__CEPS_GL_001.xml", rdf("GeographicalLocation"))));
+        ImportStatus imported = service.importModels(List.of(upload), CnmServiceType.CGM, TimeFrame.DAY_AHEAD);
+        service.initializeTransform(eventPublisher.initializationEvents().getFirst());
+
+        List<CnmFileProcessingRequested> events = new ArrayList<>(eventPublisher.processingEvents());
+        events.sort((left, right) -> Boolean.compare(!left.fileName().contains("_GL_"), !right.fileName().contains("_GL_")));
+        for (CnmFileProcessingRequested event : events) {
+            service.processFile(event);
+        }
+
+        IidmProfileTransformRequested request = eventPublisher.iidmTransformEvents().getFirst();
+        assertThat(request.sourceFiles())
+                .extracting(source -> source.profileType())
+                .contains("EQ", "TP", "SSH", "SV", "GL");
+        assertThat(request.sourceFiles())
+                .filteredOn(source -> "GL".equals(source.profileType()))
+                .singleElement()
+                .satisfies(source -> {
+                    assertThat(source.fileName()).isEqualTo("20241203T0030Z__CEPS_GL_001.xml");
+                    assertThat(source.objectId()).isNotBlank();
+                });
     }
 
     @Test
@@ -458,11 +522,11 @@ class CnmImportRestServiceTest {
                 "iidm.profile.transform.requested");
         String importId = "partial-import";
         CnmImportDocument.CnmImportFileDocument parsedFile = importFile(
-                "file-1",
+                "file-a-eq",
                 "20241202T2330Z_1D_TSO-A_EQ_001.xml",
                 ImportFileState.PARSED);
         CnmImportDocument.CnmImportFileDocument storedFile = importFile(
-                "file-2",
+                "file-b-eq",
                 "20241202T2330Z_1D_TSO-B_EQ_001.xml",
                 ImportFileState.STORED);
         documentRepository.save(new CnmImportDocument(
@@ -470,32 +534,40 @@ class CnmImportRestServiceTest {
                 CnmServiceType.CGM,
                 TimeFrame.DAY_AHEAD,
                 ImportState.IN_PROGRESS,
-                List.of(parsedFile, storedFile),
+                List.of(
+                        parsedFile,
+                        importFile("file-a-tp", "20241202T2330Z_1D_TSO-A_TP_001.xml", ImportFileState.PARSED),
+                        importFile("file-a-ssh", "20241202T2330Z_1D_TSO-A_SSH_001.xml", ImportFileState.PARSED),
+                        importFile("file-a-sv", "20241202T2330Z_1D_TSO-A_SV_001.xml", ImportFileState.PARSED),
+                        storedFile,
+                        importFile("file-b-tp", "20241202T2330Z_1D_TSO-B_TP_001.xml", ImportFileState.PARSED),
+                        importFile("file-b-ssh", "20241202T2330Z_1D_TSO-B_SSH_001.xml", ImportFileState.PARSED),
+                        importFile("file-b-sv", "20241202T2330Z_1D_TSO-B_SV_001.xml", ImportFileState.PARSED)),
                 1L,
                 "Metadata processing queued",
                 IidmTransformationStatus.DONE));
-        iidmTransformRepository.save(iidmTransform(importId, "file-1", IidmTransformState.DONE));
+        iidmTransformRepository.save(iidmTransform(importId, "2024-12-02:23:30:TSO-A:1D", IidmTransformState.DONE));
 
         ImportStatus staleStatus = service.findImport(importId);
         service.updateIidmTransformProgress(new IidmProfileTransformCompleted(
                 importId,
-                "file-1",
+                "2024-12-02:23:30:TSO-A:1D",
                 "transform-1",
-                List.of("file-1"),
+                List.of("file-a-eq", "file-a-tp", "file-a-ssh", "file-a-sv"),
                 List.of(parsedFile.fileName()),
                 "network-1",
                 "IIDM transformation completed"));
         ImportStatus afterFirstTransform = service.findImport(importId);
         ImportStatus afterSecondFileParsed = service.updateFileStatus(
                 importId,
-                "file-2",
+                "file-b-eq",
                 new ImportFileStatusUpdateRequest(ImportFileState.PARSED, "RDF metadata parsed"));
-        iidmTransformRepository.save(iidmTransform(importId, "file-2", IidmTransformState.DONE));
+        iidmTransformRepository.save(iidmTransform(importId, "2024-12-02:23:30:TSO-B:1D", IidmTransformState.DONE));
         service.updateIidmTransformProgress(new IidmProfileTransformCompleted(
                 importId,
-                "file-2",
+                "2024-12-02:23:30:TSO-B:1D",
                 "transform-2",
-                List.of("file-2"),
+                List.of("file-b-eq", "file-b-tp", "file-b-ssh", "file-b-sv"),
                 List.of(storedFile.fileName()),
                 "network-2",
                 "IIDM transformation completed"));
@@ -749,6 +821,11 @@ class CnmImportRestServiceTest {
             String fileName,
             ImportFileState state) {
         String tsoName = fileName.contains("TSO-A") ? "TSO-A" : "TSO-B";
+        String profileType = fileName.contains("_TP_")
+                ? "TP"
+                : fileName.contains("_SSH_")
+                        ? "SSH"
+                        : fileName.contains("_SV_") ? "SV" : "EQ";
         return new CnmImportDocument.CnmImportFileDocument(
                 fileId,
                 fileName,
@@ -759,7 +836,7 @@ class CnmImportRestServiceTest {
                 "23:30",
                 "1D",
                 tsoName,
-                "EQ",
+                profileType,
                 "001",
                 List.of(),
                 state == ImportFileState.PARSED ? "RDF metadata parsed" : "Raw model stored",
@@ -878,6 +955,14 @@ class CnmImportRestServiceTest {
                     .map(PublishedEvent::payload)
                     .filter(CnmSnapshotAssemblyRequested.class::isInstance)
                     .map(CnmSnapshotAssemblyRequested.class::cast)
+                    .toList();
+        }
+
+        private List<IidmProfileTransformRequested> iidmTransformEvents() {
+            return published.stream()
+                    .map(PublishedEvent::payload)
+                    .filter(IidmProfileTransformRequested.class::isInstance)
+                    .map(IidmProfileTransformRequested.class::cast)
                     .toList();
         }
     }

@@ -169,6 +169,38 @@ select {
   cursor: not-allowed;
 }
 
+.grid-map-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.grid-map-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.grid-map-meta span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.grid-map-svg {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  max-height: 620px;
+  overflow: auto;
+}
+
+.grid-map-svg svg {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
 @media (max-width: 860px) {
   .toolbar,
   .profile-filters {

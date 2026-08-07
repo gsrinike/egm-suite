@@ -1,8 +1,11 @@
 package eu.egm.srv.cnm.services.rdf;
 
 import eu.egm.data.cnm.cgmes.CgmesDiagramLayoutProfile;
+import eu.egm.data.cnm.cgmes.CgmesCoordinateSystem;
 import eu.egm.data.cnm.cgmes.CgmesEquipmentProfile;
 import eu.egm.data.cnm.cgmes.CgmesGeographicalLocationProfile;
+import eu.egm.data.cnm.cgmes.CgmesLocation;
+import eu.egm.data.cnm.cgmes.CgmesPositionPoint;
 import eu.egm.data.cnm.cgmes.CgmesProfileEntity;
 import eu.egm.data.cnm.cgmes.CgmesProfileKind;
 import eu.egm.data.cnm.cgmes.CgmesStateVariablesProfile;
@@ -87,8 +90,48 @@ class CgmesProfileExtractionStrategy extends AbstractProfileExtractionStrategy {
 
     private CgmesGeographicalLocationProfile gl(List<RdfFact> facts) {
         return new CgmesGeographicalLocationProfile(
-                entities(facts, "Location"),
-                entities(facts, "PositionPoint"),
-                entities(facts, "CoordinateSystem"));
+                facts.stream()
+                        .filter(fact -> matches(fact.type(), "Location"))
+                        .map(fact -> new CgmesLocation(
+                                fact.mRID(),
+                                name(fact),
+                                fact.type(),
+                                reference(fact, "PowerSystemResource"),
+                                reference(fact, "CoordinateSystem"),
+                                fact.attributes()))
+                        .toList(),
+                facts.stream()
+                        .filter(fact -> matches(fact.type(), "PositionPoint"))
+                        .map(fact -> new CgmesPositionPoint(
+                                fact.mRID(),
+                                name(fact),
+                                fact.type(),
+                                reference(fact, "Location"),
+                                attribute(fact, "sequenceNumber"),
+                                attribute(fact, "xPosition"),
+                                attribute(fact, "yPosition"),
+                                attribute(fact, "zPosition"),
+                                fact.attributes()))
+                        .toList(),
+                facts.stream()
+                        .filter(fact -> matches(fact.type(), "CoordinateSystem"))
+                        .map(fact -> new CgmesCoordinateSystem(fact.mRID(), name(fact), fact.type(), fact.attributes()))
+                        .toList());
+    }
+
+    private Object attribute(RdfFact fact, String key) {
+        return fact.attributes().entrySet().stream()
+                .filter(entry -> key.equalsIgnoreCase(entry.getKey()) || entry.getKey().endsWith("." + key))
+                .map(java.util.Map.Entry::getValue)
+                .findFirst()
+                .orElse("");
+    }
+
+    private String reference(RdfFact fact, String key) {
+        return fact.references().entrySet().stream()
+                .filter(entry -> entry.getKey().toLowerCase().contains(key.toLowerCase()))
+                .map(java.util.Map.Entry::getValue)
+                .findFirst()
+                .orElse("");
     }
 }

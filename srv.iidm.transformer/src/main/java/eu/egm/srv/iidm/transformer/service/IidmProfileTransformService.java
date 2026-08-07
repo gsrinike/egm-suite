@@ -48,6 +48,8 @@ import eu.egm.map.cnm.iidm.CnmToIidmMappingConfiguration;
 import eu.egm.map.cnm.iidm.CnmToIidmTransformer;
 import eu.egm.mapping.JsonMappingService;
 import eu.egm.mapping.ReflectionMappingService;
+import eu.egm.srv.iidm.transformer.domain.CnmProfileReadDocument;
+import eu.egm.srv.iidm.transformer.domain.CnmProfileReadDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocument;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotReadDocument;
@@ -57,9 +59,12 @@ import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotPayloadReadDocumentA
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocument.IidmElementCountDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmNetworkDocumentAdapter;
+import eu.egm.srv.iidm.transformer.domain.IidmGridViewDocument;
+import eu.egm.srv.iidm.transformer.domain.IidmGridViewDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.IidmProfileTransformDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmProfileTransformDocumentAdapter;
 import eu.egm.srv.iidm.transformer.api.IidmElementCountResponse;
+import eu.egm.srv.iidm.transformer.api.IidmGridViewMapResponse;
 import eu.egm.srv.iidm.transformer.api.IidmNetworkSummaryResponse;
 import eu.egm.srv.iidm.transformer.api.IidmPage;
 import eu.egm.srv.iidm.transformer.api.IidmTableBundle;
@@ -88,11 +93,13 @@ import org.springframework.stereotype.Service;
 public class IidmProfileTransformService extends RestServiceSupport {
     private static final int NETWORK_XIIDM_CHUNK_SIZE = 1_000_000;
 
+    private final DocumentRepositoryService<CnmProfileReadDocument> sourceProfileRepository;
     private final DocumentRepositoryService<CnmProfilePayloadReadDocument> sourcePayloadRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotReadDocument> sourceSnapshotRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotPayloadReadDocument> sourceSnapshotPayloadRepository;
     private final DocumentRepositoryService<IidmProfileTransformDocument> transformRepository;
     private final DocumentRepositoryService<IidmNetworkDocument> networkRepository;
+    private final DocumentRepositoryService<IidmGridViewDocument> gridViewRepository;
     private final ObjectStorageService objectStorageService;
     private final EventPublisherService eventPublisher;
     private final JsonMappingService jsonMappingService;
@@ -100,6 +107,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final CgmesSourceToIidmTransformer sourceTransformer;
     private final IidmNetworkJsonProjection networkJsonProjection = new IidmNetworkJsonProjection();
     private final String rawBucket;
+    private final String gridViewBucket;
     private final String eventExchange;
     private final String startedRoutingKey;
     private final String completedRoutingKey;
@@ -111,22 +119,26 @@ public class IidmProfileTransformService extends RestServiceSupport {
             InfrastructureUtils infrastructureUtils,
             JsonMappingService jsonMappingService,
             @Value("${iidm.transform.raw-bucket:cnm-rdf-models}") String rawBucket,
+            @Value("${iidm.grid-view.bucket:iidm-grid-view}") String gridViewBucket,
             @Value("${iidm.transform.event.exchange:iidm.events}") String eventExchange,
             @Value("${iidm.transform.event.started-routing-key:iidm.profile.transform.started}") String startedRoutingKey,
             @Value("${iidm.transform.event.completed-routing-key:iidm.profile.transform.completed}") String completedRoutingKey,
             @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey) {
         super(environment, observationRegistry);
+        this.sourceProfileRepository = infrastructureUtils.documentRepository(new CnmProfileReadDocumentAdapter());
         this.sourcePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadReadDocumentAdapter());
         this.sourceSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotReadDocumentAdapter());
         this.sourceSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadReadDocumentAdapter());
         this.transformRepository = infrastructureUtils.documentRepository(new IidmProfileTransformDocumentAdapter());
         this.networkRepository = infrastructureUtils.documentRepository(new IidmNetworkDocumentAdapter());
+        this.gridViewRepository = infrastructureUtils.documentRepository(new IidmGridViewDocumentAdapter());
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.eventPublisher = infrastructureUtils.eventPublisher();
         this.jsonMappingService = jsonMappingService;
         this.transformer = new CnmToIidmTransformer(new ReflectionMappingService(), iidmMappingConfiguration());
         this.sourceTransformer = new CgmesSourceToIidmTransformer(new ReflectionMappingService(), cgmesSourceMappingConfiguration());
         this.rawBucket = rawBucket;
+        this.gridViewBucket = gridViewBucket;
         this.eventExchange = eventExchange;
         this.startedRoutingKey = startedRoutingKey;
         this.completedRoutingKey = completedRoutingKey;
@@ -230,6 +242,15 @@ public class IidmProfileTransformService extends RestServiceSupport {
             long failedAt = Instant.now().toEpochMilli();
             String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
             List<IidmDiagnostic> diagnostics = diagnosticsCollector.failureDiagnostics(exception, networkId);
+            logger.warn(
+                    "IIDM transformation failed importId={} fileId={} transformId={} networkId={} sourceFiles={} message={}",
+                    request.importId(),
+                    request.fileId(),
+                    transformId,
+                    networkId,
+                    sourceFileNames,
+                    message,
+                    exception);
             transformRepository.save(new IidmProfileTransformDocument(
                     transformId,
                     request.importId(),
@@ -426,6 +447,93 @@ public class IidmProfileTransformService extends RestServiceSupport {
     public IidmTableBundle networkTable(String networkId, String tableId, int page, int size, String search) {
         IidmNetworkDocument document = network(networkId);
         return tableBundle(document, tableId, page, size, false, search);
+    }
+
+    public IidmTableBundle gridViewTableMetadata(String networkId) {
+        IidmNetworkDocument document = network(networkId);
+        return gridViewTableBundle(document, "grid-summary", 0, 0, true, "");
+    }
+
+    public IidmTableBundle gridViewTable(String networkId, String tableId, int page, int size, String search) {
+        IidmNetworkDocument document = network(networkId);
+        return gridViewTableBundle(document, tableId, page, size, false, search);
+    }
+
+    public IidmGridViewMapResponse gridViewMap(String networkId, boolean regenerate) {
+        IidmNetworkDocument network = network(networkId);
+        String mapId = network.id();
+        if (!regenerate) {
+            List<IidmGridViewDocument> existing = gridViewRepository.findByField("id", mapId, 1);
+            if (!existing.isEmpty() && "DONE".equals(existing.getFirst().state())) {
+                try {
+                    String svg = new String(objectStorageService.read(existing.getFirst().bucket(), existing.getFirst().objectKey()), StandardCharsets.UTF_8);
+                    return toGridViewMapResponse(existing.getFirst(), svg);
+                } catch (RuntimeException exception) {
+                    logger.warn("Stored Grid View map object is not readable for network {}; regenerating", networkId, exception);
+                }
+            }
+        }
+
+        long startedAt = Instant.now().toEpochMilli();
+        String objectKey = network.importId() + "/" + safeObjectName(network.id()) + "/grid-view.svg";
+        IidmGridViewDocument started = new IidmGridViewDocument(
+                mapId,
+                network.importId(),
+                network.id(),
+                gridViewBucket,
+                objectKey,
+                "image/svg+xml",
+                "STARTED",
+                network.sourceFileIds(),
+                0,
+                0,
+                0,
+                List.of("Grid View map generation started"),
+                startedAt,
+                startedAt);
+        gridViewRepository.save(started);
+
+        try {
+            GridViewSvg svg = buildGridViewSvg(network);
+            objectStorageService.store(gridViewBucket, objectKey, svg.svg().getBytes(StandardCharsets.UTF_8), "image/svg+xml");
+            long now = Instant.now().toEpochMilli();
+            IidmGridViewDocument done = new IidmGridViewDocument(
+                    mapId,
+                    network.importId(),
+                    network.id(),
+                    gridViewBucket,
+                    objectKey,
+                    "image/svg+xml",
+                    "DONE",
+                    network.sourceFileIds(),
+                    svg.coordinateCount(),
+                    svg.lineCount(),
+                    svg.substationCount(),
+                    svg.diagnostics(),
+                    now,
+                    now);
+            gridViewRepository.save(done);
+            return toGridViewMapResponse(done, svg.svg());
+        } catch (RuntimeException exception) {
+            long now = Instant.now().toEpochMilli();
+            IidmGridViewDocument failed = new IidmGridViewDocument(
+                    mapId,
+                    network.importId(),
+                    network.id(),
+                    gridViewBucket,
+                    objectKey,
+                    "image/svg+xml",
+                    "FAILED",
+                    network.sourceFileIds(),
+                    0,
+                    0,
+                    0,
+                    List.of(exception.getClass().getSimpleName() + ": " + exception.getMessage()),
+                    startedAt,
+                    now);
+            gridViewRepository.save(failed);
+            throw exception;
+        }
     }
 
     private CnmProfilePayloadReadDocument sourcePayload(String payloadId, String importId) {
@@ -773,6 +881,129 @@ public class IidmProfileTransformService extends RestServiceSupport {
         return specs;
     }
 
+    private IidmTableBundle gridViewTableBundle(
+            IidmNetworkDocument document,
+            String selectedTableId,
+            int page,
+            int size,
+            boolean metadataOnly,
+            String search) {
+        int resolvedSize = metadataOnly ? 0 : Math.min(Math.max(size, 1), 500);
+        int resolvedPage = Math.max(page, 0);
+        List<IidmTableSpec> specs = metadataOnly
+                ? gridViewMetadataSpecs(document)
+                : gridViewTableSpecs(document, selectedTableId);
+        List<DynamicTableDefinition> tables = specs.stream()
+                .map(spec -> {
+                    if (metadataOnly || !spec.tableId().equals(selectedTableId)) {
+                        return new DynamicTableDefinition(
+                                spec.tableId(),
+                                spec.label(),
+                                spec.columns(),
+                                List.of(),
+                                spec.totalRows(),
+                                spec.defaultSort());
+                    }
+                    List<Map<String, Object>> rows = spec.rows().stream()
+                            .filter(row -> matches(row, search))
+                            .toList();
+                    return table(spec.tableId(), spec.label(), spec.columns(), rows, resolvedPage, resolvedSize, spec.defaultSort());
+                })
+                .toList();
+        return new IidmTableBundle(
+                document.importId(),
+                document.id(),
+                document.sourceFileIds().isEmpty() ? "" : document.sourceFileIds().getFirst(),
+                selectedTableId,
+                resolvedPage,
+                resolvedSize,
+                tables);
+    }
+
+    private List<IidmTableSpec> gridViewTableSpecs(IidmNetworkDocument document, String selectedTableId) {
+        IidmTableSpec selectedSpec = gridViewSelectedTableSpec(document, selectedTableId);
+        return gridViewMetadataSpecs(document).stream()
+                .map(spec -> spec.tableId().equals(selectedTableId) ? selectedSpec : spec)
+                .toList();
+    }
+
+    private IidmTableSpec gridViewSelectedTableSpec(IidmNetworkDocument document, String selectedTableId) {
+        return switch (selectedTableId) {
+            case "grid-summary" -> gridViewSummarySpec(document);
+            case "substation-positions" -> new IidmTableSpec(
+                    "substation-positions",
+                    "Substation positions",
+                    positionColumns(),
+                    projectedRowsOrEmpty(document, "substation-positions"),
+                    "id");
+            case "line-positions" -> new IidmTableSpec(
+                    "line-positions",
+                    "Line positions",
+                    positionColumns(),
+                    projectedRowsOrEmpty(document, "line-positions"),
+                    "id");
+            case "gl-locations" -> new IidmTableSpec(
+                    "gl-locations",
+                    "GL locations",
+                    columns("mRID", "mRID", "name", "Name", "type", "Type", "powerSystemResourceId", "Grid element",
+                            "coordinateSystemId", "Coordinate system", "sourceFileId", "Source file"),
+                    glProfileRows(document, "locations"),
+                    "mRID");
+            case "gl-position-points" -> new IidmTableSpec(
+                    "gl-position-points",
+                    "GL position points",
+                    columns("mRID", "mRID", "locationId", "Location", "sequenceNumber", "Sequence",
+                            "xPosition", "Longitude/X", "yPosition", "Latitude/Y", "zPosition", "Z", "sourceFileId", "Source file"),
+                    glProfileRows(document, "positionPoints"),
+                    "locationId");
+            case "gl-coordinate-systems" -> new IidmTableSpec(
+                    "gl-coordinate-systems",
+                    "GL coordinate systems",
+                    columns("mRID", "mRID", "name", "Name", "type", "Type", "sourceFileId", "Source file"),
+                    glProfileRows(document, "coordinateSystems"),
+                    "mRID");
+            default -> throw new IllegalArgumentException("Unknown Grid View table: " + selectedTableId);
+        };
+    }
+
+    private List<IidmTableSpec> gridViewMetadataSpecs(IidmNetworkDocument document) {
+        List<IidmTableSpec> specs = new ArrayList<>();
+        specs.add(gridViewSummarySpec(document).withoutRows());
+        specs.add(new IidmTableSpec("substation-positions", "Substation positions", positionColumns(), List.of(), "id",
+                projectedRowsOrEmpty(document, "substation-positions").size()));
+        specs.add(new IidmTableSpec("line-positions", "Line positions", positionColumns(), List.of(), "id",
+                projectedRowsOrEmpty(document, "line-positions").size()));
+        specs.add(new IidmTableSpec("gl-locations", "GL locations",
+                columns("mRID", "mRID", "name", "Name", "type", "Type", "powerSystemResourceId", "Grid element",
+                        "coordinateSystemId", "Coordinate system", "sourceFileId", "Source file"),
+                List.of(), "mRID", glProfileRows(document, "locations").size()));
+        specs.add(new IidmTableSpec("gl-position-points", "GL position points",
+                columns("mRID", "mRID", "locationId", "Location", "sequenceNumber", "Sequence",
+                        "xPosition", "Longitude/X", "yPosition", "Latitude/Y", "zPosition", "Z", "sourceFileId", "Source file"),
+                List.of(), "locationId", glProfileRows(document, "positionPoints").size()));
+        specs.add(new IidmTableSpec("gl-coordinate-systems", "GL coordinate systems",
+                columns("mRID", "mRID", "name", "Name", "type", "Type", "sourceFileId", "Source file"),
+                List.of(), "mRID", glProfileRows(document, "coordinateSystems").size()));
+        return specs;
+    }
+
+    private IidmTableSpec gridViewSummarySpec(IidmNetworkDocument document) {
+        List<Map<String, Object>> rows = List.of(
+                row("Network ID", document.id()),
+                row("Import ID", document.importId()),
+                row("Source files", String.join(", ", document.sourceFileIds())),
+                row("TSO", document.tsoName()),
+                row("Business day", document.businessDay()),
+                row("Business time", document.businessTime()),
+                row("Timeframe", document.timeFrame()),
+                row("IIDM substation positions", projectedRowsOrEmpty(document, "substation-positions").size()),
+                row("IIDM line positions", projectedRowsOrEmpty(document, "line-positions").size()),
+                row("GL locations", glProfileRows(document, "locations").size()),
+                row("GL position points", glProfileRows(document, "positionPoints").size()),
+                row("GL coordinate systems", glProfileRows(document, "coordinateSystems").size()));
+        return new IidmTableSpec("grid-summary", "Grid summary", columns("field", "Field", "value", "Value"), rows, "field");
+    }
+
     private List<IidmTableSpec> iidmTableDataSpecs(IidmNetworkDocument document) {
         List<IidmTableSpec> specs = new ArrayList<>();
         specs.add(new IidmTableSpec(
@@ -840,6 +1071,226 @@ public class IidmProfileTransformService extends RestServiceSupport {
             }
         }
         return rows;
+    }
+
+    private List<Map<String, Object>> projectedRowsOrEmpty(IidmNetworkDocument document, String tableId) {
+        List<Map<String, Object>> rows = projectedRows(document, tableId);
+        return rows == null ? List.of() : rows;
+    }
+
+    private List<Map<String, Object>> glProfileRows(IidmNetworkDocument document, String section) {
+        List<CnmProfilePayloadReadDocument> payloads = glProfilePayloads(document);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (CnmProfilePayloadReadDocument payload : payloads) {
+            String json = profileJson(payload);
+            if (json.isBlank()) {
+                continue;
+            }
+            Map<?, ?> root = jsonMappingService.fromJson(json, Map.class);
+            Object profile = root.get("profile");
+            if (!(profile instanceof Map<?, ?> profileMap)) {
+                continue;
+            }
+            Object sectionValue = profileMap.get(section);
+            if (!(sectionValue instanceof List<?> values)) {
+                continue;
+            }
+            for (Object value : values) {
+                if (value instanceof Map<?, ?> map) {
+                    Map<String, Object> row = toStringKeyMap(map);
+                    row.put("sourceFileId", payload.fileId());
+                    rows.add(row);
+                }
+            }
+        }
+        return rows;
+    }
+
+    private List<CnmProfilePayloadReadDocument> glProfilePayloads(IidmNetworkDocument document) {
+        return sourceProfileRepository.findByField("importId", document.importId(), 1_000)
+                .stream()
+                .filter(profile -> isMatchingGridViewProfile(document, profile))
+                .flatMap(profile -> sourcePayloadRepository.findByField("fileId", profile.fileId(), 1).stream())
+                .filter(this::isGeographicalLocationPayload)
+                .toList();
+    }
+
+    private boolean isMatchingGridViewProfile(IidmNetworkDocument document, CnmProfileReadDocument profile) {
+        return profile != null
+                && isGeographicalLocationProfile(profile)
+                && sameValue(profile.tsoName(), document.tsoName())
+                && sameValue(profile.businessDay(), document.businessDay());
+    }
+
+    private boolean isGeographicalLocationProfile(CnmProfileReadDocument profile) {
+        String type = valueOr(profile.profileType(), "");
+        String kind = valueOr(profile.detectedProfileKind(), "");
+        String jsonType = valueOr(profile.profileJsonType(), "");
+        return "GL".equalsIgnoreCase(type)
+                || "GEOGRAPHICAL_LOCATION".equalsIgnoreCase(kind)
+                || jsonType.contains("GEOGRAPHICAL_LOCATION")
+                || jsonType.endsWith("_GL");
+    }
+
+    private boolean sameValue(String left, String right) {
+        return valueOr(left, "").equalsIgnoreCase(valueOr(right, ""));
+    }
+
+    private String valueOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private GridViewSvg buildGridViewSvg(IidmNetworkDocument document) {
+        List<GridPoint> points = glProfileRows(document, "positionPoints").stream()
+                .map(this::toGridPoint)
+                .filter(GridPoint::valid)
+                .sorted((left, right) -> {
+                    int locationCompare = left.locationId().compareTo(right.locationId());
+                    return locationCompare != 0 ? locationCompare : Integer.compare(left.sequenceNumber(), right.sequenceNumber());
+                })
+                .toList();
+        List<Map<String, Object>> substationPositions = projectedRowsOrEmpty(document, "substation-positions");
+        List<String> diagnostics = new ArrayList<>();
+        diagnostics.add("Grid View generated from stored GL profile coordinates");
+        if (points.isEmpty()) {
+            diagnostics.add("No GL position points were available for this IIDM network");
+        }
+        Map<String, List<GridPoint>> byLocation = new LinkedHashMap<>();
+        for (GridPoint point : points) {
+            byLocation.computeIfAbsent(point.locationId().isBlank() ? point.rowId() : point.locationId(), ignored -> new ArrayList<>()).add(point);
+        }
+        String svg = renderWorldMapSvg(document, byLocation, diagnostics);
+        long lineCount = byLocation.values().stream().filter(value -> value.size() > 1).count();
+        return new GridViewSvg(svg, points.size(), Math.toIntExact(lineCount), substationPositions.size(), diagnostics);
+    }
+
+    private String renderWorldMapSvg(IidmNetworkDocument document, Map<String, List<GridPoint>> locations, List<String> diagnostics) {
+        int width = 1200;
+        int height = 680;
+        int left = 60;
+        int top = 40;
+        int mapWidth = 1080;
+        int mapHeight = 540;
+        StringBuilder svg = new StringBuilder();
+        svg.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"").append(width)
+                .append("\" height=\"").append(height).append("\" viewBox=\"0 0 ").append(width).append(' ').append(height).append("\">");
+        svg.append("<rect width=\"100%\" height=\"100%\" fill=\"#08111f\"/>");
+        svg.append("<rect x=\"").append(left).append("\" y=\"").append(top).append("\" width=\"").append(mapWidth)
+                .append("\" height=\"").append(mapHeight).append("\" rx=\"14\" fill=\"#0f2035\" stroke=\"#274968\"/>");
+        for (int lon = -180; lon <= 180; lon += 30) {
+            double x = left + ((lon + 180.0) / 360.0) * mapWidth;
+            svg.append("<line x1=\"").append(x).append("\" y1=\"").append(top).append("\" x2=\"").append(x)
+                    .append("\" y2=\"").append(top + mapHeight).append("\" stroke=\"#20384f\" stroke-width=\"1\"/>");
+        }
+        for (int lat = -60; lat <= 60; lat += 30) {
+            double y = top + ((90.0 - lat) / 180.0) * mapHeight;
+            svg.append("<line x1=\"").append(left).append("\" y1=\"").append(y).append("\" x2=\"").append(left + mapWidth)
+                    .append("\" y2=\"").append(y).append("\" stroke=\"#20384f\" stroke-width=\"1\"/>");
+        }
+        svg.append("<text x=\"60\" y=\"620\" fill=\"#b7c9dc\" font-family=\"Inter, Arial\" font-size=\"18\">")
+                .append(escapeXml(document.tsoName())).append(" Grid View - ").append(escapeXml(document.businessDay()))
+                .append(' ').append(escapeXml(document.businessTime())).append("</text>");
+        svg.append("<text x=\"60\" y=\"648\" fill=\"#7f98b3\" font-family=\"Inter, Arial\" font-size=\"14\">")
+                .append(escapeXml(document.id())).append("</text>");
+
+        int colorIndex = 0;
+        String[] colors = {"#00f2fe", "#b026ff", "#22c55e", "#f59e0b", "#fb7185"};
+        for (List<GridPoint> points : locations.values()) {
+            if (points.isEmpty()) {
+                continue;
+            }
+            String color = colors[colorIndex++ % colors.length];
+            if (points.size() > 1) {
+                svg.append("<polyline fill=\"none\" stroke=\"").append(color)
+                        .append("\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" points=\"");
+                for (GridPoint point : points) {
+                    svg.append(projectX(point.longitude(), left, mapWidth)).append(',').append(projectY(point.latitude(), top, mapHeight)).append(' ');
+                }
+                svg.append("\"/>");
+            }
+            for (GridPoint point : points) {
+                double x = projectX(point.longitude(), left, mapWidth);
+                double y = projectY(point.latitude(), top, mapHeight);
+                svg.append("<circle cx=\"").append(x).append("\" cy=\"").append(y)
+                        .append("\" r=\"4\" fill=\"").append(color).append("\" stroke=\"#ffffff\" stroke-width=\"1\">")
+                        .append("<title>").append(escapeXml(point.label())).append("</title></circle>");
+            }
+        }
+        if (locations.isEmpty()) {
+            svg.append("<text x=\"").append(left + 36).append("\" y=\"").append(top + 80)
+                    .append("\" fill=\"#dbeafe\" font-family=\"Inter, Arial\" font-size=\"24\">No GL coordinates available</text>");
+        }
+        svg.append("</svg>");
+        return svg.toString();
+    }
+
+    private GridPoint toGridPoint(Map<String, Object> row) {
+        String rowId = String.valueOf(row.getOrDefault("mRID", row.getOrDefault("rowId", "")));
+        String locationId = String.valueOf(row.getOrDefault("locationId", ""));
+        double longitude = coordinate(row.get("xPosition"));
+        double latitude = coordinate(row.get("yPosition"));
+        int sequence = integer(row.get("sequenceNumber"));
+        return new GridPoint(rowId, locationId, sequence, latitude, longitude);
+    }
+
+    private double projectX(double longitude, int left, int width) {
+        return left + ((Math.max(-180.0, Math.min(180.0, longitude)) + 180.0) / 360.0) * width;
+    }
+
+    private double projectY(double latitude, int top, int height) {
+        return top + ((90.0 - Math.max(-90.0, Math.min(90.0, latitude))) / 180.0) * height;
+    }
+
+    private double coordinate(Object value) {
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (RuntimeException exception) {
+            return Double.NaN;
+        }
+    }
+
+    private int integer(Object value) {
+        try {
+            return (int) Math.round(Double.parseDouble(String.valueOf(value)));
+        } catch (RuntimeException exception) {
+            return 0;
+        }
+    }
+
+    private String safeObjectName(String value) {
+        return value == null ? "network" : value.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private String escapeXml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+
+    private IidmGridViewMapResponse toGridViewMapResponse(IidmGridViewDocument document, String svg) {
+        return new IidmGridViewMapResponse(
+                document.id(),
+                document.importId(),
+                document.networkId(),
+                document.bucket(),
+                document.objectKey(),
+                document.contentType(),
+                document.state(),
+                svg,
+                document.coordinateCount(),
+                document.lineCount(),
+                document.substationCount(),
+                document.diagnostics(),
+                document.generatedAt());
+    }
+
+    private boolean isGeographicalLocationPayload(CnmProfilePayloadReadDocument payload) {
+        String type = payload.profileJsonType() == null ? "" : payload.profileJsonType();
+        return type.contains("GEOGRAPHICAL_LOCATION") || type.endsWith("_GL");
     }
 
     private Map<String, Object> toStringKeyMap(Map<?, ?> source) {
@@ -1029,6 +1480,12 @@ public class IidmProfileTransformService extends RestServiceSupport {
         return columns("id", "ID", "name", "Name", "voltageLevelId", "Voltage level", "v", "V", "angle", "Angle");
     }
 
+    private List<DynamicTableColumn> positionColumns() {
+        return columns("id", "ID", "name", "Name", "elementType", "Element type", "extensionType", "Extension",
+                "sequenceNumber", "Sequence", "latitude", "Latitude", "longitude", "Longitude",
+                "xPosition", "X", "yPosition", "Y", "zPosition", "Z");
+    }
+
     private List<DynamicTableColumn> columns(String... keyLabels) {
         List<DynamicTableColumn> columns = new ArrayList<>();
         for (int index = 0; index < keyLabels.length; index += 2) {
@@ -1054,6 +1511,22 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
         IidmTableSpec withoutRows() {
             return new IidmTableSpec(tableId, label, columns, List.of(), defaultSort, totalRows);
+        }
+    }
+
+    private record GridPoint(String rowId, String locationId, int sequenceNumber, double latitude, double longitude) {
+        boolean valid() {
+            return Double.isFinite(latitude) && Double.isFinite(longitude);
+        }
+
+        String label() {
+            return rowId + " (" + latitude + ", " + longitude + ")";
+        }
+    }
+
+    private record GridViewSvg(String svg, int coordinateCount, int lineCount, int substationCount, List<String> diagnostics) {
+        GridViewSvg {
+            diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
         }
     }
 }

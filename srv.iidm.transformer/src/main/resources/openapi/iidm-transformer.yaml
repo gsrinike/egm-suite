@@ -73,6 +73,41 @@ paths:
       responses:
         '200':
           description: IIDM table bundle with rows only for the requested table/page
+  /api/iidm/networks/{networkId}/grid-view/tables:
+    get:
+      summary: Get Grid View table metadata for one transformed network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Grid View table metadata without row payloads
+  /api/iidm/networks/{networkId}/grid-view/tables/{tableId}:
+    get:
+      summary: Get one paged Grid View table for a selected network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+        - { name: tableId, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, default: 100 } }
+        - { name: search, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Grid View table bundle with rows only for the requested table/page
+  /api/iidm/networks/{networkId}/grid-view/map:
+    get:
+      summary: Get or generate the stored SVG Grid View map for a selected network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Grid View SVG map response
+    post:
+      summary: Regenerate the SVG Grid View map for a selected network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Regenerated Grid View SVG map response
 components:
   schemas:
     IidmTransformState:

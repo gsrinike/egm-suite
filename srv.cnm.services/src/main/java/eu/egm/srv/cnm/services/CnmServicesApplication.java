@@ -48,10 +48,10 @@ public class CnmServicesApplication {
                         "Missing CNM document component " + documentType.getName() + "." + componentName))
                 .getType();
         LOGGER.info("CNM document schema {}.{} uses {}", documentType.getSimpleName(), componentName, componentType);
-        if (componentType != Object.class) {
+        if (componentType != Long.class) {
             throw new IllegalStateException(
                     "Stale CNM document class loaded: " + documentType.getName() + "." + componentName
-                            + " must use Object but uses " + componentType.getName());
+                            + " must use Long but uses " + componentType.getName());
         }
     }
 }

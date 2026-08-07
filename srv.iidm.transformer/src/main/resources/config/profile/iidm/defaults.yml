@@ -27,3 +27,4 @@ iidm:
       missing-permanent-limit-percentage: 100
       cgm-with-subnetworks: true
       cgm-with-subnetworks-defined-by: MODELING_AUTHORITY
+      post-processors: cgmesGLImport

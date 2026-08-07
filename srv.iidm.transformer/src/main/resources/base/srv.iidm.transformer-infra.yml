@@ -6,7 +6,7 @@ utility:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${vault:MINIO_SECRET_KEY}
-    buckets: cnm-rdf-models
+    buckets: cnm-rdf-models,${IIDM_GRID_VIEW_BUCKET:iidm-grid-view}
   messaging:
     listener:
       retry:

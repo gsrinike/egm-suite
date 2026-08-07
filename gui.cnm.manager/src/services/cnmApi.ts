@@ -133,6 +133,22 @@ export interface IidmTableBundle {
   tables: DynamicTableDefinition[];
 }
 
+export interface IidmGridViewMap {
+  id: string;
+  importId: string;
+  networkId: string;
+  bucket: string;
+  objectKey: string;
+  contentType: string;
+  state: string;
+  svg: string;
+  coordinateCount: number;
+  lineCount: number;
+  substationCount: number;
+  diagnostics: string[];
+  generatedAt: string;
+}
+
 export interface DynamicTableColumn {
   key: string;
   label: string;
@@ -369,6 +385,16 @@ export async function getIidmNetworkTables(networkId: string): Promise<IidmTable
   return response.json();
 }
 
+export async function getIidmGridViewTables(networkId: string): Promise<IidmTableBundle> {
+  const baseUrl = iidmBaseUrl();
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/grid-view/tables`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load Grid View table metadata', url, response);
+  }
+  return response.json();
+}
+
 export async function getIidmNetworkTableRows(
   networkId: string,
   tableId: string,
@@ -385,6 +411,36 @@ export async function getIidmNetworkTableRows(
   const response = await fetch(url);
   if (!response.ok) {
     throw await HttpClientError.fromResponse('Unable to load IIDM table rows', url, response);
+  }
+  return response.json();
+}
+
+export async function getIidmGridViewTableRows(
+  networkId: string,
+  tableId: string,
+  page: number,
+  size: number,
+  search = ''
+): Promise<IidmTableBundle> {
+  const baseUrl = iidmBaseUrl();
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (search) {
+    params.set('search', search);
+  }
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/grid-view/tables/${encodeURIComponent(tableId)}?${params}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load Grid View table rows', url, response);
+  }
+  return response.json();
+}
+
+export async function getIidmGridViewMap(networkId: string, regenerate = false): Promise<IidmGridViewMap> {
+  const baseUrl = iidmBaseUrl();
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/grid-view/map`;
+  const response = await fetch(url, { method: regenerate ? 'POST' : 'GET' });
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load Grid View map', url, response);
   }
   return response.json();
 }

@@ -57,6 +57,7 @@ import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocument;
 import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocumentAdapter;
+import eu.egm.srv.cnm.services.service.CnmModelFileNameParser.CnmModelFileName;
 import eu.egm.srv.cnm.services.rdf.CgmSnapshotAssembler;
 import eu.egm.srv.cnm.services.rdf.ProfileProcessingContext;
 import eu.egm.srv.cnm.services.rdf.RdfMetadata;
@@ -68,9 +69,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -78,14 +76,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,18 +93,15 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class CnmImportRestService extends RestServiceSupport {
-    private static final Pattern MODEL_FILE_PATTERN =
-            Pattern.compile(
-                    "^(?<timestamp>\\d{8}T\\d{4}Z)_(?<timeFrame>ID|1D|2D)_(?<tso>.+?)_(?<profile>[A-Z0-9_-]+)_(?<version>\\d+)$",
-                    Pattern.CASE_INSENSITIVE);
-    private static final Pattern BOUNDARY_MODEL_FILE_PATTERN =
-            Pattern.compile(
-                    "^(?<timestamp>\\d{8}T\\d{4}Z)__+(?<authority>.+?)_(?<profile>EQBD|EQ_BD|TPBD|TP_BD)_(?<version>\\d+)$",
-                    Pattern.CASE_INSENSITIVE);
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
     private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
     private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
+    private static final Set<CgmesProfileKind> REQUIRED_IIDM_PROFILE_KINDS = Set.of(
+            CgmesProfileKind.EQUIPMENT,
+            CgmesProfileKind.TOPOLOGY,
+            CgmesProfileKind.STEADY_STATE_HYPOTHESIS,
+            CgmesProfileKind.STATE_VARIABLES);
 
     private final ObjectStorageService objectStorageService;
     private final DocumentRepositoryService<CnmImportDocument> documentRepository;
@@ -261,7 +255,9 @@ public class CnmImportRestService extends RestServiceSupport {
         ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
         try {
             List<CnmImportFileDocument> files = payloads.stream()
-                    .map(payload -> CompletableFuture.supplyAsync(() -> storePayload(importId, payload), executorService))
+                    .map(payload -> CompletableFuture.supplyAsync(
+                            () -> storePayload(importId, payload, timeFrame),
+                            executorService))
                     .map(CompletableFuture::join)
                     .sorted(Comparator.comparing(CnmImportFileDocument::fileName))
                     .toList();
@@ -339,7 +335,7 @@ public class CnmImportRestService extends RestServiceSupport {
             Instant createdAt,
             String message) {
         List<CnmImportFileDocument> files = (fileNames == null ? List.<String>of() : fileNames).stream()
-                .map(fileName -> statusFile(fileName, state, message, createdAt))
+                .map(fileName -> statusFile(fileName, state, timeFrame, message, createdAt))
                 .toList();
         return new CnmImportDocument(
                 importId,
@@ -354,10 +350,11 @@ public class CnmImportRestService extends RestServiceSupport {
     private CnmImportFileDocument statusFile(
             String fileName,
             ImportState state,
+            TimeFrame timeFrame,
             String message,
             Instant createdAt) {
         String safeFileName = fileName == null || fileName.isBlank() ? "upload" : fileName;
-        ModelFileName modelFileName = parseModelFileName(safeFileName);
+        CnmModelFileName modelFileName = parseModelFileName(safeFileName, timeFrame);
         return new CnmImportFileDocument(
                 UUID.randomUUID().toString(),
                 safeFileName,
@@ -404,9 +401,9 @@ public class CnmImportRestService extends RestServiceSupport {
         return requestedMessage == null || requestedMessage.isBlank() ? fallback : requestedMessage.trim();
     }
 
-    private CnmImportFileDocument storePayload(String importId, RdfPayload payload) {
+    private CnmImportFileDocument storePayload(String importId, RdfPayload payload, TimeFrame timeFrame) {
         Instant uploadedAt = Instant.now();
-        ModelFileName modelFileName = parseModelFileName(payload.fileName());
+        CnmModelFileName modelFileName = parseModelFileName(payload.fileName(), timeFrame);
         String fileId = UUID.randomUUID().toString();
         String objectId = importId + "/" + sanitize(payload.relativePath());
         try {
@@ -640,37 +637,12 @@ public class CnmImportRestService extends RestServiceSupport {
                 || ".DS_Store".equals(name);
     }
 
-    private ModelFileName parseModelFileName(String fileName) {
-        String baseName = baseName(fileName);
-        int dot = baseName.lastIndexOf('.');
-        String stem = dot > 0 ? baseName.substring(0, dot) : baseName;
-        Matcher matcher = MODEL_FILE_PATTERN.matcher(stem);
-        Matcher boundaryMatcher = BOUNDARY_MODEL_FILE_PATTERN.matcher(stem);
-        if (boundaryMatcher.matches()) {
-            String timestamp = boundaryMatcher.group("timestamp");
-            String profileType = boundaryMatcher.group("profile").toUpperCase(Locale.ROOT).replace('-', '_');
-            CgmesProfileKind profileKind = CgmesProfileKind.fromCode(profileType);
-            return new ModelFileName(
-                    LocalDate.parse(timestamp.substring(0, 8), DateTimeFormatter.BASIC_ISO_DATE).toString(),
-                    LocalTime.parse(timestamp.substring(9, 13), DateTimeFormatter.ofPattern("HHmm")).toString(),
-                    "",
-                    boundaryMatcher.group("authority"),
-                    profileKind == CgmesProfileKind.UNKNOWN ? profileType : profileKind.code(),
-                    boundaryMatcher.group("version"),
-                    ProfileFamily.CGMES);
-        }
-        if (!matcher.matches()) {
-            return ModelFileName.empty();
-        }
-        String timestamp = matcher.group("timestamp");
-        return new ModelFileName(
-                LocalDate.parse(timestamp.substring(0, 8), DateTimeFormatter.BASIC_ISO_DATE).toString(),
-                LocalTime.parse(timestamp.substring(9, 13), DateTimeFormatter.ofPattern("HHmm")).toString(),
-                matcher.group("timeFrame").toUpperCase(Locale.ROOT),
-                matcher.group("tso"),
-                matcher.group("profile").toUpperCase(Locale.ROOT).replace('-', '_'),
-                matcher.group("version"),
-                ProfileFamily.fromCode(matcher.group("profile")));
+    private CnmModelFileName parseModelFileName(String fileName) {
+        return CnmModelFileNameParser.parse(fileName);
+    }
+
+    private CnmModelFileName parseModelFileName(String fileName, TimeFrame timeFrame) {
+        return CnmModelFileNameParser.parse(fileName, timeFrame);
     }
 
     private String contentType(String fileName) {
@@ -719,23 +691,10 @@ public class CnmImportRestService extends RestServiceSupport {
         }
     }
 
-    private record ModelFileName(
-            String businessDay,
-            String businessTime,
-            String timeFrame,
-            String tsoName,
-            String profileType,
-            String version,
-            ProfileFamily profileFamily) {
-        static ModelFileName empty() {
-            return new ModelFileName("", "", "", "", "", "", ProfileFamily.Unknown);
-        }
-    }
-
     public ImportStatus importRdf(String fileName, byte[] payload, CnmServiceType serviceType, TimeFrame timeFrame) {
         String importId = UUID.randomUUID().toString();
         RdfPayload rdfPayload = new RdfPayload(fileName, baseName(fileName), payload);
-        CnmImportFileDocument file = storePayload(importId, rdfPayload);
+        CnmImportFileDocument file = storePayload(importId, rdfPayload, timeFrame);
         CnmImportDocument document = new CnmImportDocument(
                 importId,
                 serviceType,
@@ -978,11 +937,15 @@ public class CnmImportRestService extends RestServiceSupport {
             return;
         }
         List<CnmImportFileDocument> groupFiles = modelGroupFiles(document, processedFile);
-        if (!groupFiles.isEmpty()
-                && groupFiles.stream().allMatch(file -> file.state() == ImportFileState.PARSED)
-                && !hasUnparsedBoundaryFiles(document)) {
-            publishIidmTransformRequested(document.id(), withBoundaryFiles(groupFiles, boundaryFiles));
+        if (isIidmTransformReady(groupFiles)) {
+            publishIidmTransformRequested(document.id(), withSupportFiles(groupFiles, boundaryFiles, matchingGlFiles(document, processedFile)));
             publishSnapshotAssemblyRequested(document, processedFile);
+        } else {
+            logger.info(
+                    "Skipping IIDM transform publication for import {} group {} until required profiles are parsed; missing={}",
+                    document.id(),
+                    modelGroupKey(processedFile),
+                    missingIidmProfileCodes(groupFiles));
         }
     }
 
@@ -996,8 +959,11 @@ public class CnmImportRestService extends RestServiceSupport {
                         java.util.stream.Collectors.toList()))
                 .values()
                 .stream()
-                .filter(groupFiles -> groupFiles.stream().allMatch(file -> file.state() == ImportFileState.PARSED))
-                .forEach(groupFiles -> publishIidmTransformRequested(document.id(), withBoundaryFiles(groupFiles, boundaryFiles)));
+                .filter(this::isIidmTransformReady)
+                .forEach(groupFiles -> publishIidmTransformRequested(document.id(), withSupportFiles(
+                        groupFiles,
+                        boundaryFiles,
+                        matchingGlFiles(document, groupFiles.getFirst()))));
     }
 
     private List<CnmImportFileDocument> modelGroupFiles(CnmImportDocument document, CnmImportFileDocument processedFile) {
@@ -1020,12 +986,25 @@ public class CnmImportRestService extends RestServiceSupport {
                 .anyMatch(file -> file.state() != ImportFileState.PARSED);
     }
 
-    private List<CnmImportFileDocument> withBoundaryFiles(
+    private List<CnmImportFileDocument> matchingGlFiles(CnmImportDocument document, CnmImportFileDocument modelFile) {
+        return document.files().stream()
+                .filter(this::isGlProfile)
+                .filter(file -> file.state() == ImportFileState.PARSED)
+                .filter(file -> sameValue(file.tsoName(), modelFile.tsoName()))
+                .filter(file -> sameValue(file.businessDay(), modelFile.businessDay()))
+                .toList();
+    }
+
+    private List<CnmImportFileDocument> withSupportFiles(
             List<CnmImportFileDocument> groupFiles,
-            List<CnmImportFileDocument> boundaryFiles) {
+            List<CnmImportFileDocument> boundaryFiles,
+            List<CnmImportFileDocument> glFiles) {
         List<CnmImportFileDocument> files = new ArrayList<>(groupFiles);
         boundaryFiles.stream()
                 .filter(boundary -> files.stream().noneMatch(file -> file.fileId().equals(boundary.fileId())))
+                .forEach(files::add);
+        glFiles.stream()
+                .filter(glFile -> files.stream().noneMatch(file -> file.fileId().equals(glFile.fileId())))
                 .forEach(files::add);
         return files;
     }
@@ -1046,6 +1025,32 @@ public class CnmImportRestService extends RestServiceSupport {
         }
         CgmesProfileKind kind = CgmesProfileKind.fromCode(file.profileType());
         return kind == CgmesProfileKind.BOUNDARY_EQUIPMENT || kind == CgmesProfileKind.BOUNDARY_TOPOLOGY;
+    }
+
+    private boolean isGlProfile(CnmImportFileDocument file) {
+        return file != null && CgmesProfileKind.fromCode(file.profileType()) == CgmesProfileKind.GEOGRAPHICAL_LOCATION;
+    }
+
+    private boolean isIidmTransformReady(List<CnmImportFileDocument> groupFiles) {
+        if (groupFiles == null || groupFiles.isEmpty()) {
+            return false;
+        }
+        return groupFiles.stream().allMatch(file -> file.state() == ImportFileState.PARSED)
+                && profileKinds(groupFiles).containsAll(REQUIRED_IIDM_PROFILE_KINDS);
+    }
+
+    private Set<CgmesProfileKind> profileKinds(List<CnmImportFileDocument> groupFiles) {
+        return groupFiles.stream()
+                .map(file -> CgmesProfileKind.fromCode(file.profileType()))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private List<String> missingIidmProfileCodes(List<CnmImportFileDocument> groupFiles) {
+        Set<CgmesProfileKind> presentKinds = profileKinds(groupFiles == null ? List.of() : groupFiles);
+        return REQUIRED_IIDM_PROFILE_KINDS.stream()
+                .filter(kind -> !presentKinds.contains(kind))
+                .map(CgmesProfileKind::code)
+                .toList();
     }
 
     public void assembleSnapshot(CnmSnapshotAssemblyRequested event) {
@@ -1499,15 +1504,32 @@ public class CnmImportRestService extends RestServiceSupport {
 
     public CnmPage<ImportStatus> listImports(int page, int size) {
         int boundedSize = size <= 0 ? 25 : size;
-        List<ImportStatus> imports = documentRepository.findAll(
-                        Math.max((page + 1) * boundedSize, boundedSize),
-                        DocumentSort.descending("createdAt"))
-                .stream()
-                .skip((long) Math.max(page, 0) * boundedSize)
-                .limit(boundedSize)
-                .map(this::toStatus)
-                .toList();
-        return new CnmPage<>(imports, imports.size(), Math.max(page, 0), boundedSize);
+        int boundedPage = Math.max(page, 0);
+        try {
+            List<ImportStatus> imports = documentRepository.findAll(
+                            Math.max((boundedPage + 1) * boundedSize, boundedSize),
+                            DocumentSort.descending("createdAt"))
+                    .stream()
+                    .skip((long) boundedPage * boundedSize)
+                    .limit(boundedSize)
+                    .map(this::toStatus)
+                    .toList();
+            return new CnmPage<>(imports, imports.size(), boundedPage, boundedSize);
+        } catch (RuntimeException exception) {
+            logger.warn(
+                    "Unable to list CNM imports using createdAt sort; retrying without sort. "
+                            + "If this persists, recreate the cnm-imports Elasticsearch index.",
+                    exception);
+            DocumentPage<CnmImportDocument> fallback = documentRepository.search(new DocumentSearchRequest(
+                    List.of(),
+                    List.of(),
+                    boundedPage,
+                    boundedSize));
+            List<ImportStatus> imports = fallback.content().stream()
+                    .map(this::toStatus)
+                    .toList();
+            return new CnmPage<>(imports, fallback.total(), fallback.page(), fallback.size());
+        }
     }
 
     public ImportStatus findImport(String importId) {
@@ -1684,7 +1706,7 @@ public class CnmImportRestService extends RestServiceSupport {
                         java.util.stream.Collectors.toList()))
                 .values()
                 .stream()
-                .filter(files -> files.stream().allMatch(file -> file.state() == ImportFileState.PARSED))
+                .filter(this::isIidmTransformReady)
                 .count();
     }
 
@@ -2136,7 +2158,7 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private CnmProfileMetadata toProfileMetadata(CnmProfileDocument document) {
-        ModelFileName fileNameMetadata = parseModelFileName(document.fileName());
+        CnmModelFileName fileNameMetadata = parseModelFileName(document.fileName());
         return new CnmProfileMetadata(
                 document.id(),
                 document.fileId(),
@@ -2200,7 +2222,7 @@ public class CnmImportRestService extends RestServiceSupport {
     }
 
     private ImportFileStatus toFileStatus(CnmImportFileDocument file) {
-        ModelFileName fileNameMetadata = parseModelFileName(file.fileName());
+        CnmModelFileName fileNameMetadata = parseModelFileName(file.fileName());
         ProfileFamily family = file.profileFamily() == null || file.profileFamily() == ProfileFamily.Unknown
                 ? fileNameMetadata.profileFamily()
                 : file.profileFamily();
@@ -2227,6 +2249,10 @@ public class CnmImportRestService extends RestServiceSupport {
 
     private String valueOr(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private boolean sameValue(String left, String right) {
+        return valueOr(left, "").equalsIgnoreCase(valueOr(right, ""));
     }
 
     private int number(Integer value) {

@@ -61,6 +61,16 @@
       </label>
     </section>
 
+    <section v-if="activeView === 'grid-view'" class="profile-filters glass-panel">
+      <label>Successful import
+        <select v-model="selectedGridImportId">
+          <option v-for="option in iidmImportOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+    </section>
+
     <section v-if="activeView === 'import-files'" class="detail-heading glass-panel">
       <div>
         <p>Import files</p>
@@ -87,12 +97,29 @@
       <Button :disabled="busy" @click="activeView = 'iidm'">Back to IIDM</Button>
     </section>
 
+    <section v-if="activeView === 'grid-view-data'" class="detail-heading glass-panel">
+      <div>
+        <p>Grid View</p>
+        <strong>{{ selectedGridNetworkId }}</strong>
+      </div>
+      <Button :disabled="busy" @click="activeView = 'grid-view'">Back to Grid View</Button>
+    </section>
+
     <section v-if="activeView === 'iidm-data'" class="profile-filters iidm-table-filters glass-panel">
       <label>Search table
         <input v-model="iidmTableSearch" placeholder="Search selected IIDM table" @keyup.enter="searchIidmTableRows" />
       </label>
       <Button :disabled="busy || !selectedIidmTableId" @click="searchIidmTableRows">Search</Button>
       <Button :disabled="busy || !iidmTableSearch" @click="clearIidmTableSearch">Clear</Button>
+    </section>
+
+    <section v-if="activeView === 'grid-view-data'" class="profile-filters iidm-table-filters glass-panel">
+      <label>Search table
+        <input v-model="gridTableSearch" placeholder="Search selected Grid View table" @keyup.enter="searchGridTableRows" />
+      </label>
+      <Button :disabled="busy || !selectedGridNetworkId" @click="refreshGridMap">Regenerate map</Button>
+      <Button :disabled="busy || !selectedGridTableId" @click="searchGridTableRows">Search</Button>
+      <Button :disabled="busy || !gridTableSearch" @click="clearGridTableSearch">Clear</Button>
     </section>
 
     <p v-if="message" class="status-message">{{ message }}</p>
@@ -203,6 +230,26 @@
       </template>
     </DataTable>
 
+    <DataTable
+      v-if="activeView === 'grid-view'"
+      :columns="gridColumns"
+      :rows="gridRows"
+      :page-size="10"
+      id-key="transformId"
+    >
+      <template #cell-networkId="{ row }">
+        <Link
+          v-if="canOpenIidmData(String(row.transformState), String(row.networkId))"
+          @click="openGridTables(String(row.networkId))"
+        >
+          {{ row.networkId }}
+        </Link>
+        <span v-else class="disabled-profile-link" title="Grid View data is available after IIDM transformation completes">
+          {{ row.networkId }}
+        </span>
+      </template>
+    </DataTable>
+
     <DynamicTable
       v-if="activeView === 'iidm-data'"
       :tables="iidmTables?.tables ?? []"
@@ -213,6 +260,27 @@
       server-side
       @table-selected="loadIidmTableRows($event, 0)"
       @page-change="loadIidmTableRows(selectedIidmTableId, $event)"
+    />
+
+    <section v-if="activeView === 'grid-view-data'" class="glass-panel grid-map-panel">
+      <div class="grid-map-meta">
+        <strong>{{ gridMap?.state ?? 'Map not generated' }}</strong>
+        <span>{{ gridMapSummary }}</span>
+      </div>
+      <div v-if="gridMap?.svg" class="grid-map-svg" v-html="gridMap.svg"></div>
+      <p v-else class="status-message">No Grid View map available</p>
+    </section>
+
+    <DynamicTable
+      v-if="activeView === 'grid-view-data'"
+      :tables="gridTables?.tables ?? []"
+      :loading="busy"
+      :error="message"
+      :page-size="gridTablePageSize"
+      :current-page="gridTablePage"
+      server-side
+      @table-selected="loadGridTableRows($event, 0)"
+      @page-change="loadGridTableRows(selectedGridTableId, $event)"
     />
   </main>
 </template>
@@ -233,6 +301,9 @@ import {
 } from '@egm/gui.common/src';
 import {
   getImport,
+  getIidmGridViewTables,
+  getIidmGridViewTableRows,
+  getIidmGridViewMap,
   getIidmNetworkTables,
   getIidmNetworkTableRows,
   getProfileTables,
@@ -246,6 +317,7 @@ import {
   type CnmSnapshotMetadata,
   type DynamicTableBundle,
   type IidmTransformationStatus,
+  type IidmGridViewMap,
   type IidmTableBundle,
   type IidmTransformSummary,
   type ImportStatus,
@@ -282,12 +354,20 @@ const profileReturnView = ref('import-files');
 const profileFilters = ref({ profileType: '', tso: '', businessDay: '', businessTime: '' });
 const selectedProfileImportId = ref('');
 const selectedIidmImportId = ref('');
+const selectedGridImportId = ref('');
 const iidmTables = ref<IidmTableBundle>();
+const gridTables = ref<IidmTableBundle>();
+const gridMap = ref<IidmGridViewMap>();
 const selectedIidmNetworkId = ref('');
+const selectedGridNetworkId = ref('');
 const selectedIidmTableId = ref('');
+const selectedGridTableId = ref('');
 const iidmTablePage = ref(0);
+const gridTablePage = ref(0);
 const iidmTablePageSize = 100;
+const gridTablePageSize = 100;
 const iidmTableSearch = ref('');
+const gridTableSearch = ref('');
 const lightTheme = ref(false);
 let importRefreshTimer: number | undefined;
 let importRefreshInFlight = false;
@@ -296,7 +376,8 @@ let requestedImportRefreshInterval: number | null = null;
 const menuItems = [
   { id: 'imports', label: 'Imports' },
   { id: 'profiles', label: 'Profiles' },
-  { id: 'iidm', label: 'IIDM' }
+  { id: 'iidm', label: 'IIDM' },
+  { id: 'grid-view', label: 'Grid View' }
 ];
 
 const serviceOptions = [
@@ -365,6 +446,18 @@ const iidmColumns = [
   { key: 'transformMessage', label: 'Message' }
 ];
 
+const gridColumns = [
+  { key: 'importId', label: 'Import ID' },
+  { key: 'sourceFiles', label: 'Source files' },
+  { key: 'profileType', label: 'Profile type' },
+  { key: 'profileFamily', label: 'Profile family' },
+  { key: 'transformState', label: 'State' },
+  { key: 'networkId', label: 'Grid View' },
+  { key: 'diagnosticCount', label: 'Diagnostics' },
+  { key: 'completedAt', label: 'Completed' },
+  { key: 'transformMessage', label: 'Message' }
+];
+
 const snapshotColumns = [
   { key: 'snapshotId', label: 'Snapshot' },
   { key: 'state', label: 'State' },
@@ -406,6 +499,19 @@ const iidmRows = computed(() => iidmTransforms.value.map((transform) => ({
   completedAt: formatDateTime(transform.completedAt),
   failedAt: formatDateTime(transform.failedAt)
 })));
+const gridRows = computed(() => iidmTransforms.value
+  .filter((transform) => transform.transformState === 'DONE')
+  .map((transform) => ({
+    ...transform,
+    sourceFiles: (transform.sourceFileNames?.length ? transform.sourceFileNames : [transform.fileId]).join(', '),
+    completedAt: formatDateTime(transform.completedAt)
+  })));
+const gridMapSummary = computed(() => {
+  if (!gridMap.value) {
+    return '';
+  }
+  return `${gridMap.value.coordinateCount} coordinates, ${gridMap.value.lineCount} lines, ${gridMap.value.substationCount} substation positions`;
+});
 const snapshotRows = computed(() => selectedImportSnapshots.value.map((snapshot) => ({
   ...snapshot,
   timeFrame: displayModelTimeFrame(snapshot.timeFrame),
@@ -461,6 +567,10 @@ watch(activeView, (view) => {
     alignSelectedMetadataSelections();
     void refreshIidmTransforms();
   }
+  if (view === 'grid-view') {
+    alignSelectedMetadataSelections();
+    void refreshGridTransforms();
+  }
 });
 watch(selectedProfileImportId, () => {
   clearMessage();
@@ -480,6 +590,18 @@ watch(selectedIidmImportId, () => {
   iidmTableSearch.value = '';
   if (activeView.value === 'iidm' && selectedIidmImportId.value) {
     void refreshIidmTransforms();
+  }
+});
+watch(selectedGridImportId, () => {
+  clearMessage();
+  iidmTransforms.value = [];
+  gridTables.value = undefined;
+  gridMap.value = undefined;
+  selectedGridNetworkId.value = '';
+  selectedGridTableId.value = '';
+  gridTableSearch.value = '';
+  if (activeView.value === 'grid-view' && selectedGridImportId.value) {
+    void refreshGridTransforms();
   }
 });
 
@@ -692,6 +814,33 @@ async function refreshIidmTransforms() {
   }
 }
 
+async function refreshGridTransforms() {
+  clearMessage();
+  if (!selectedGridImportId.value) {
+    iidmTransforms.value = [];
+    message.value = iidmReadyImports.value.length === 0
+      ? 'No successful imports available'
+      : 'Select a successful import';
+    return;
+  }
+  busy.value = true;
+  message.value = '';
+  try {
+    iidmTransforms.value = (await listIidmTransforms({
+      importId: selectedGridImportId.value,
+      page: 0,
+      size: 100
+    })).items;
+  } catch (error) {
+    logClientError('refreshGridTransforms failed', error, {
+      importId: selectedGridImportId.value
+    });
+    message.value = error instanceof Error ? error.message : 'Unable to load Grid View transforms';
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function openIidmTables(networkId: string) {
   busy.value = true;
   clearMessage();
@@ -755,6 +904,87 @@ async function clearIidmTableSearch() {
   await loadIidmTableRows(selectedIidmTableId.value, 0);
 }
 
+async function openGridTables(networkId: string) {
+  busy.value = true;
+  clearMessage();
+  selectedGridNetworkId.value = networkId;
+  selectedGridTableId.value = '';
+  gridTablePage.value = 0;
+  gridTableSearch.value = '';
+  gridMap.value = undefined;
+  try {
+    gridMap.value = await getIidmGridViewMap(networkId);
+    gridTables.value = await getIidmGridViewTables(networkId);
+    selectedGridTableId.value = gridTables.value.tables[0]?.tableId ?? '';
+    activeView.value = 'grid-view-data';
+    if (selectedGridTableId.value) {
+      await loadGridTableRows(selectedGridTableId.value, 0);
+    }
+  } catch (error) {
+    logClientError('openGridTables failed', error, { networkId });
+    message.value = error instanceof Error ? error.message : 'Unable to load Grid View data';
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function refreshGridMap() {
+  if (!selectedGridNetworkId.value) {
+    return;
+  }
+  busy.value = true;
+  clearMessage();
+  try {
+    gridMap.value = await getIidmGridViewMap(selectedGridNetworkId.value, true);
+  } catch (error) {
+    logClientError('refreshGridMap failed', error, { networkId: selectedGridNetworkId.value });
+    message.value = error instanceof Error ? error.message : 'Unable to regenerate Grid View map';
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadGridTableRows(tableId: string, page: number) {
+  if (!selectedGridNetworkId.value || !tableId) {
+    return;
+  }
+  busy.value = true;
+  clearMessage();
+  selectedGridTableId.value = tableId;
+  gridTablePage.value = page;
+  try {
+    gridTables.value = await getIidmGridViewTableRows(
+      selectedGridNetworkId.value,
+      tableId,
+      page,
+      gridTablePageSize,
+      gridTableSearch.value
+    );
+  } catch (error) {
+    logClientError('loadGridTableRows failed', error, {
+      networkId: selectedGridNetworkId.value,
+      tableId,
+      page,
+      search: gridTableSearch.value
+    });
+    message.value = error instanceof Error ? error.message : 'Unable to load Grid View table rows';
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function searchGridTableRows() {
+  await loadGridTableRows(selectedGridTableId.value, 0);
+}
+
+async function clearGridTableSearch() {
+  if (!gridTableSearch.value) {
+    return;
+  }
+  gridTableSearch.value = '';
+  await loadGridTableRows(selectedGridTableId.value, 0);
+}
+
 async function upload(importId?: string) {
   if (selectedFiles.value.length === 0) {
     return;
@@ -813,8 +1043,15 @@ function alignSelectedMetadataSelections() {
     selectedIidmImportId.value = '';
     iidmTransforms.value = [];
   }
+  if (selectedGridImportId.value && !iidmReadyImports.value.some((item) => item.importId === selectedGridImportId.value)) {
+    selectedGridImportId.value = '';
+    gridTables.value = undefined;
+  }
   if (!selectedIidmImportId.value && iidmReadyImports.value.length === 1) {
     selectedIidmImportId.value = iidmReadyImports.value[0].importId;
+  }
+  if (!selectedGridImportId.value && iidmReadyImports.value.length === 1) {
+    selectedGridImportId.value = iidmReadyImports.value[0].importId;
   }
 }
 

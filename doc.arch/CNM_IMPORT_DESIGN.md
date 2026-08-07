@@ -37,9 +37,24 @@ Boundary files use the ENTSO-E boundary style:
 <Timestamp>__<Authority>_<EQBD|EQ_BD|TPBD|TP_BD>_<Version>
 ```
 
+Profiles that do not carry a model timeframe in the filename, including
+geographical layout files, use the same double-underscore shape:
+
+```text
+<Timestamp>__<TSO>_<ProfileType>_<Version>
+```
+
+The importer strips chained transport/data extensions such as `.xml.zip` before
+parsing metadata. When the filename omits the timeframe, the file-level model
+timeframe falls back to the timeframe selected for the import request.
+
 The service derives business day, business time, timeframe, TSO/authority,
 profile type, profile family, and version from the filename. RDF metadata is
 also inspected to confirm profile information.
+
+Import documents use explicit Elasticsearch mappings for searchable enum,
+identifier, and timestamp fields. `createdAt` and file `uploadedAt` are stored
+as epoch-millisecond `long` values so import listing can sort consistently.
 
 ## Import State
 
