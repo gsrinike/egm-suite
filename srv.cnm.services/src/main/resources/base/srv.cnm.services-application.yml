@@ -12,6 +12,9 @@ server:
 cnm:
   import:
     raw-bucket: cnm-rdf-models
+    profile-payload-bucket: ${CNM_PROFILE_PAYLOAD_BUCKET:cnm-profile-payloads}
+    profile-fragment-bucket: ${CNM_PROFILE_FRAGMENT_BUCKET:cnm-profile-fragments}
+    network-snapshot-payload-bucket: ${CNM_NETWORK_SNAPSHOT_PAYLOAD_BUCKET:cnm-network-snapshot-payloads}
     recovery:
       enabled: ${CNM_IMPORT_RECOVERY_ENABLED:true}
       fixed-delay-ms: ${CNM_IMPORT_RECOVERY_FIXED_DELAY_MS:30000}

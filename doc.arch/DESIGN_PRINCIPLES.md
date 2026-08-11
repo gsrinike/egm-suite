@@ -63,8 +63,12 @@ Document storage is separated by ownership and query use:
 - CNM import metadata, profile metadata, profile payloads, profile fragments,
   mRID indexes, and snapshots are owned by `srv.cnm.services`.
 - IIDM transform states and IIDM networks are owned by `srv.iidm.transformer`.
-- Large JSON/XML payloads are chunked or stored separately from list/search
-  documents so list screens do not load heavy data.
+- Elasticsearch is used for searchable metadata, statuses, diagnostics, counts,
+  and lightweight table summaries.
+- MinIO/object storage owns large payload bodies such as raw RDF/XML, typed RDF
+  profile JSON, RDF fragments, XIIDM, IIDM JSON projections, and generated grid
+  view artifacts. Elasticsearch stores object keys, checksums, sizes, and
+  content types for those payloads.
 - RabbitMQ topic exchanges are declared at application startup by publishers.
 - CNM and IIDM queues retry failed listener handling three times and route
   exhausted messages to module-owned dead-letter queues.

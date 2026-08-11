@@ -26,6 +26,11 @@ public record CnmProfileFragmentDocument(
         String fragmentJson,
         List<String> fragmentJsonChunks,
         Integer fragmentJsonChunkCount,
+        String payloadBucket,
+        String payloadObjectKey,
+        String payloadContentType,
+        String payloadChecksum,
+        Long payloadSizeBytes,
         Object importedAt) {
     public CnmProfileFragmentDocument {
         entityCounts = entityCounts == null ? Map.of() : Map.copyOf(entityCounts);
@@ -33,5 +38,10 @@ public record CnmProfileFragmentDocument(
         fragmentJson = fragmentJson == null ? "" : fragmentJson;
         fragmentJsonChunks = fragmentJsonChunks == null ? List.of() : List.copyOf(fragmentJsonChunks);
         fragmentJsonChunkCount = fragmentJsonChunkCount == null ? fragmentJsonChunks.size() : fragmentJsonChunkCount;
+        payloadBucket = payloadBucket == null ? "" : payloadBucket;
+        payloadObjectKey = payloadObjectKey == null ? "" : payloadObjectKey;
+        payloadContentType = payloadContentType == null ? "" : payloadContentType;
+        payloadChecksum = payloadChecksum == null ? "" : payloadChecksum;
+        payloadSizeBytes = payloadSizeBytes == null ? 0L : payloadSizeBytes;
     }
 }

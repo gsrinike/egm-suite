@@ -85,19 +85,26 @@ transforms. Any failed related transform makes the aggregate IIDM status
 
 ## Storage Ownership
 
-`srv.cnm.services` owns these Elasticsearch indices:
+`srv.cnm.services` owns these Elasticsearch indices for searchable metadata,
+small summaries, and object references:
 
 - `cnm-imports`: aggregate import document and per-file metadata.
 - `cnm-profiles`: searchable lightweight profile metadata.
-- `cnm-profile-payloads`: large profile JSON payloads, stored separately from
-  search/list metadata.
-- `cnm-profile-fragments`: compact RDF fragments used for snapshot assembly.
+- `cnm-profile-payloads`: profile payload metadata, entity counts, diagnostics,
+  and the MinIO object key for the full typed profile JSON.
+- `cnm-profile-fragments`: fragment metadata and the MinIO object key for the
+  full RDF fragment JSON used by snapshot assembly.
 - `cnm-mrid-index`: mRID lookup rows.
 - `cnm-network-snapshots`: snapshot metadata.
-- `cnm-network-snapshot-payloads`: chunked snapshot payload sections.
+- `cnm-network-snapshot-payloads`: snapshot section metadata and the MinIO
+  object key for each full section payload.
 
 Raw RDF/XML and ZIP entries are stored in MinIO through
-`com.infra.storage.object`.
+`com.infra.storage.object`. Large profile payloads and profile fragments are
+also stored in MinIO. Elasticsearch keeps only object bucket/key, content type,
+checksum, byte size, counts, diagnostics, and other fields needed for search or
+table summaries. Read endpoints resolve the object key lazily when a user opens
+a specific profile or table.
 
 The service reads lightweight IIDM transform documents from the IIDM-owned
 `iidm-profile-transforms` index to aggregate file-level IIDM status. It does
@@ -127,7 +134,8 @@ sequenceDiagram
   Worker->>Worker: Priority queue by profile kind and requested time
   Worker->>MinIO: Read raw payload
   Worker->>Worker: Stream RDF and extract profile data
-  Worker->>ES: Store metadata, payload, fragments, mRID index
+  Worker->>MinIO: Store full profile payload and fragment JSON
+  Worker->>ES: Store metadata, payload refs, fragment refs, mRID index
   Worker->>ES: Update file state PARSED or FAILED
   Worker->>MQ: Publish IIDM transform when group is complete
   MQ->>IIDM: Consume IIDM transform request

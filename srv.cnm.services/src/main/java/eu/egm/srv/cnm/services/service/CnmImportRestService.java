@@ -72,10 +72,14 @@ import io.micrometer.observation.ObservationRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -134,6 +138,9 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String iidmTransformRoutingKey;
     private final ConcurrentMap<String, Object> snapshotLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> importStatusLocks = new ConcurrentHashMap<>();
+    private final String profilePayloadBucket;
+    private final String profileFragmentBucket;
+    private final String networkSnapshotPayloadBucket;
 
     public CnmImportRestService(
             Environment environment,
@@ -145,7 +152,10 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
             @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
-            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
+            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey,
+            @Value("${cnm.import.profile-payload-bucket:cnm-profile-payloads}") String profilePayloadBucket,
+            @Value("${cnm.import.profile-fragment-bucket:cnm-profile-fragments}") String profileFragmentBucket,
+            @Value("${cnm.import.network-snapshot-payload-bucket:cnm-network-snapshot-payloads}") String networkSnapshotPayloadBucket) {
         this(
                 environment,
                 observationRegistry,
@@ -157,7 +167,10 @@ public class CnmImportRestService extends RestServiceSupport {
                 fileProcessingRoutingKey,
                 snapshotAssemblyRoutingKey,
                 iidmTransformExchange,
-                iidmTransformRoutingKey);
+                iidmTransformRoutingKey,
+                profilePayloadBucket,
+                profileFragmentBucket,
+                networkSnapshotPayloadBucket);
     }
 
     @Autowired
@@ -172,7 +185,10 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.event.file-processing-routing-key:cnm.file.processing.requested}") String fileProcessingRoutingKey,
             @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
-            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey) {
+            @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey,
+            @Value("${cnm.import.profile-payload-bucket:cnm-profile-payloads}") String profilePayloadBucket,
+            @Value("${cnm.import.profile-fragment-bucket:cnm-profile-fragments}") String profileFragmentBucket,
+            @Value("${cnm.import.network-snapshot-payload-bucket:cnm-network-snapshot-payloads}") String networkSnapshotPayloadBucket) {
         super(environment, observationRegistry);
         this.objectStorageService = infrastructureUtils.objectStorageService();
         this.documentRepository = infrastructureUtils.documentRepository(new CnmImportDocumentAdapter());
@@ -194,6 +210,9 @@ public class CnmImportRestService extends RestServiceSupport {
         this.slowMetadataProcessingThresholdMs =
                 environment.getProperty("cnm.import.metadata.slow-threshold-ms", Long.class, 5_000L);
         this.rawBucket = rawBucket;
+        this.profilePayloadBucket = profilePayloadBucket;
+        this.profileFragmentBucket = profileFragmentBucket;
+        this.networkSnapshotPayloadBucket = networkSnapshotPayloadBucket;
         this.eventExchange = eventExchange;
         this.transformInitializationRoutingKey = environment.getProperty(
                 "cnm.import.event.transform-initialization-routing-key",
@@ -1249,6 +1268,9 @@ public class CnmImportRestService extends RestServiceSupport {
         if ((json == null || json.isBlank()) && document.fragmentJsonChunks() != null) {
             json = String.join("", document.fragmentJsonChunks());
         }
+        if ((json == null || json.isBlank()) && hasObjectPayload(document.payloadBucket(), document.payloadObjectKey())) {
+            json = readObjectPayload(document.payloadBucket(), document.payloadObjectKey());
+        }
         if (json == null || json.isBlank()) {
             json = joinedFragmentChunks(document.importId(), document.fileId());
         }
@@ -1258,9 +1280,9 @@ public class CnmImportRestService extends RestServiceSupport {
     private void saveProfileFragment(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
         ProfileFragment fragment = metadata.fragment();
         String fragmentJson = jsonMappingService.toJson(fragment);
-        List<String> fragmentChunks = chunks(fragmentJson);
-        profileFragmentRepository.save(toProfileFragmentDocument(importId, file, metadata, fragment, fragmentJson, fragmentChunks.size()));
-        saveFragmentChunks(importId, file, fragmentChunks);
+        String objectKey = payloadObjectKey(importId, file.fileId(), "rdf-fragment.json");
+        objectStorageService.store(profileFragmentBucket, objectKey, fragmentJson.getBytes(StandardCharsets.UTF_8), "application/json");
+        profileFragmentRepository.save(toProfileFragmentDocument(importId, file, metadata, fragment, objectKey, fragmentJson));
     }
 
     private CnmProfileFragmentDocument toProfileFragmentDocument(
@@ -1268,8 +1290,8 @@ public class CnmImportRestService extends RestServiceSupport {
             CnmImportFileDocument file,
             RdfMetadata metadata,
             ProfileFragment fragment,
-            String fragmentJson,
-            int fragmentJsonChunkCount) {
+            String objectKey,
+            String fragmentJson) {
         return new CnmProfileFragmentDocument(
                 file.fileId(),
                 importId,
@@ -1286,9 +1308,14 @@ public class CnmImportRestService extends RestServiceSupport {
                 metadata.entityCounts(),
                 fragment.facts().size(),
                 metadata.warnings(),
-                fragmentJson.length() <= PROFILE_JSON_CHUNK_SIZE ? fragmentJson : "",
+                "",
                 List.of(),
-                fragmentJsonChunkCount,
+                0,
+                profileFragmentBucket,
+                objectKey,
+                "application/json",
+                sha256(fragmentJson),
+                (long) fragmentJson.getBytes(StandardCharsets.UTF_8).length,
                 file.uploadedAt());
     }
 
@@ -1410,15 +1437,7 @@ public class CnmImportRestService extends RestServiceSupport {
             List<?> values,
             long createdAt) {
         if (values == null || values.isEmpty()) {
-            return List.of(new CnmNetworkSnapshotPayloadDocument(
-                    snapshot.snapshotId() + ":" + section + ":0",
-                    snapshot.snapshotId(),
-                    snapshot.importId(),
-                    section,
-                    0,
-                    0,
-                    "[]",
-                    createdAt));
+            return List.of(payloadDocument(snapshot, section, 0, List.of(), createdAt));
         }
         List<CnmNetworkSnapshotPayloadDocument> documents = new ArrayList<>();
         List<String> batch = new ArrayList<>();
@@ -1447,6 +1466,16 @@ public class CnmImportRestService extends RestServiceSupport {
             int sequence,
             List<String> values,
             long createdAt) {
+        String payloadJson = "[" + String.join(",", values) + "]";
+        String objectKey = payloadObjectKey(
+                snapshot.importId(),
+                snapshot.snapshotId() + ":" + section + ":" + sequence,
+                "snapshot-payload.json");
+        objectStorageService.store(
+                networkSnapshotPayloadBucket,
+                objectKey,
+                payloadJson.getBytes(StandardCharsets.UTF_8),
+                "application/json");
         return new CnmNetworkSnapshotPayloadDocument(
                 snapshot.snapshotId() + ":" + section + ":" + sequence,
                 snapshot.snapshotId(),
@@ -1454,7 +1483,12 @@ public class CnmImportRestService extends RestServiceSupport {
                 section,
                 sequence,
                 values.size(),
-                "[" + String.join(",", values) + "]",
+                "",
+                networkSnapshotPayloadBucket,
+                objectKey,
+                "application/json",
+                sha256(payloadJson),
+                (long) payloadJson.getBytes(StandardCharsets.UTF_8).length,
                 createdAt);
     }
 
@@ -2052,25 +2086,30 @@ public class CnmImportRestService extends RestServiceSupport {
 
     private void saveProfilePayload(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
         String profileJson = jsonMappingService.toJson(metadata.payload());
-        List<String> profileChunks = chunks(profileJson);
-        profilePayloadRepository.save(toProfilePayloadDocument(importId, file, metadata, profileJson, profileChunks.size()));
-        savePayloadChunks(importId, file, metadata, profileChunks);
+        String objectKey = payloadObjectKey(importId, file.fileId(), "profile-payload.json");
+        objectStorageService.store(profilePayloadBucket, objectKey, profileJson.getBytes(StandardCharsets.UTF_8), "application/json");
+        profilePayloadRepository.save(toProfilePayloadDocument(importId, file, metadata, objectKey, profileJson));
     }
 
     private CnmProfilePayloadDocument toProfilePayloadDocument(
             String importId,
             CnmImportFileDocument file,
             RdfMetadata metadata,
-            String profileJson,
-            int profileJsonChunkCount) {
+            String objectKey,
+            String profileJson) {
         return new CnmProfilePayloadDocument(
                 file.fileId(),
                 importId,
                 file.fileId(),
                 metadata.profileJsonType(),
-                profileJson.length() <= PROFILE_JSON_CHUNK_SIZE ? profileJson : "",
+                "",
                 List.of(),
-                profileJsonChunkCount,
+                0,
+                profilePayloadBucket,
+                objectKey,
+                "application/json",
+                sha256(profileJson),
+                (long) profileJson.getBytes(StandardCharsets.UTF_8).length,
                 file.uploadedAt());
     }
 
@@ -2111,6 +2150,9 @@ public class CnmImportRestService extends RestServiceSupport {
         if (payload.profileJson() != null && !payload.profileJson().isBlank()) {
             return payload.profileJson();
         }
+        if (hasObjectPayload(payload.payloadBucket(), payload.payloadObjectKey())) {
+            return readObjectPayload(payload.payloadBucket(), payload.payloadObjectKey());
+        }
         if (payload.profileJsonChunks() == null || payload.profileJsonChunks().isEmpty()) {
             return joinedPayloadChunks(importId, fileId);
         }
@@ -2133,6 +2175,31 @@ public class CnmImportRestService extends RestServiceSupport {
                 .sorted(Comparator.comparing(CnmProfileFragmentChunkDocument::chunkIndex))
                 .map(CnmProfileFragmentChunkDocument::chunkJson)
                 .reduce("", String::concat);
+    }
+
+    private boolean hasObjectPayload(String bucket, String objectKey) {
+        return bucket != null && !bucket.isBlank() && objectKey != null && !objectKey.isBlank();
+    }
+
+    private String readObjectPayload(String bucket, String objectKey) {
+        return new String(objectStorageService.read(bucket, objectKey), StandardCharsets.UTF_8);
+    }
+
+    private String payloadObjectKey(String importId, String fileId, String suffix) {
+        return safeObjectName(importId) + "/" + safeObjectName(fileId) + "/" + suffix;
+    }
+
+    private String safeObjectName(String value) {
+        return value == null ? "payload" : value.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 digest is not available", exception);
+        }
     }
 
     private int chunkFetchLimit() {

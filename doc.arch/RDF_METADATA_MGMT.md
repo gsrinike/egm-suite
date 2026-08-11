@@ -34,9 +34,11 @@ boundary profile kinds.
 The extractor stores two kinds of profile data:
 
 - searchable metadata in `cnm-profiles`
-- large typed JSON payloads in `cnm-profile-payloads`
+- full typed JSON payloads in MinIO, referenced by `cnm-profile-payloads`
 
-Profile JSON is stored as JSON text/chunks, not as binary data. DTO to JSON and
+Profile JSON is stored as JSON text in object storage, not as binary data in
+Elasticsearch. `cnm-profile-payloads` keeps the profile JSON type, object
+bucket/key, checksum, byte size, entity counts, and diagnostics. DTO to JSON and
 JSON to DTO conversion goes through `com.mapping.JsonMappingService`.
 
 Common topology facts are represented through reusable DTOs:
@@ -59,7 +61,12 @@ Snapshot assembly is separate from raw RDF parsing:
    core topology objects.
 3. A second pass resolves relationships and state values across EQ, TP, SSH, and
    SV fragments.
-4. Snapshot metadata is stored separately from chunked snapshot payload sections.
+4. Snapshot metadata is stored separately from snapshot payload object
+   references.
+
+Profile fragments and snapshot sections follow the same storage split as
+profile payloads: the full JSON is stored in MinIO, while Elasticsearch stores
+the reference and the fields required for lookup and diagnostics.
 
 This preserves partial profile diagnostics even when full snapshot assembly or
 IIDM conversion fails.
@@ -79,7 +86,8 @@ sequenceDiagram
   participant ES as Elasticsearch
 
   GUI->>CNM: GET profile tables for import/file
-  CNM->>ES: Read profile metadata and payload JSON
+  CNM->>ES: Read profile metadata and payload object reference
+  CNM->>CNM: Load selected payload JSON from object storage
   CNM->>CNM: Build dynamic table definitions
   CNM-->>GUI: DynamicTableBundle
   GUI->>GUI: Render tabs and selected table rows

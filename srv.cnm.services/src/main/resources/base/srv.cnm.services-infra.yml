@@ -6,7 +6,7 @@ utility:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${vault:MINIO_SECRET_KEY}
-    buckets: cnm-rdf-models
+    buckets: cnm-rdf-models,${CNM_PROFILE_PAYLOAD_BUCKET:cnm-profile-payloads},${CNM_PROFILE_FRAGMENT_BUCKET:cnm-profile-fragments},${CNM_NETWORK_SNAPSHOT_PAYLOAD_BUCKET:cnm-network-snapshot-payloads}
   messaging:
     listener:
       concurrent-consumers: ${CNM_RABBIT_CONCURRENT_CONSUMERS:8}

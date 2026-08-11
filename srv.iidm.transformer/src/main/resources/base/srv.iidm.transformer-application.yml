@@ -6,6 +6,7 @@ server:
 iidm:
   transform:
     raw-bucket: cnm-rdf-models
+    network-payload-bucket: ${IIDM_NETWORK_PAYLOAD_BUCKET:iidm-network-payloads}
     event:
       exchange: iidm.events
       dead-letter-exchange: iidm.events.dlx

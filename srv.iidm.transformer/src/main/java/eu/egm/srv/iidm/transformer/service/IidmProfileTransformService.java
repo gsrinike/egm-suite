@@ -115,6 +115,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final CgmesSourceToIidmTransformer sourceTransformer;
     private final IidmNetworkJsonProjection networkJsonProjection = new IidmNetworkJsonProjection();
     private final String rawBucket;
+    private final String networkPayloadBucket;
     private final String gridViewBucket;
     private final String eventExchange;
     private final String startedRoutingKey;
@@ -127,6 +128,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
             InfrastructureUtils infrastructureUtils,
             JsonMappingService jsonMappingService,
             @Value("${iidm.transform.raw-bucket:cnm-rdf-models}") String rawBucket,
+            @Value("${iidm.transform.network-payload-bucket:iidm-network-payloads}") String networkPayloadBucket,
             @Value("${iidm.grid-view.bucket:iidm-grid-view}") String gridViewBucket,
             @Value("${iidm.transform.event.exchange:iidm.events}") String eventExchange,
             @Value("${iidm.transform.event.started-routing-key:iidm.profile.transform.started}") String startedRoutingKey,
@@ -148,6 +150,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
         this.transformer = new CnmToIidmTransformer(new ReflectionMappingService(), iidmMappingConfiguration());
         this.sourceTransformer = new CgmesSourceToIidmTransformer(new ReflectionMappingService(), cgmesSourceMappingConfiguration());
         this.rawBucket = rawBucket;
+        this.networkPayloadBucket = networkPayloadBucket;
         this.gridViewBucket = gridViewBucket;
         this.eventExchange = eventExchange;
         this.startedRoutingKey = startedRoutingKey;
@@ -671,6 +674,10 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private IidmNetworkDocument toNetworkDocument(IidmNetworkModel network) {
         String networkXiidm = IidmNetworkXiidm.write(network.network());
         String networkJson = jsonMappingService.toJson(networkJsonProjection.project(network.network()));
+        String xiidmObjectKey = networkPayloadObjectKey(network.importId(), network.id(), "network.xiidm");
+        String jsonObjectKey = networkPayloadObjectKey(network.importId(), network.id(), "network-projection.json");
+        objectStorageService.store(networkPayloadBucket, xiidmObjectKey, networkXiidm.getBytes(StandardCharsets.UTF_8), "application/xml");
+        objectStorageService.store(networkPayloadBucket, jsonObjectKey, networkJson.getBytes(StandardCharsets.UTF_8), "application/json");
         IidmNetworkSummary summary = network.summary();
         long now = Instant.now().toEpochMilli();
         return new IidmNetworkDocument(
@@ -682,11 +689,19 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 network.timeFrame(),
                 network.tsoName(),
                 IidmNetworkXiidm.FORMAT,
-                networkXiidm.length() <= NETWORK_XIIDM_CHUNK_SIZE ? networkXiidm : "",
-                chunks(networkXiidm),
+                "",
+                List.of(),
+                networkPayloadBucket,
+                xiidmObjectKey,
+                sha256(networkXiidm),
+                (long) networkXiidm.getBytes(StandardCharsets.UTF_8).length,
                 IidmNetworkJsonProjection.TYPE,
-                networkJson.length() <= NETWORK_XIIDM_CHUNK_SIZE ? networkJson : "",
-                chunks(networkJson),
+                "",
+                List.of(),
+                networkPayloadBucket,
+                jsonObjectKey,
+                sha256(networkJson),
+                (long) networkJson.getBytes(StandardCharsets.UTF_8).length,
                 List.of(
                         new IidmElementCountDocument("substations", summary.substationCount()),
                         new IidmElementCountDocument("voltageLevels", summary.voltageLevelCount()),
@@ -703,6 +718,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private String profileJson(CnmProfilePayloadReadDocument payload) {
         if (payload.profileJson() != null && !payload.profileJson().isBlank()) {
             return payload.profileJson();
+        }
+        if (hasObjectPayload(payload.payloadBucket(), payload.payloadObjectKey())) {
+            return readObjectPayload(payload.payloadBucket(), payload.payloadObjectKey());
         }
         if (payload.profileJsonChunks() != null && !payload.profileJsonChunks().isEmpty()) {
             return String.join("", payload.profileJsonChunks());
@@ -744,6 +762,18 @@ public class IidmProfileTransformService extends RestServiceSupport {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is not available", exception);
         }
+    }
+
+    private boolean hasObjectPayload(String bucket, String objectKey) {
+        return bucket != null && !bucket.isBlank() && objectKey != null && !objectKey.isBlank();
+    }
+
+    private String readObjectPayload(String bucket, String objectKey) {
+        return new String(objectStorageService.read(bucket, objectKey), StandardCharsets.UTF_8);
+    }
+
+    private String networkPayloadObjectKey(String importId, String networkId, String suffix) {
+        return safeObjectName(importId) + "/" + safeObjectName(networkId) + "/" + suffix;
     }
 
     private int number(Integer value) {
@@ -1132,6 +1162,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
         if (document.networkXiidm() != null && !document.networkXiidm().isBlank()) {
             return document.networkXiidm();
         }
+        if (hasObjectPayload(document.networkXiidmBucket(), document.networkXiidmObjectKey())) {
+            return readObjectPayload(document.networkXiidmBucket(), document.networkXiidmObjectKey());
+        }
         return String.join("", document.networkXiidmChunks());
     }
 
@@ -1497,6 +1530,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private String networkJson(IidmNetworkDocument document) {
         if (document.networkJson() != null && !document.networkJson().isBlank()) {
             return document.networkJson();
+        }
+        if (hasObjectPayload(document.networkJsonBucket(), document.networkJsonObjectKey())) {
+            return readObjectPayload(document.networkJsonBucket(), document.networkJsonObjectKey());
         }
         return String.join("", document.networkJsonChunks());
     }

@@ -47,6 +47,7 @@ import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,7 +133,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         byte[] innerZip = zip("20241202T2330Z_1D_TSO-XYZ_SV_002.xml", rdf("StateVariables"));
         byte[] outerZip = zip(
                 new ZipItem("models/CGM/20241202T2330Z_1D_TSO-XYZ_SV_002.zip", innerZip),
@@ -200,11 +204,18 @@ class CnmImportRestServiceTest {
         assertThat(svProfile.profileJsonType()).isEqualTo("cgmes.sv");
         assertThat(svProfile.entityCounts()).isNotEmpty();
         assertThat(profilePayloadRepository.saved).hasSize(2);
-        assertThat(profilePayloadRepository.saved.stream()
+        CnmProfilePayloadDocument svPayload = profilePayloadRepository.saved.stream()
                 .filter(payload -> payload.id().equals(svProfile.fileId()))
                 .findFirst()
-                .orElseThrow()
-                .profileJson()).contains("\"profileType\":\"SV\"");
+                .orElseThrow();
+        assertThat(svPayload.profileJson()).isBlank();
+        assertThat(svPayload.profileJsonChunks()).isEmpty();
+        assertThat(svPayload.payloadBucket()).isEqualTo("cnm-profile-payloads");
+        assertThat(svPayload.payloadObjectKey()).isNotBlank();
+        assertThat(svPayload.payloadChecksum()).isNotBlank();
+        assertThat(svPayload.payloadSizeBytes()).isPositive();
+        assertThat(new String(objectStorageService.read(svPayload.payloadBucket(), svPayload.payloadObjectKey()),
+                StandardCharsets.UTF_8)).contains("\"profileType\":\"SV\"");
         assertThat(service.profilePayload(status.importId(), svProfile.fileId())).isInstanceOf(Map.class);
         assertThat(service.profileTables(status.importId(), svProfile.fileId()).tables())
                 .extracting(table -> table.tableId())
@@ -232,7 +243,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         String importId = "client-import-id";
 
         ImportStatus failed = service.reportFailure(new ImportFailureRequest(
@@ -287,7 +301,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
                 "20241202T2330Z_1D_TSO-XYZ_SV_002.xml",
@@ -352,7 +369,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
                 "models.zip",
@@ -413,7 +433,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         MockMultipartFile upload = new MockMultipartFile(
                 "file",
                 "models.zip",
@@ -460,7 +483,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         long timestamp = java.time.Instant.parse("2026-06-24T18:24:05Z").toEpochMilli();
         documentRepository.save(new CnmImportDocument(
                 "legacy-import",
@@ -523,7 +549,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         String importId = "partial-import";
         CnmImportDocument.CnmImportFileDocument parsedFile = importFile(
                 "file-a-eq",
@@ -599,7 +628,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         String importId = "stale-done-import";
         documentRepository.save(new CnmImportDocument(
                 importId,
@@ -640,7 +672,10 @@ class CnmImportRestServiceTest {
                 "cnm.file.processing.requested",
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
-                "iidm.profile.transform.requested");
+                "iidm.profile.transform.requested",
+                "cnm-profile-payloads",
+                "cnm-profile-fragments",
+                "cnm-network-snapshot-payloads");
         CnmImportRecoveryService recoveryService = new CnmImportRecoveryService(
                 infrastructureUtils(
                         objectStorageService,

@@ -16,9 +16,17 @@ public record IidmNetworkDocument(
         String networkFormat,
         String networkXiidm,
         List<String> networkXiidmChunks,
+        String networkXiidmBucket,
+        String networkXiidmObjectKey,
+        String networkXiidmChecksum,
+        Long networkXiidmSizeBytes,
         String networkJsonType,
         String networkJson,
         List<String> networkJsonChunks,
+        String networkJsonBucket,
+        String networkJsonObjectKey,
+        String networkJsonChecksum,
+        Long networkJsonSizeBytes,
         List<IidmElementCountDocument> elementCounts,
         Object createdAt,
         Object updatedAt) {
@@ -26,9 +34,17 @@ public record IidmNetworkDocument(
         sourceFileIds = sourceFileIds == null ? List.of() : List.copyOf(sourceFileIds);
         networkXiidm = networkXiidm == null ? "" : networkXiidm;
         networkXiidmChunks = networkXiidmChunks == null ? List.of() : List.copyOf(networkXiidmChunks);
+        networkXiidmBucket = networkXiidmBucket == null ? "" : networkXiidmBucket;
+        networkXiidmObjectKey = networkXiidmObjectKey == null ? "" : networkXiidmObjectKey;
+        networkXiidmChecksum = networkXiidmChecksum == null ? "" : networkXiidmChecksum;
+        networkXiidmSizeBytes = networkXiidmSizeBytes == null ? 0L : networkXiidmSizeBytes;
         networkJsonType = networkJsonType == null ? "" : networkJsonType;
         networkJson = networkJson == null ? "" : networkJson;
         networkJsonChunks = networkJsonChunks == null ? List.of() : List.copyOf(networkJsonChunks);
+        networkJsonBucket = networkJsonBucket == null ? "" : networkJsonBucket;
+        networkJsonObjectKey = networkJsonObjectKey == null ? "" : networkJsonObjectKey;
+        networkJsonChecksum = networkJsonChecksum == null ? "" : networkJsonChecksum;
+        networkJsonSizeBytes = networkJsonSizeBytes == null ? 0L : networkJsonSizeBytes;
         elementCounts = elementCounts == null ? List.of() : List.copyOf(elementCounts);
     }
 

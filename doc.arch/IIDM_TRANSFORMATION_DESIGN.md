@@ -41,14 +41,18 @@ payload IDs or CNM snapshot IDs.
   source-profile linkage, source file IDs/names, timestamps, and IIDM network
   ID.
 - `iidm-networks`: IIDM network metadata, source filenames, element counts,
-  XIIDM payload, and GUI-oriented JSON table projection.
+  and object references for the XIIDM payload and GUI-oriented JSON table
+  projection.
 
 XIIDM remains the canonical PowSyBl interchange representation. The JSON
 projection is stored to render GUI tables without reconstructing a PowSyBl
 network for every selected table.
 
-Large XIIDM and JSON payloads are chunked when needed. List APIs exclude heavy
-payload fields.
+Large XIIDM and JSON payloads are stored in MinIO under the
+`iidm-network-payloads` bucket. Elasticsearch stores searchable metadata,
+object keys, checksums, byte sizes, element counts, and diagnostics. List APIs
+therefore never return heavy payload fields; selected table and Grid View APIs
+load the referenced payload lazily.
 
 ## Diagnostics
 
@@ -106,7 +110,8 @@ sequenceDiagram
   IIDM->>PowSyBl: Convert CGMES source set to IIDM Network
   PowSyBl-->>IIDM: Network or exception
   IIDM->>IIDM: Build XIIDM and JSON table projection
-  IIDM->>ES: Save iidm-networks
+  IIDM->>MinIO: Store XIIDM and JSON projection payloads
+  IIDM->>ES: Save iidm-networks metadata and payload refs
   IIDM->>ES: Save iidm-profile-transforms
   GUI->>IIDM: List transforms for selected import
   GUI->>IIDM: Load selected network table metadata/page
