@@ -25,11 +25,13 @@ public record CnmProfileFragmentDocument(
         List<String> diagnostics,
         String fragmentJson,
         List<String> fragmentJsonChunks,
+        Integer fragmentJsonChunkCount,
         Object importedAt) {
     public CnmProfileFragmentDocument {
         entityCounts = entityCounts == null ? Map.of() : Map.copyOf(entityCounts);
         diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
         fragmentJson = fragmentJson == null ? "" : fragmentJson;
         fragmentJsonChunks = fragmentJsonChunks == null ? List.of() : List.copyOf(fragmentJsonChunks);
+        fragmentJsonChunkCount = fragmentJsonChunkCount == null ? fragmentJsonChunks.size() : fragmentJsonChunkCount;
     }
 }

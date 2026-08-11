@@ -18,6 +18,8 @@ import java.util.Map;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 
 /**
@@ -46,6 +48,7 @@ public class IidmNetworkJsonProjection {
         projection.put("line-positions", stream(network.getLines()).stream()
                 .flatMap(line -> extensionPositionRows(line).stream())
                 .toList());
+        projection.put("iidm-positions", allPositionRows(network));
         return projection;
     }
 
@@ -147,11 +150,57 @@ public class IidmNetworkJsonProjection {
         return rows;
     }
 
+    private List<Map<String, Object>> allPositionRows(Network network) {
+        Set<String> seen = new LinkedHashSet<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Identifiable<?> identifiable : identifiableElements(network)) {
+            for (Map<String, Object> row : extensionPositionRows(identifiable)) {
+                String rowId = String.valueOf(row.getOrDefault("rowId", ""));
+                if (seen.add(rowId)) {
+                    rows.add(row);
+                }
+            }
+        }
+        return rows;
+    }
+
+    private List<Identifiable<?>> identifiableElements(Network network) {
+        List<Identifiable<?>> elements = new ArrayList<>();
+        addElements(elements, network, "getSubstations");
+        addElements(elements, network, "getVoltageLevels");
+        addElements(elements, network, "getLines");
+        addElements(elements, network, "getTwoWindingsTransformers");
+        addElements(elements, network, "getThreeWindingsTransformers");
+        addElements(elements, network, "getGenerators");
+        addElements(elements, network, "getLoads");
+        addElements(elements, network, "getBatteries");
+        addElements(elements, network, "getShuntCompensators");
+        addElements(elements, network, "getStaticVarCompensators");
+        addElements(elements, network, "getDanglingLines");
+        addElements(elements, network, "getHvdcLines");
+        addElements(elements, network, "getSwitches");
+        addElements(elements, network, "getBusbarSections");
+        return elements;
+    }
+
+    private void addElements(List<Identifiable<?>> elements, Network network, String methodName) {
+        Object result = invoke(network, methodName);
+        if (!(result instanceof Iterable<?> iterable)) {
+            return;
+        }
+        for (Object value : iterable) {
+            if (value instanceof Identifiable<?> identifiable) {
+                elements.add(identifiable);
+            }
+        }
+    }
+
     private Map<String, Object> positionRow(Identifiable<?> identifiable, Extension<?> extension, Object point, int sequence) {
         Object source = point == null ? extension : point;
         Map<String, Object> row = identifiableRow(identifiable,
                 "elementType", identifiable.getType().name(),
                 "extensionType", extension.getClass().getSimpleName(),
+                "canonicalId", canonicalId(identifiable.getId()),
                 "sequenceNumber", sequence,
                 "latitude", firstAvailable(source, "getLatitude", "getLat", "getY", "getYPosition"),
                 "longitude", firstAvailable(source, "getLongitude", "getLon", "getLng", "getX", "getXPosition"),
@@ -160,6 +209,23 @@ public class IidmNetworkJsonProjection {
                 "zPosition", firstAvailable(source, "getZPosition", "getZ"));
         row.put("rowId", identifiable.getId() + ":" + extension.getClass().getSimpleName() + ":" + sequence);
         return row;
+    }
+
+    private String canonicalId(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.trim();
+        int hash = normalized.lastIndexOf('#');
+        int slash = normalized.lastIndexOf('/');
+        int index = Math.max(hash, slash);
+        if (index >= 0 && index < normalized.length() - 1) {
+            normalized = normalized.substring(index + 1);
+        }
+        while (normalized.startsWith("_")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private Object firstAvailable(Object target, String... methodNames) {

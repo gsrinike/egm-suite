@@ -50,6 +50,8 @@ import eu.egm.mapping.JsonMappingService;
 import eu.egm.mapping.ReflectionMappingService;
 import eu.egm.srv.iidm.transformer.domain.CnmProfileReadDocument;
 import eu.egm.srv.iidm.transformer.domain.CnmProfileReadDocumentAdapter;
+import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadChunkReadDocument;
+import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadChunkReadDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocument;
 import eu.egm.srv.iidm.transformer.domain.CnmProfilePayloadReadDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.CnmNetworkSnapshotReadDocument;
@@ -95,6 +97,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private final DocumentRepositoryService<CnmProfileReadDocument> sourceProfileRepository;
     private final DocumentRepositoryService<CnmProfilePayloadReadDocument> sourcePayloadRepository;
+    private final DocumentRepositoryService<CnmProfilePayloadChunkReadDocument> sourcePayloadChunkRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotReadDocument> sourceSnapshotRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotPayloadReadDocument> sourceSnapshotPayloadRepository;
     private final DocumentRepositoryService<IidmProfileTransformDocument> transformRepository;
@@ -127,6 +130,8 @@ public class IidmProfileTransformService extends RestServiceSupport {
         super(environment, observationRegistry);
         this.sourceProfileRepository = infrastructureUtils.documentRepository(new CnmProfileReadDocumentAdapter());
         this.sourcePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadReadDocumentAdapter());
+        this.sourcePayloadChunkRepository =
+                infrastructureUtils.documentRepository(new CnmProfilePayloadChunkReadDocumentAdapter());
         this.sourceSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotReadDocumentAdapter());
         this.sourceSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadReadDocumentAdapter());
         this.transformRepository = infrastructureUtils.documentRepository(new IidmProfileTransformDocumentAdapter());
@@ -642,7 +647,15 @@ public class IidmProfileTransformService extends RestServiceSupport {
         if (payload.profileJson() != null && !payload.profileJson().isBlank()) {
             return payload.profileJson();
         }
-        return String.join("", payload.profileJsonChunks());
+        if (payload.profileJsonChunks() != null && !payload.profileJsonChunks().isEmpty()) {
+            return String.join("", payload.profileJsonChunks());
+        }
+        return sourcePayloadChunkRepository.findByField("fileId", payload.fileId(), 10_000)
+                .stream()
+                .filter(chunk -> payload.importId().equals(chunk.importId()))
+                .sorted((left, right) -> Integer.compare(number(left.chunkIndex()), number(right.chunkIndex())))
+                .map(CnmProfilePayloadChunkReadDocument::chunkJson)
+                .reduce("", String::concat);
     }
 
     private List<String> chunks(String value) {
@@ -942,10 +955,17 @@ public class IidmProfileTransformService extends RestServiceSupport {
                     positionColumns(),
                     projectedRowsOrEmpty(document, "line-positions"),
                     "id");
+            case "iidm-positions" -> new IidmTableSpec(
+                    "iidm-positions",
+                    "IIDM positions",
+                    positionColumns(),
+                    projectedRowsOrEmpty(document, "iidm-positions"),
+                    "id");
             case "gl-locations" -> new IidmTableSpec(
                     "gl-locations",
                     "GL locations",
-                    columns("mRID", "mRID", "name", "Name", "type", "Type", "powerSystemResourceId", "Grid element",
+                    columns("mRID", "mRID", "canonicalMRID", "Canonical mRID", "name", "Name", "type", "Type",
+                            "powerSystemResourceId", "Grid element", "canonicalPowerSystemResource", "Canonical grid element",
                             "coordinateSystemId", "Coordinate system", "sourceFileId", "Source file"),
                     glProfileRows(document, "locations"),
                     "mRID");
@@ -973,8 +993,11 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 projectedRowsOrEmpty(document, "substation-positions").size()));
         specs.add(new IidmTableSpec("line-positions", "Line positions", positionColumns(), List.of(), "id",
                 projectedRowsOrEmpty(document, "line-positions").size()));
+        specs.add(new IidmTableSpec("iidm-positions", "IIDM positions", positionColumns(), List.of(), "id",
+                projectedRowsOrEmpty(document, "iidm-positions").size()));
         specs.add(new IidmTableSpec("gl-locations", "GL locations",
-                columns("mRID", "mRID", "name", "Name", "type", "Type", "powerSystemResourceId", "Grid element",
+                columns("mRID", "mRID", "canonicalMRID", "Canonical mRID", "name", "Name", "type", "Type",
+                        "powerSystemResourceId", "Grid element", "canonicalPowerSystemResource", "Canonical grid element",
                         "coordinateSystemId", "Coordinate system", "sourceFileId", "Source file"),
                 List.of(), "mRID", glProfileRows(document, "locations").size()));
         specs.add(new IidmTableSpec("gl-position-points", "GL position points",
@@ -998,6 +1021,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 row("Timeframe", document.timeFrame()),
                 row("IIDM substation positions", projectedRowsOrEmpty(document, "substation-positions").size()),
                 row("IIDM line positions", projectedRowsOrEmpty(document, "line-positions").size()),
+                row("IIDM positions", projectedRowsOrEmpty(document, "iidm-positions").size()),
                 row("GL locations", glProfileRows(document, "locations").size()),
                 row("GL position points", glProfileRows(document, "positionPoints").size()),
                 row("GL coordinate systems", glProfileRows(document, "coordinateSystems").size()));
@@ -1099,11 +1123,35 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 if (value instanceof Map<?, ?> map) {
                     Map<String, Object> row = toStringKeyMap(map);
                     row.put("sourceFileId", payload.fileId());
+                    enrichCanonicalGlRow(section, row);
                     rows.add(row);
                 }
             }
         }
         return rows;
+    }
+
+    private void enrichCanonicalGlRow(String section, Map<String, Object> row) {
+        Object mRID = row.get("mRID");
+        if (mRID != null) {
+            row.putIfAbsent("canonicalMRID", canonicalId(String.valueOf(mRID)));
+        }
+        if ("locations".equals(section)) {
+            Object resource = row.get("powerSystemResourceId");
+            if (resource != null) {
+                row.putIfAbsent("canonicalPowerSystemResource", canonicalId(String.valueOf(resource)));
+            }
+            Object coordinateSystem = row.get("coordinateSystemId");
+            if (coordinateSystem != null) {
+                row.putIfAbsent("canonicalCoordinateSystem", canonicalId(String.valueOf(coordinateSystem)));
+            }
+        }
+        if ("positionPoints".equals(section)) {
+            Object location = row.get("locationId");
+            if (location != null) {
+                row.putIfAbsent("canonicalLocation", canonicalId(String.valueOf(location)));
+            }
+        }
     }
 
     private List<CnmProfilePayloadReadDocument> glProfilePayloads(IidmNetworkDocument document) {
@@ -1150,8 +1198,11 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 })
                 .toList();
         List<Map<String, Object>> substationPositions = projectedRowsOrEmpty(document, "substation-positions");
+        List<Map<String, Object>> iidmPositions = projectedRowsOrEmpty(document, "iidm-positions");
         List<String> diagnostics = new ArrayList<>();
         diagnostics.add("Grid View generated from stored GL profile coordinates");
+        diagnostics.add("IIDM position extensions found: " + iidmPositions.size());
+        diagnostics.add("IIDM substation position extensions found: " + substationPositions.size());
         if (points.isEmpty()) {
             diagnostics.add("No GL position points were available for this IIDM network");
         }
@@ -1290,7 +1341,11 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private boolean isGeographicalLocationPayload(CnmProfilePayloadReadDocument payload) {
         String type = payload.profileJsonType() == null ? "" : payload.profileJsonType();
-        return type.contains("GEOGRAPHICAL_LOCATION") || type.endsWith("_GL");
+        String normalized = type.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_');
+        return normalized.contains("GEOGRAPHICAL_LOCATION")
+                || normalized.endsWith("_GL")
+                || normalized.equals("CGMES_GL")
+                || normalized.equals("GL");
     }
 
     private Map<String, Object> toStringKeyMap(Map<?, ?> source) {
@@ -1482,8 +1537,25 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private List<DynamicTableColumn> positionColumns() {
         return columns("id", "ID", "name", "Name", "elementType", "Element type", "extensionType", "Extension",
-                "sequenceNumber", "Sequence", "latitude", "Latitude", "longitude", "Longitude",
+                "canonicalId", "Canonical ID", "sequenceNumber", "Sequence", "latitude", "Latitude", "longitude", "Longitude",
                 "xPosition", "X", "yPosition", "Y", "zPosition", "Z");
+    }
+
+    private String canonicalId(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.trim();
+        int hash = normalized.lastIndexOf('#');
+        int slash = normalized.lastIndexOf('/');
+        int index = Math.max(hash, slash);
+        if (index >= 0 && index < normalized.length() - 1) {
+            normalized = normalized.substring(index + 1);
+        }
+        while (normalized.startsWith("_")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private List<DynamicTableColumn> columns(String... keyLabels) {

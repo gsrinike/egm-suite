@@ -49,7 +49,10 @@ final class CgmStreamingRdfHandler extends AbstractRDFHandler {
             return;
         }
         if (object instanceof Resource resource) {
-            mutable(subject).references.put(normalizedKey(predicate), subjectId(resource));
+            String key = normalizedKey(predicate);
+            String referencedId = subjectId(resource);
+            mutable(subject).references.put(key, referencedId);
+            mutable(subject).references.putIfAbsent("canonical" + key, canonicalId(referencedId));
         }
     }
 
@@ -72,6 +75,7 @@ final class CgmStreamingRdfHandler extends AbstractRDFHandler {
             String mRID = valueOr(String.valueOf(mutable.attributes.getOrDefault("mRID", "")), mutable.subject);
             mRID = valueOr(mRID, profileType + "-" + index++);
             mutable.attributes.putIfAbsent("mRID", mRID);
+            mutable.attributes.putIfAbsent("canonicalMRID", canonicalId(mRID));
             mutable.attributes.putIfAbsent("type", type);
             facts.add(new RdfFact(mRID, type, mutable.attributes, mutable.references));
         }
@@ -102,6 +106,14 @@ final class CgmStreamingRdfHandler extends AbstractRDFHandler {
         int slash = trimmed.lastIndexOf('/');
         int index = Math.max(hash, slash);
         return index >= 0 && index < trimmed.length() - 1 ? trimmed.substring(index + 1) : trimmed;
+    }
+
+    private String canonicalId(String value) {
+        String normalized = normalizeResourceId(value);
+        while (normalized.startsWith("_")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private ProfileFamily family(String uri) {

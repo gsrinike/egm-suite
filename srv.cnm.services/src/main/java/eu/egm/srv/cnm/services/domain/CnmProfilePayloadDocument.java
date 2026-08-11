@@ -15,9 +15,11 @@ public record CnmProfilePayloadDocument(
         String profileJsonType,
         String profileJson,
         List<String> profileJsonChunks,
+        Integer profileJsonChunkCount,
         Object importedAt) {
     public CnmProfilePayloadDocument {
         profileJson = profileJson == null ? "" : profileJson;
         profileJsonChunks = profileJsonChunks == null ? List.of() : List.copyOf(profileJsonChunks);
+        profileJsonChunkCount = profileJsonChunkCount == null ? profileJsonChunks.size() : profileJsonChunkCount;
     }
 }

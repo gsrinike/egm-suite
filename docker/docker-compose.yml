@@ -6,7 +6,7 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms3g -Xmx3g}
       - indices.memory.index_buffer_size=${ELASTICSEARCH_INDEX_BUFFER_SIZE:-15%}
-    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-4g}
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-5g}
     ports:
       - "9200:9200"
     healthcheck:

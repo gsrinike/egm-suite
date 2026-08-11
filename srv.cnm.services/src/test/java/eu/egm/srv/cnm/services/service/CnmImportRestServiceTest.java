@@ -35,8 +35,12 @@ import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.rdf.RdfMetadataExtractor;
@@ -783,6 +787,12 @@ class CnmImportRestServiceTest {
                 }
                 if (adapter instanceof CnmProfileFragmentDocumentAdapter) {
                     return (DocumentRepositoryService<T>) profileFragmentRepository;
+                }
+                if (adapter instanceof CnmProfilePayloadChunkDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) new NoopDocumentRepository<CnmProfilePayloadChunkDocument>();
+                }
+                if (adapter instanceof CnmProfileFragmentChunkDocumentAdapter) {
+                    return (DocumentRepositoryService<T>) new NoopDocumentRepository<CnmProfileFragmentChunkDocument>();
                 }
                 if (adapter instanceof CnmNetworkSnapshotDocumentAdapter) {
                     return (DocumentRepositoryService<T>) networkSnapshotRepository;

@@ -5,9 +5,11 @@ import eu.egm.data.cnm.common.RdfProfileReference;
 import eu.egm.data.cnm.cgmes.CgmesProfileKind;
 import eu.egm.data.cnm.nc.NCProfileKind;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFParser;
 import org.eclipse.rdf4j.rio.Rio;
@@ -20,6 +22,8 @@ import org.eclipse.rdf4j.rio.Rio;
  * by compact DTO maps rather than semantic-web object retention.</p>
  */
 class RdfXmlProfileParser {
+    private static final Pattern RDF_ID_ATTRIBUTE = Pattern.compile("rdf:ID=\"_?([^\"]+)\"");
+
     /**
      * Parses one RDF/XML payload and applies filename metadata as a trusted
      * fallback when the RDF profile header is incomplete.
@@ -34,7 +38,7 @@ class RdfXmlProfileParser {
             CgmStreamingRdfHandler handler = new CgmStreamingRdfHandler();
             RDFParser parser = Rio.createParser(RDFFormat.RDFXML);
             parser.setRDFHandler(handler);
-            parser.parse(new ByteArrayInputStream(payload), "https://egm.local/cnm/rdf/");
+            parser.parse(new ByteArrayInputStream(parseSafePayload(payload)), "https://egm.local/cnm/rdf/");
             List<RdfProfileReference> profiles = handler.profiles();
             ProfileFamily rdfFamily = profiles.stream()
                     .map(RdfProfileReference::family)
@@ -109,5 +113,11 @@ class RdfXmlProfileParser {
 
     private String valueOr(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private byte[] parseSafePayload(byte[] payload) {
+        String rdf = new String(payload, StandardCharsets.UTF_8);
+        String normalized = RDF_ID_ATTRIBUTE.matcher(rdf).replaceAll("rdf:about=\"#$1\"");
+        return normalized.getBytes(StandardCharsets.UTF_8);
     }
 }

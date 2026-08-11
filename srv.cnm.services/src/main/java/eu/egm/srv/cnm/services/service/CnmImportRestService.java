@@ -51,8 +51,12 @@ import eu.egm.srv.cnm.services.domain.CnmNetworkSnapshotPayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocument.CnmEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.IidmProfileTransformReadDocument;
@@ -94,6 +98,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class CnmImportRestService extends RestServiceSupport {
     private static final int PROFILE_JSON_CHUNK_SIZE = 1_000_000;
+    private static final int PROFILE_JSON_CHUNK_BATCH_SIZE = 10;
     private static final int SNAPSHOT_PAYLOAD_SECTION_TARGET_SIZE = 500_000;
     private static final int MAX_PROFILE_PAGE_SIZE = 50;
     private static final List<String> PROFILE_LIST_EXCLUDED_FIELDS = List.of("profileJson", "profileJsonChunks");
@@ -108,6 +113,8 @@ public class CnmImportRestService extends RestServiceSupport {
     private final DocumentRepositoryService<CnmProfileDocument> profileRepository;
     private final DocumentRepositoryService<CnmProfilePayloadDocument> profilePayloadRepository;
     private final DocumentRepositoryService<CnmProfileFragmentDocument> profileFragmentRepository;
+    private final DocumentRepositoryService<CnmProfilePayloadChunkDocument> profilePayloadChunkRepository;
+    private final DocumentRepositoryService<CnmProfileFragmentChunkDocument> profileFragmentChunkRepository;
     private final DocumentRepositoryService<CnmMridIndexDocument> mridIndexRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotDocument> networkSnapshotRepository;
     private final DocumentRepositoryService<CnmNetworkSnapshotPayloadDocument> networkSnapshotPayloadRepository;
@@ -172,6 +179,10 @@ public class CnmImportRestService extends RestServiceSupport {
         this.profileRepository = infrastructureUtils.documentRepository(new CnmProfileDocumentAdapter());
         this.profilePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadDocumentAdapter());
         this.profileFragmentRepository = infrastructureUtils.documentRepository(new CnmProfileFragmentDocumentAdapter());
+        this.profilePayloadChunkRepository =
+                infrastructureUtils.documentRepository(new CnmProfilePayloadChunkDocumentAdapter());
+        this.profileFragmentChunkRepository =
+                infrastructureUtils.documentRepository(new CnmProfileFragmentChunkDocumentAdapter());
         this.mridIndexRepository = infrastructureUtils.documentRepository(new CnmMridIndexDocumentAdapter());
         this.networkSnapshotRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotDocumentAdapter());
         this.networkSnapshotPayloadRepository = infrastructureUtils.documentRepository(new CnmNetworkSnapshotPayloadDocumentAdapter());
@@ -756,9 +767,9 @@ public class CnmImportRestService extends RestServiceSupport {
             processed = withParsedMetadata(target, metadata);
             profileRepository.save(toProfileDocument(current.id(), processed, metadata));
             timings.mark("profileMetadataSave");
-            profilePayloadRepository.save(toProfilePayloadDocument(current.id(), processed, metadata));
+            saveProfilePayload(current.id(), processed, metadata);
             timings.mark("profilePayloadSave");
-            profileFragmentRepository.save(toProfileFragmentDocument(current.id(), processed, metadata));
+            saveProfileFragment(current.id(), processed, metadata);
             timings.mark("profileFragmentSave");
             if (mridIndexEnabled) {
                 mridIndexRepository.saveAll(toMridIndexDocuments(current.id(), processed, metadata));
@@ -1238,15 +1249,27 @@ public class CnmImportRestService extends RestServiceSupport {
         if ((json == null || json.isBlank()) && document.fragmentJsonChunks() != null) {
             json = String.join("", document.fragmentJsonChunks());
         }
+        if (json == null || json.isBlank()) {
+            json = joinedFragmentChunks(document.importId(), document.fileId());
+        }
         return jsonMappingService.fromJson(json, ProfileFragment.class);
+    }
+
+    private void saveProfileFragment(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
+        ProfileFragment fragment = metadata.fragment();
+        String fragmentJson = jsonMappingService.toJson(fragment);
+        List<String> fragmentChunks = chunks(fragmentJson);
+        profileFragmentRepository.save(toProfileFragmentDocument(importId, file, metadata, fragment, fragmentJson, fragmentChunks.size()));
+        saveFragmentChunks(importId, file, fragmentChunks);
     }
 
     private CnmProfileFragmentDocument toProfileFragmentDocument(
             String importId,
             CnmImportFileDocument file,
-            RdfMetadata metadata) {
-        ProfileFragment fragment = metadata.fragment();
-        String fragmentJson = jsonMappingService.toJson(fragment);
+            RdfMetadata metadata,
+            ProfileFragment fragment,
+            String fragmentJson,
+            int fragmentJsonChunkCount) {
         return new CnmProfileFragmentDocument(
                 file.fileId(),
                 importId,
@@ -1264,8 +1287,23 @@ public class CnmImportRestService extends RestServiceSupport {
                 fragment.facts().size(),
                 metadata.warnings(),
                 fragmentJson.length() <= PROFILE_JSON_CHUNK_SIZE ? fragmentJson : "",
-                chunks(fragmentJson),
+                List.of(),
+                fragmentJsonChunkCount,
                 file.uploadedAt());
+    }
+
+    private void saveFragmentChunks(String importId, CnmImportFileDocument file, List<String> chunks) {
+        List<CnmProfileFragmentChunkDocument> documents = new ArrayList<>();
+        for (int index = 0; index < chunks.size(); index++) {
+            documents.add(new CnmProfileFragmentChunkDocument(
+                    chunkDocumentId(file.fileId(), index),
+                    importId,
+                    file.fileId(),
+                    index,
+                    chunks.get(index),
+                    file.uploadedAt()));
+        }
+        saveInSmallBatches(profileFragmentChunkRepository, documents);
     }
 
     private List<CnmMridIndexDocument> toMridIndexDocuments(
@@ -2012,19 +2050,53 @@ public class CnmImportRestService extends RestServiceSupport {
                 file.uploadedAt());
     }
 
+    private void saveProfilePayload(String importId, CnmImportFileDocument file, RdfMetadata metadata) {
+        String profileJson = jsonMappingService.toJson(metadata.payload());
+        List<String> profileChunks = chunks(profileJson);
+        profilePayloadRepository.save(toProfilePayloadDocument(importId, file, metadata, profileJson, profileChunks.size()));
+        savePayloadChunks(importId, file, metadata, profileChunks);
+    }
+
     private CnmProfilePayloadDocument toProfilePayloadDocument(
             String importId,
             CnmImportFileDocument file,
-            RdfMetadata metadata) {
-        String profileJson = jsonMappingService.toJson(metadata.payload());
+            RdfMetadata metadata,
+            String profileJson,
+            int profileJsonChunkCount) {
         return new CnmProfilePayloadDocument(
                 file.fileId(),
                 importId,
                 file.fileId(),
                 metadata.profileJsonType(),
                 profileJson.length() <= PROFILE_JSON_CHUNK_SIZE ? profileJson : "",
-                chunks(profileJson),
+                List.of(),
+                profileJsonChunkCount,
                 file.uploadedAt());
+    }
+
+    private void savePayloadChunks(
+            String importId,
+            CnmImportFileDocument file,
+            RdfMetadata metadata,
+            List<String> chunks) {
+        List<CnmProfilePayloadChunkDocument> documents = new ArrayList<>();
+        for (int index = 0; index < chunks.size(); index++) {
+            documents.add(new CnmProfilePayloadChunkDocument(
+                    chunkDocumentId(file.fileId(), index),
+                    importId,
+                    file.fileId(),
+                    index,
+                    metadata.profileJsonType(),
+                    chunks.get(index),
+                    file.uploadedAt()));
+        }
+        saveInSmallBatches(profilePayloadChunkRepository, documents);
+    }
+
+    private <T> void saveInSmallBatches(DocumentRepositoryService<T> repository, List<T> documents) {
+        for (int index = 0; index < documents.size(); index += PROFILE_JSON_CHUNK_BATCH_SIZE) {
+            repository.saveAll(documents.subList(index, Math.min(index + PROFILE_JSON_CHUNK_BATCH_SIZE, documents.size())));
+        }
     }
 
     private String profileJson(String importId, String fileId) {
@@ -2040,9 +2112,35 @@ public class CnmImportRestService extends RestServiceSupport {
             return payload.profileJson();
         }
         if (payload.profileJsonChunks() == null || payload.profileJsonChunks().isEmpty()) {
-            return "";
+            return joinedPayloadChunks(importId, fileId);
         }
         return String.join("", payload.profileJsonChunks());
+    }
+
+    private String joinedPayloadChunks(String importId, String fileId) {
+        return profilePayloadChunkRepository.findByField("fileId", fileId, chunkFetchLimit())
+                .stream()
+                .filter(chunk -> chunk.importId().equals(importId))
+                .sorted(Comparator.comparing(CnmProfilePayloadChunkDocument::chunkIndex))
+                .map(CnmProfilePayloadChunkDocument::chunkJson)
+                .reduce("", String::concat);
+    }
+
+    private String joinedFragmentChunks(String importId, String fileId) {
+        return profileFragmentChunkRepository.findByField("fileId", fileId, chunkFetchLimit())
+                .stream()
+                .filter(chunk -> chunk.importId().equals(importId))
+                .sorted(Comparator.comparing(CnmProfileFragmentChunkDocument::chunkIndex))
+                .map(CnmProfileFragmentChunkDocument::chunkJson)
+                .reduce("", String::concat);
+    }
+
+    private int chunkFetchLimit() {
+        return 10_000;
+    }
+
+    private String chunkDocumentId(String fileId, int chunkIndex) {
+        return fileId + ":" + chunkIndex;
     }
 
     private List<String> chunks(String value) {
