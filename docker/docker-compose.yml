@@ -4,9 +4,9 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms3g -Xmx3g}
+      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms5g -Xmx5g}
       - indices.memory.index_buffer_size=${ELASTICSEARCH_INDEX_BUFFER_SIZE:-15%}
-    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-5g}
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-6g}
     ports:
       - "9200:9200"
     healthcheck:
