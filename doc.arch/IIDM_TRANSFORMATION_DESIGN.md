@@ -71,9 +71,17 @@ The service exposes:
 - network summaries without heavy payload fields
 - table metadata for a network
 - one selected table page at a time
+- Grid View map data with GL bounds, markers, line paths, and diagnostics
 
 Search and paging are applied before the GUI receives table rows so large IIDM
 networks are not loaded into the browser at once.
+
+Grid View uses GL profile payloads associated with the transformed IIDM network.
+`srv.iidm.transformer` exposes `/api/iidm/networks/{networkId}/grid-view/map-data`
+for interactive map rendering and keeps the existing SVG map endpoint as a
+compatibility path. `gui.cnm.manager` renders the structured map data through
+`GeoNetworkMap` from `gui.common`, allowing pan, zoom, fit-to-data, and point
+inspection without loading every IIDM table into the browser.
 
 The IIDM request queue uses three listener attempts. After retry exhaustion the
 message is rejected without requeue and RabbitMQ routes it to the configured
@@ -102,4 +110,5 @@ sequenceDiagram
   IIDM->>ES: Save iidm-profile-transforms
   GUI->>IIDM: List transforms for selected import
   GUI->>IIDM: Load selected network table metadata/page
+  GUI->>IIDM: Load Grid View map-data for selected network
 ```

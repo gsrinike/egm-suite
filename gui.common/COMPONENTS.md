@@ -102,6 +102,33 @@ Use `DataTable` for a single known table. Use `DynamicTable` when the table list
 or columns are generated at runtime. `DynamicTable` composes `DataTable`; it is
 not a replacement for all table screens.
 
+## GeoNetworkMap
+
+Interactive browser-side map for geographically located network data. It renders
+OpenStreetMap raster tiles, GL/IIDM markers, optional line paths, and a vector
+overlay without adding a framework-specific mapping dependency.
+
+Capabilities:
+
+- pan and mouse-wheel zoom
+- fit-to-data bounds
+- maximize/minimize map area
+- marker clustering for dense coordinate sets
+- point popup with supplied details
+
+Props:
+
+- `title`
+- `points`: `{ id, label, latitude, longitude, details }[]`
+- `lines`: `{ id, label, points, details }[]`
+- `bounds`
+- `tileUrl`
+- `attribution`
+
+Use it when a feature already has WGS84 coordinates and needs an inspectable map
+inside Vue. Backend services should send bounded point/line data; large tabular
+payloads remain behind `DynamicTable`.
+
 ## RefreshButton
 
 Icon-style reload button. It emits `refresh` and can optionally reload the whole

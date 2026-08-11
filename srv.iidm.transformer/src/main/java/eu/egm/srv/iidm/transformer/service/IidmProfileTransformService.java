@@ -66,6 +66,10 @@ import eu.egm.srv.iidm.transformer.domain.IidmGridViewDocumentAdapter;
 import eu.egm.srv.iidm.transformer.domain.IidmProfileTransformDocument;
 import eu.egm.srv.iidm.transformer.domain.IidmProfileTransformDocumentAdapter;
 import eu.egm.srv.iidm.transformer.api.IidmElementCountResponse;
+import eu.egm.srv.iidm.transformer.api.IidmGridViewMapDataResponse;
+import eu.egm.srv.iidm.transformer.api.IidmGridViewMapDataResponse.GridViewBounds;
+import eu.egm.srv.iidm.transformer.api.IidmGridViewMapDataResponse.GridViewLine;
+import eu.egm.srv.iidm.transformer.api.IidmGridViewMapDataResponse.GridViewPoint;
 import eu.egm.srv.iidm.transformer.api.IidmGridViewMapResponse;
 import eu.egm.srv.iidm.transformer.api.IidmNetworkSummaryResponse;
 import eu.egm.srv.iidm.transformer.api.IidmPage;
@@ -85,6 +89,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.function.Function;
 import java.util.stream.StreamSupport;
 import org.springframework.beans.factory.annotation.Value;
@@ -539,6 +544,58 @@ public class IidmProfileTransformService extends RestServiceSupport {
             gridViewRepository.save(failed);
             throw exception;
         }
+    }
+
+    public IidmGridViewMapDataResponse gridViewMapData(String networkId) {
+        IidmNetworkDocument document = network(networkId);
+        List<Map<String, Object>> locationRows = glProfileRows(document, "locations");
+        List<GridPoint> glPoints = glProfileRows(document, "positionPoints").stream()
+                .map(this::toGridPoint)
+                .filter(GridPoint::valid)
+                .sorted(Comparator.comparing(GridPoint::locationId).thenComparingInt(GridPoint::sequenceNumber))
+                .toList();
+        Map<String, Map<String, Object>> locationsById = glLocationIndex(locationRows);
+        Map<String, List<GridPoint>> pointsByLocation = new LinkedHashMap<>();
+        for (GridPoint point : glPoints) {
+            String key = point.locationId().isBlank() ? point.rowId() : canonicalId(point.locationId());
+            pointsByLocation.computeIfAbsent(key, ignored -> new ArrayList<>()).add(point);
+        }
+
+        List<GridViewPoint> points = new ArrayList<>();
+        List<GridViewLine> lines = new ArrayList<>();
+        for (Map.Entry<String, List<GridPoint>> entry : pointsByLocation.entrySet()) {
+            List<GridPoint> groupedPoints = entry.getValue();
+            if (groupedPoints.isEmpty()) {
+                continue;
+            }
+            Map<String, Object> location = locationsById.getOrDefault(entry.getKey(), Map.of());
+            String label = gridLocationLabel(location, groupedPoints.getFirst());
+            List<GridViewPoint> linePoints = groupedPoints.stream()
+                    .map(point -> gridViewPoint(point, gridPointLabel(location, point), location))
+                    .toList();
+            if (linePoints.size() > 1) {
+                lines.add(new GridViewLine(entry.getKey(), label, linePoints, gridViewDetails(location, groupedPoints.getFirst())));
+            }
+            points.add(gridViewPoint(groupedPoints.getFirst(), label, location));
+        }
+
+        List<String> diagnostics = new ArrayList<>();
+        diagnostics.add("Grid View data generated from stored GL profile coordinates");
+        diagnostics.add("GL location rows found: " + locationRows.size());
+        diagnostics.add("GL position points found: " + glPoints.size());
+        diagnostics.add("Map markers generated: " + points.size());
+        diagnostics.add("Map lines generated: " + lines.size());
+        return new IidmGridViewMapDataResponse(
+                document.importId(),
+                document.id(),
+                document.tsoName(),
+                document.businessDay(),
+                document.businessTime(),
+                document.timeFrame(),
+                gridViewBounds(glPoints),
+                points,
+                lines,
+                diagnostics);
     }
 
     private CnmProfilePayloadReadDocument sourcePayload(String payloadId, String importId) {
@@ -1281,7 +1338,90 @@ public class IidmProfileTransformService extends RestServiceSupport {
         double longitude = coordinate(row.get("xPosition"));
         double latitude = coordinate(row.get("yPosition"));
         int sequence = integer(row.get("sequenceNumber"));
-        return new GridPoint(rowId, locationId, sequence, latitude, longitude);
+        String sourceFileId = String.valueOf(row.getOrDefault("sourceFileId", ""));
+        return new GridPoint(rowId, locationId, sequence, latitude, longitude, sourceFileId);
+    }
+
+    private Map<String, Map<String, Object>> glLocationIndex(List<Map<String, Object>> locations) {
+        Map<String, Map<String, Object>> index = new LinkedHashMap<>();
+        for (Map<String, Object> location : locations) {
+            putLocationIndex(index, location, location.get("canonicalMRID"));
+            putLocationIndex(index, location, location.get("mRID"));
+        }
+        return index;
+    }
+
+    private void putLocationIndex(Map<String, Map<String, Object>> index, Map<String, Object> location, Object key) {
+        String canonical = canonicalId(String.valueOf(key == null ? "" : key));
+        if (!canonical.isBlank()) {
+            index.putIfAbsent(canonical, location);
+        }
+    }
+
+    private GridViewPoint gridViewPoint(GridPoint point, String label, Map<String, Object> location) {
+        return new GridViewPoint(point.rowId(), label, point.latitude(), point.longitude(), gridViewDetails(location, point));
+    }
+
+    private Map<String, Object> gridViewDetails(Map<String, Object> location, GridPoint point) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (location != null) {
+            details.putAll(location);
+        }
+        details.put("positionPointId", point.rowId());
+        details.put("locationId", point.locationId());
+        details.put("canonicalLocationId", canonicalId(point.locationId()));
+        details.put("sequenceNumber", point.sequenceNumber());
+        details.put("latitude", point.latitude());
+        details.put("longitude", point.longitude());
+        details.put("sourceFileId", point.sourceFileId());
+        return details;
+    }
+
+    private String gridLocationLabel(Map<String, Object> location, GridPoint fallback) {
+        String name = location == null ? "" : stringValue(location.get("name"));
+        if (!name.isBlank()) {
+            return name;
+        }
+        String mRID = location == null ? "" : stringValue(location.get("mRID"));
+        if (!mRID.isBlank()) {
+            return mRID;
+        }
+        return fallback.rowId();
+    }
+
+    private String gridPointLabel(Map<String, Object> location, GridPoint point) {
+        String base = gridLocationLabel(location, point);
+        if (point.sequenceNumber() <= 0) {
+            return base;
+        }
+        return base + " #" + point.sequenceNumber();
+    }
+
+    private GridViewBounds gridViewBounds(List<GridPoint> points) {
+        if (points.isEmpty()) {
+            return new GridViewBounds(34.0, 72.0, -25.0, 45.0);
+        }
+        double minLatitude = 90.0;
+        double maxLatitude = -90.0;
+        double minLongitude = 180.0;
+        double maxLongitude = -180.0;
+        for (GridPoint point : points) {
+            minLatitude = Math.min(minLatitude, point.latitude());
+            maxLatitude = Math.max(maxLatitude, point.latitude());
+            minLongitude = Math.min(minLongitude, point.longitude());
+            maxLongitude = Math.max(maxLongitude, point.longitude());
+        }
+        double latitudePadding = Math.max((maxLatitude - minLatitude) * 0.12, 0.15);
+        double longitudePadding = Math.max((maxLongitude - minLongitude) * 0.12, 0.15);
+        return new GridViewBounds(
+                Math.max(-85.0, minLatitude - latitudePadding),
+                Math.min(85.0, maxLatitude + latitudePadding),
+                Math.max(-180.0, minLongitude - longitudePadding),
+                Math.min(180.0, maxLongitude + longitudePadding));
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     private double projectX(double longitude, int left, int width) {
@@ -1586,7 +1726,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
         }
     }
 
-    private record GridPoint(String rowId, String locationId, int sequenceNumber, double latitude, double longitude) {
+    private record GridPoint(String rowId, String locationId, int sequenceNumber, double latitude, double longitude, String sourceFileId) {
         boolean valid() {
             return Double.isFinite(latitude) && Double.isFinite(longitude);
         }

@@ -117,7 +117,7 @@
       <label>Search table
         <input v-model="gridTableSearch" placeholder="Search selected Grid View table" @keyup.enter="searchGridTableRows" />
       </label>
-      <Button :disabled="busy || !selectedGridNetworkId" @click="refreshGridMap">Regenerate map</Button>
+      <Button :disabled="busy || !selectedGridNetworkId" @click="refreshGridMap">Refresh map</Button>
       <Button :disabled="busy || !selectedGridTableId" @click="searchGridTableRows">Search</Button>
       <Button :disabled="busy || !gridTableSearch" @click="clearGridTableSearch">Clear</Button>
     </section>
@@ -264,10 +264,16 @@
 
     <section v-if="activeView === 'grid-view-data'" class="glass-panel grid-map-panel">
       <div class="grid-map-meta">
-        <strong>{{ gridMap?.state ?? 'Map not generated' }}</strong>
+        <strong>{{ gridMapData?.points.length ? 'GL coordinates loaded' : 'No GL coordinates available' }}</strong>
         <span>{{ gridMapSummary }}</span>
       </div>
-      <div v-if="gridMap?.svg" class="grid-map-svg" v-html="gridMap.svg"></div>
+      <GeoNetworkMap
+        v-if="gridMapData"
+        title="GL geographical layout"
+        :points="gridMapData.points"
+        :lines="gridMapData.lines"
+        :bounds="gridMapData.bounds"
+      />
       <p v-else class="status-message">No Grid View map available</p>
     </section>
 
@@ -294,6 +300,7 @@ import {
   DataTable,
   Dropdown,
   DynamicTable,
+  GeoNetworkMap,
   Link,
   logClientError,
   Menu,
@@ -303,7 +310,7 @@ import {
   getImport,
   getIidmGridViewTables,
   getIidmGridViewTableRows,
-  getIidmGridViewMap,
+  getIidmGridViewMapData,
   getIidmNetworkTables,
   getIidmNetworkTableRows,
   getProfileTables,
@@ -317,7 +324,7 @@ import {
   type CnmSnapshotMetadata,
   type DynamicTableBundle,
   type IidmTransformationStatus,
-  type IidmGridViewMap,
+  type IidmGridViewMapData,
   type IidmTableBundle,
   type IidmTransformSummary,
   type ImportStatus,
@@ -357,7 +364,7 @@ const selectedIidmImportId = ref('');
 const selectedGridImportId = ref('');
 const iidmTables = ref<IidmTableBundle>();
 const gridTables = ref<IidmTableBundle>();
-const gridMap = ref<IidmGridViewMap>();
+const gridMapData = ref<IidmGridViewMapData>();
 const selectedIidmNetworkId = ref('');
 const selectedGridNetworkId = ref('');
 const selectedIidmTableId = ref('');
@@ -507,10 +514,10 @@ const gridRows = computed(() => iidmTransforms.value
     completedAt: formatDateTime(transform.completedAt)
   })));
 const gridMapSummary = computed(() => {
-  if (!gridMap.value) {
+  if (!gridMapData.value) {
     return '';
   }
-  return `${gridMap.value.coordinateCount} coordinates, ${gridMap.value.lineCount} lines, ${gridMap.value.substationCount} substation positions`;
+  return `${gridMapData.value.points.length} points, ${gridMapData.value.lines.length} lines`;
 });
 const snapshotRows = computed(() => selectedImportSnapshots.value.map((snapshot) => ({
   ...snapshot,
@@ -596,7 +603,7 @@ watch(selectedGridImportId, () => {
   clearMessage();
   iidmTransforms.value = [];
   gridTables.value = undefined;
-  gridMap.value = undefined;
+  gridMapData.value = undefined;
   selectedGridNetworkId.value = '';
   selectedGridTableId.value = '';
   gridTableSearch.value = '';
@@ -911,9 +918,9 @@ async function openGridTables(networkId: string) {
   selectedGridTableId.value = '';
   gridTablePage.value = 0;
   gridTableSearch.value = '';
-  gridMap.value = undefined;
+  gridMapData.value = undefined;
   try {
-    gridMap.value = await getIidmGridViewMap(networkId);
+    gridMapData.value = await getIidmGridViewMapData(networkId);
     gridTables.value = await getIidmGridViewTables(networkId);
     selectedGridTableId.value = gridTables.value.tables[0]?.tableId ?? '';
     activeView.value = 'grid-view-data';
@@ -935,10 +942,10 @@ async function refreshGridMap() {
   busy.value = true;
   clearMessage();
   try {
-    gridMap.value = await getIidmGridViewMap(selectedGridNetworkId.value, true);
+    gridMapData.value = await getIidmGridViewMapData(selectedGridNetworkId.value);
   } catch (error) {
     logClientError('refreshGridMap failed', error, { networkId: selectedGridNetworkId.value });
-    message.value = error instanceof Error ? error.message : 'Unable to regenerate Grid View map';
+    message.value = error instanceof Error ? error.message : 'Unable to refresh Grid View map';
   } finally {
     busy.value = false;
   }

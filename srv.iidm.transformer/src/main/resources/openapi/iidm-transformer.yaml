@@ -108,6 +108,14 @@ paths:
       responses:
         '200':
           description: Regenerated Grid View SVG map response
+  /api/iidm/networks/{networkId}/grid-view/map-data:
+    get:
+      summary: Get interactive Grid View map coordinates for a selected network
+      parameters:
+        - { name: networkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: GL coordinate map data with bounds, markers, lines, and diagnostics
 components:
   schemas:
     IidmTransformState:

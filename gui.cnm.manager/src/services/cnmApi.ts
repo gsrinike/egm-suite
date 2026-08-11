@@ -149,6 +149,41 @@ export interface IidmGridViewMap {
   generatedAt: string;
 }
 
+export interface IidmGridViewMapBounds {
+  minLatitude: number;
+  maxLatitude: number;
+  minLongitude: number;
+  maxLongitude: number;
+}
+
+export interface IidmGridViewMapPoint {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  details: Record<string, unknown>;
+}
+
+export interface IidmGridViewMapLine {
+  id: string;
+  label: string;
+  points: IidmGridViewMapPoint[];
+  details: Record<string, unknown>;
+}
+
+export interface IidmGridViewMapData {
+  importId: string;
+  networkId: string;
+  tsoName: string;
+  businessDay: string;
+  businessTime: string;
+  timeFrame: string;
+  bounds: IidmGridViewMapBounds;
+  points: IidmGridViewMapPoint[];
+  lines: IidmGridViewMapLine[];
+  diagnostics: string[];
+}
+
 export interface DynamicTableColumn {
   key: string;
   label: string;
@@ -441,6 +476,16 @@ export async function getIidmGridViewMap(networkId: string, regenerate = false):
   const response = await fetch(url, { method: regenerate ? 'POST' : 'GET' });
   if (!response.ok) {
     throw await HttpClientError.fromResponse('Unable to load Grid View map', url, response);
+  }
+  return response.json();
+}
+
+export async function getIidmGridViewMapData(networkId: string): Promise<IidmGridViewMapData> {
+  const baseUrl = iidmBaseUrl();
+  const url = `${baseUrl}/api/iidm/networks/${encodeURIComponent(networkId)}/grid-view/map-data`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw await HttpClientError.fromResponse('Unable to load Grid View map data', url, response);
   }
   return response.json();
 }

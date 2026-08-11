@@ -188,19 +188,6 @@ select {
   font-size: 13px;
 }
 
-.grid-map-svg {
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  max-height: 620px;
-  overflow: auto;
-}
-
-.grid-map-svg svg {
-  display: block;
-  height: auto;
-  width: 100%;
-}
-
 @media (max-width: 860px) {
   .toolbar,
   .profile-filters {

@@ -90,4 +90,9 @@ public class IidmTransformController {
     public IidmGridViewMapResponse gridViewMap(@PathVariable String networkId) {
         return transformService.gridViewMap(networkId, false);
     }
+
+    @GetMapping("/networks/{networkId}/grid-view/map-data")
+    public IidmGridViewMapDataResponse gridViewMapData(@PathVariable String networkId) {
+        return transformService.gridViewMapData(networkId);
+    }
 }
