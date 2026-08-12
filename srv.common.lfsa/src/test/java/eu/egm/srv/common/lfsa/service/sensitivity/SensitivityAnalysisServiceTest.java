@@ -34,13 +34,13 @@ class SensitivityAnalysisServiceTest {
         CapturingRepository<IidmNetworkReadDocument> networks = new CapturingRepository<>();
         imports.save(importDocument("ready-import", ImportState.SUCCESS, IidmTransformationStatus.DONE));
         imports.save(importDocument("not-iidm-ready", ImportState.SUCCESS, IidmTransformationStatus.STARTED));
-        networks.save(networkDocument("network-1", "ready-import"));
+        networks.save(networkDocument("ready-import:MERGED_CGM", "ready-import"));
         SensitivityAnalysisService service = service(imports, networks);
 
         assertThat(service.completedIidmNetworks("ready-import", 0, 100).items())
                 .singleElement()
                 .satisfies(network -> {
-                    assertThat(network.id()).isEqualTo("network-1");
+                    assertThat(network.id()).isEqualTo("ready-import:MERGED_CGM");
                     assertThat(network.importId()).isEqualTo("ready-import");
                 });
         assertThatThrownBy(() -> service.completedIidmNetworks("not-iidm-ready", 0, 100))
@@ -89,6 +89,8 @@ class SensitivityAnalysisServiceTest {
                 "XIIDM",
                 "<network/>",
                 List.of(),
+                "",
+                "",
                 null,
                 1L,
                 1L);

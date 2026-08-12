@@ -14,9 +14,16 @@ iidm:
       requested-queue: iidm.profile.transform
       requested-dlq: iidm.profile.transform.dlq
       requested-dead-letter-routing-key: iidm.profile.transform.failed.dlq
+      merge-requested-routing-key: iidm.network.merge.requested
+      merge-requested-queue: iidm.network.merge
+      merge-requested-dlq: iidm.network.merge.dlq
+      merge-requested-dead-letter-routing-key: iidm.network.merge.failed.dlq
       started-routing-key: iidm.profile.transform.started
       completed-routing-key: iidm.profile.transform.completed
       failed-routing-key: iidm.profile.transform.failed
+      merge-started-routing-key: iidm.network.merge.started
+      merge-completed-routing-key: iidm.network.merge.completed
+      merge-failed-routing-key: iidm.network.merge.failed
   grid-view:
     bucket: ${IIDM_GRID_VIEW_BUCKET:iidm-grid-view}
     output-format: svg

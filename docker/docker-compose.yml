@@ -84,6 +84,8 @@ services:
       SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       JAVA_TOOL_OPTIONS: "-Xms512m -Xmx2g"
+      CNM_RABBIT_RETRY_INITIAL_INTERVAL_MS: 10000
+      CNM_RABBIT_RETRY_MAX_INTERVAL_MS: 60000
     mem_limit: 3g
     ports:
       - "8080:8080"
@@ -110,8 +112,13 @@ services:
       SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       IIDM_TRANSFORMER_PORT: 8098
-      JAVA_TOOL_OPTIONS: "-Xms512m -Xmx2g"
-      mem_limit: 3g
+      JAVA_TOOL_OPTIONS: "-Xms1g -Xmx3g"
+      IIDM_RABBIT_CONCURRENT_CONSUMERS: 1
+      IIDM_RABBIT_MAX_CONCURRENT_CONSUMERS: 1
+      IIDM_RABBIT_PREFETCH_COUNT: 1
+      IIDM_RABBIT_RETRY_INITIAL_INTERVAL_MS: 10000
+      IIDM_RABBIT_RETRY_MAX_INTERVAL_MS: 60000
+    mem_limit: 4g
     ports:
       - "8098:8098"
     depends_on:
@@ -148,6 +155,8 @@ services:
       MINIO_SECRET_KEY: minioadmin
       SPRING_RABBITMQ_HOST: rabbitmq
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      LFSA_RABBIT_RETRY_INITIAL_INTERVAL_MS: 10000
+      LFSA_RABBIT_RETRY_MAX_INTERVAL_MS: 60000
     ports:
       - "8091:8091"
     depends_on:

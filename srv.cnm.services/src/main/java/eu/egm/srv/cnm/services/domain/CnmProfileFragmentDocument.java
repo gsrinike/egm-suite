@@ -2,7 +2,6 @@ package eu.egm.srv.cnm.services.domain;
 
 import eu.egm.data.cnm.common.ProfileFamily;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Elasticsearch document for one streamed RDF profile fragment.
@@ -20,7 +19,7 @@ public record CnmProfileFragmentDocument(
         String businessTime,
         String timeFrame,
         String version,
-        Map<String, Long> entityCounts,
+        List<CnmFragmentEntityCountDocument> entityCounts,
         Integer factCount,
         List<String> diagnostics,
         String fragmentJson,
@@ -33,7 +32,7 @@ public record CnmProfileFragmentDocument(
         Long payloadSizeBytes,
         Object importedAt) {
     public CnmProfileFragmentDocument {
-        entityCounts = entityCounts == null ? Map.of() : Map.copyOf(entityCounts);
+        entityCounts = entityCounts == null ? List.of() : List.copyOf(entityCounts);
         diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
         fragmentJson = fragmentJson == null ? "" : fragmentJson;
         fragmentJsonChunks = fragmentJsonChunks == null ? List.of() : List.copyOf(fragmentJsonChunks);
@@ -43,5 +42,12 @@ public record CnmProfileFragmentDocument(
         payloadContentType = payloadContentType == null ? "" : payloadContentType;
         payloadChecksum = payloadChecksum == null ? "" : payloadChecksum;
         payloadSizeBytes = payloadSizeBytes == null ? 0L : payloadSizeBytes;
+    }
+
+    /**
+     * Stable key/value shape avoids dynamic Elasticsearch fields for every CIM
+     * entity name observed while parsing a profile.
+     */
+    public record CnmFragmentEntityCountDocument(String entityType, long count) {
     }
 }

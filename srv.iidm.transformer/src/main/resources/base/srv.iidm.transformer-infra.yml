@@ -9,7 +9,13 @@ utility:
     buckets: cnm-rdf-models,${IIDM_NETWORK_PAYLOAD_BUCKET:iidm-network-payloads},${IIDM_GRID_VIEW_BUCKET:iidm-grid-view}
   messaging:
     listener:
+      concurrent-consumers: ${IIDM_RABBIT_CONCURRENT_CONSUMERS:1}
+      max-concurrent-consumers: ${IIDM_RABBIT_MAX_CONCURRENT_CONSUMERS:1}
+      prefetch-count: ${IIDM_RABBIT_PREFETCH_COUNT:1}
       retry:
-        max-attempts: 3
+        max-attempts: ${IIDM_RABBIT_RETRY_MAX_ATTEMPTS:3}
+        initial-interval-ms: ${IIDM_RABBIT_RETRY_INITIAL_INTERVAL_MS:10000}
+        multiplier: ${IIDM_RABBIT_RETRY_MULTIPLIER:2.0}
+        max-interval-ms: ${IIDM_RABBIT_RETRY_MAX_INTERVAL_MS:60000}
     topic-exchange:
       name: iidm.events

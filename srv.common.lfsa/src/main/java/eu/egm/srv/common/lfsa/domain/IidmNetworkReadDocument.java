@@ -17,6 +17,8 @@ public record IidmNetworkReadDocument(
         String networkFormat,
         String networkXiidm,
         List<String> networkXiidmChunks,
+        String networkXiidmBucket,
+        String networkXiidmObjectKey,
         Object elementCounts,
         Object createdAt,
         Object updatedAt) {
@@ -25,5 +27,7 @@ public record IidmNetworkReadDocument(
         sourceFileNames = sourceFileNames == null ? List.of() : List.copyOf(sourceFileNames);
         networkXiidm = networkXiidm == null ? "" : networkXiidm;
         networkXiidmChunks = networkXiidmChunks == null ? List.of() : List.copyOf(networkXiidmChunks);
+        networkXiidmBucket = networkXiidmBucket == null ? "" : networkXiidmBucket;
+        networkXiidmObjectKey = networkXiidmObjectKey == null ? "" : networkXiidmObjectKey;
     }
 }

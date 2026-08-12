@@ -10,6 +10,7 @@ import com.infra.storage.object.ObjectStorageService;
 import com.utils.restservice.RestServiceSupport;
 import com.utils.profile.ProfileDefaults;
 import com.utils.profile.ProfileDefaultsService;
+import com.powsybl.cgmes.conversion.CgmesModelExtension;
 import com.powsybl.iidm.network.Bus;
 import com.powsybl.iidm.network.BusbarSection;
 import com.powsybl.iidm.network.Generator;
@@ -34,6 +35,9 @@ import eu.egm.data.cnm.state.StateVariablePoint;
 import eu.egm.data.cnm.topology.StaticTopologyModel;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
+import eu.egm.data.iidm.common.IidmNetworkMergeFailed;
+import eu.egm.data.iidm.common.IidmNetworkMergeState;
+import eu.egm.data.iidm.common.IidmNetworkMergeStatus;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.data.iidm.common.IidmProfileTransformStarted;
 import eu.egm.data.iidm.common.IidmDiagnostic;
@@ -77,6 +81,7 @@ import eu.egm.srv.iidm.transformer.api.IidmTableBundle;
 import eu.egm.srv.iidm.transformer.api.IidmTransformSummaryResponse;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -121,6 +126,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
     private final String startedRoutingKey;
     private final String completedRoutingKey;
     private final String failedRoutingKey;
+    private final String mergeStartedRoutingKey;
+    private final String mergeCompletedRoutingKey;
+    private final String mergeFailedRoutingKey;
 
     public IidmProfileTransformService(
             Environment environment,
@@ -133,7 +141,10 @@ public class IidmProfileTransformService extends RestServiceSupport {
             @Value("${iidm.transform.event.exchange:iidm.events}") String eventExchange,
             @Value("${iidm.transform.event.started-routing-key:iidm.profile.transform.started}") String startedRoutingKey,
             @Value("${iidm.transform.event.completed-routing-key:iidm.profile.transform.completed}") String completedRoutingKey,
-            @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey) {
+            @Value("${iidm.transform.event.failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey,
+            @Value("${iidm.transform.event.merge-started-routing-key:iidm.network.merge.started}") String mergeStartedRoutingKey,
+            @Value("${iidm.transform.event.merge-completed-routing-key:iidm.network.merge.completed}") String mergeCompletedRoutingKey,
+            @Value("${iidm.transform.event.merge-failed-routing-key:iidm.network.merge.failed}") String mergeFailedRoutingKey) {
         super(environment, observationRegistry);
         this.sourceProfileRepository = infrastructureUtils.documentRepository(new CnmProfileReadDocumentAdapter());
         this.sourcePayloadRepository = infrastructureUtils.documentRepository(new CnmProfilePayloadReadDocumentAdapter());
@@ -156,6 +167,9 @@ public class IidmProfileTransformService extends RestServiceSupport {
         this.startedRoutingKey = startedRoutingKey;
         this.completedRoutingKey = completedRoutingKey;
         this.failedRoutingKey = failedRoutingKey;
+        this.mergeStartedRoutingKey = mergeStartedRoutingKey;
+        this.mergeCompletedRoutingKey = mergeCompletedRoutingKey;
+        this.mergeFailedRoutingKey = mergeFailedRoutingKey;
     }
 
     private CnmToIidmMappingConfiguration iidmMappingConfiguration() {
@@ -289,6 +303,141 @@ public class IidmProfileTransformService extends RestServiceSupport {
         }
     }
 
+    public void merge(IidmNetworkMergeStatus request) {
+        if (request == null || request.importId() == null || request.importId().isBlank()) {
+            throw new IllegalArgumentException("IIDM merge request importId is required");
+        }
+        String importId = request.importId();
+        String mergedNetworkId = mergedNetworkId(importId);
+        eventPublisher.publish(
+                eventExchange,
+                mergeStartedRoutingKey,
+                new IidmNetworkMergeStatus(
+                        importId,
+                        mergedNetworkId,
+                        request.iidmNetworkIds(),
+                        request.sourceFiles(),
+                        IidmNetworkMergeState.STARTED,
+                        request.businessDay(),
+                        request.businessTime(),
+                        request.timeFrame(),
+                        request.tsoName(),
+                        request.importOptions(),
+                        Instant.now().toString(),
+                        "Merged IIDM network creation started"));
+        try {
+            if (mergedNetworkExists(mergedNetworkId)) {
+                eventPublisher.publish(
+                        eventExchange,
+                        mergeCompletedRoutingKey,
+                        new IidmNetworkMergeStatus(
+                                importId,
+                                mergedNetworkId,
+                                request.iidmNetworkIds(),
+                                request.sourceFiles(),
+                                IidmNetworkMergeState.COMPLETED,
+                                request.businessDay(),
+                                request.businessTime(),
+                                request.timeFrame(),
+                                request.tsoName(),
+                                request.importOptions(),
+                                Instant.now().toString(),
+                                "Merged IIDM network already exists"));
+                return;
+            }
+            IidmNetworkModel mergedNetwork = request.sourceFiles().isEmpty()
+                    ? mergeExistingNetworks(request, mergedNetworkId)
+                    : transformMergedCgmesSource(request, mergedNetworkId);
+            networkRepository.save(toNetworkDocument(mergedNetwork));
+            eventPublisher.publish(
+                    eventExchange,
+                    mergeCompletedRoutingKey,
+                    new IidmNetworkMergeStatus(
+                            importId,
+                            mergedNetworkId,
+                            request.iidmNetworkIds(),
+                            request.sourceFiles(),
+                            IidmNetworkMergeState.COMPLETED,
+                            request.businessDay(),
+                            request.businessTime(),
+                            request.timeFrame(),
+                            request.tsoName(),
+                            request.importOptions(),
+                            Instant.now().toString(),
+                            "Merged IIDM network persisted"));
+        } catch (Exception exception) {
+            String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+            logger.warn("Merged IIDM network creation failed importId={} networkId={}", importId, mergedNetworkId, exception);
+            eventPublisher.publish(
+                    eventExchange,
+                    mergeFailedRoutingKey,
+                    new IidmNetworkMergeFailed(importId, mergedNetworkId, Instant.now().toString(), message));
+        }
+    }
+
+    private IidmNetworkModel transformMergedCgmesSource(IidmNetworkMergeStatus request, String mergedNetworkId) {
+        Path workspace = null;
+        try {
+            workspace = Files.createTempDirectory("egm-cgmes-iidm-merge-");
+            for (int index = 0; index < request.sourceFiles().size(); index++) {
+                CgmesIidmSourceFile source = request.sourceFiles().get(index);
+                byte[] bytes = objectStorageService.read(rawBucket, source.objectId());
+                Path target = workspace.resolve(index + "-" + safeFileName(source));
+                Files.write(target, bytes);
+            }
+            logger.info(
+                    "Creating merged IIDM network {} from {} CGMES source file(s)",
+                    mergedNetworkId,
+                    request.sourceFiles().size());
+            return sourceTransformer.transform(
+                    workspace,
+                    mergedNetworkId,
+                    request.importId(),
+                    request.sourceFiles().stream().map(this::sourceFileReference).toList(),
+                    request.businessDay(),
+                    request.businessTime(),
+                    request.timeFrame(),
+                    request.tsoName(),
+                    request.importOptions().properties());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to stage CGMES source files for merged IIDM transformation", exception);
+        } finally {
+            deleteWorkspace(workspace);
+        }
+    }
+
+    private IidmNetworkModel mergeExistingNetworks(IidmNetworkMergeStatus request, String mergedNetworkId) {
+        List<IidmNetworkDocument> documents = sourceNetworkDocuments(request);
+        if (documents.isEmpty()) {
+            throw new IllegalStateException("No completed IIDM network documents found for import " + request.importId());
+        }
+        List<Network> networks = documents.stream()
+                .map(document -> IidmNetworkXiidm.read(networkXiidm(document)))
+                .toList();
+        Network merged = mergeNetworks(networks);
+        List<String> sourceFileIds = documents.stream()
+                .flatMap(document -> document.sourceFileIds().stream())
+                .distinct()
+                .sorted()
+                .toList();
+        IidmNetworkDocument first = documents.getFirst();
+        List<IidmDiagnostic> diagnostics = List.of(new IidmDiagnostic(
+                "INFO",
+                "IIDM_MERGE",
+                "Merged " + documents.size() + " IIDM network document(s)",
+                mergedNetworkId));
+        return new IidmNetworkModel(
+                mergedNetworkId,
+                request.importId(),
+                sourceFileIds,
+                first.businessDay(),
+                first.businessTime(),
+                first.timeFrame(),
+                "MERGED_CGM",
+                merged,
+                diagnostics);
+    }
+
     private IidmNetworkModel transformNetwork(IidmProfileTransformRequested request) {
         if (isDirectCgmesSourceRequest(request)) {
             return transformCgmesSource(request);
@@ -296,6 +445,49 @@ public class IidmProfileTransformService extends RestServiceSupport {
         return request.sourceSnapshotId() == null || request.sourceSnapshotId().isBlank()
                 ? transformProfilePayload(request)
                 : transformSnapshot(request);
+    }
+
+    private boolean mergedNetworkExists(String mergedNetworkId) {
+        return networkRepository.findByField("id", mergedNetworkId, 1).stream().findFirst().isPresent();
+    }
+
+    private List<IidmNetworkDocument> sourceNetworkDocuments(IidmNetworkMergeStatus request) {
+        List<IidmNetworkDocument> documents = request.iidmNetworkIds().isEmpty()
+                ? networkRepository.findByField("importId", request.importId(), 10_000)
+                : request.iidmNetworkIds().stream()
+                        .flatMap(networkId -> networkRepository.findByField("id", networkId, 1).stream())
+                        .toList();
+        return documents.stream()
+                .filter(document -> !mergedNetworkId(request.importId()).equals(document.id()))
+                .filter(document -> document.networkXiidm() != null && !document.networkXiidm().isBlank()
+                        || hasObjectPayload(document.networkXiidmBucket(), document.networkXiidmObjectKey())
+                        || !document.networkXiidmChunks().isEmpty())
+                .sorted(Comparator.comparing(IidmNetworkDocument::id))
+                .toList();
+    }
+
+    private Network mergeNetworks(List<Network> networks) {
+        if (networks.isEmpty()) {
+            throw new IllegalArgumentException("At least one IIDM network is required for merge");
+        }
+        if (networks.size() == 1) {
+            return networks.getFirst();
+        }
+        try {
+            Class<?> mergerClass = Class.forName("com.powsybl.iidm.network.NetworkMerger");
+            Object merger = mergerClass.getDeclaredConstructor().newInstance();
+            Method merge = mergerClass.getMethod("merge", Network.class, Network.class);
+            Network merged = networks.getFirst();
+            for (int index = 1; index < networks.size(); index++) {
+                Object result = merge.invoke(merger, merged, networks.get(index));
+                if (result instanceof Network network) {
+                    merged = network;
+                }
+            }
+            return merged;
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("PowSyBl NetworkMerger is required to merge multiple IIDM networks", exception);
+        }
     }
 
     private boolean isDirectCgmesSourceRequest(IidmProfileTransformRequested request) {
@@ -672,6 +864,7 @@ public class IidmProfileTransformService extends RestServiceSupport {
     }
 
     private IidmNetworkDocument toNetworkDocument(IidmNetworkModel network) {
+        removeNonSerializableCgmesImportContext(network.network());
         String networkXiidm = IidmNetworkXiidm.write(network.network());
         String networkJson = jsonMappingService.toJson(networkJsonProjection.project(network.network()));
         String xiidmObjectKey = networkPayloadObjectKey(network.importId(), network.id(), "network.xiidm");
@@ -715,6 +908,14 @@ public class IidmProfileTransformService extends RestServiceSupport {
                 now);
     }
 
+    private void removeNonSerializableCgmesImportContext(Network network) {
+        if (network.removeExtension(CgmesModelExtension.class)) {
+            logger.debug(
+                    "Removed non-serializable PowSyBl CGMES import context extension before XIIDM persistence for network {}",
+                    network.getId());
+        }
+    }
+
     private String profileJson(CnmProfilePayloadReadDocument payload) {
         if (payload.profileJson() != null && !payload.profileJson().isBlank()) {
             return payload.profileJson();
@@ -746,6 +947,10 @@ public class IidmProfileTransformService extends RestServiceSupport {
 
     private String networkId(String importId, String fileId) {
         return importId + ":" + fileId;
+    }
+
+    private String mergedNetworkId(String importId) {
+        return importId + ":MERGED_CGM";
     }
 
     private String transformId(IidmProfileTransformRequested request) {

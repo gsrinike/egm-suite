@@ -22,6 +22,7 @@ import eu.egm.data.cnm.common.ImportStatus;
 import eu.egm.data.cnm.common.IidmTransformationStatus;
 import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
+import eu.egm.data.iidm.common.IidmNetworkMergeStatus;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import eu.egm.data.iidm.common.IidmTransformState;
@@ -134,6 +135,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -244,6 +246,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -302,6 +305,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -370,6 +374,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -434,6 +439,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -484,6 +490,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -530,6 +537,7 @@ class CnmImportRestServiceTest {
         CapturingObjectStorageService objectStorageService = new CapturingObjectStorageService();
         CapturingDocumentRepository documentRepository = new CapturingDocumentRepository();
         CapturingIidmTransformRepository iidmTransformRepository = new CapturingIidmTransformRepository();
+        CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         CnmImportRestService service = new CnmImportRestService(
                 new StandardEnvironment(),
                 ObservationRegistry.NOOP,
@@ -542,7 +550,7 @@ class CnmImportRestServiceTest {
                         new NoopDocumentRepository<>(),
                         new NoopDocumentRepository<>(),
                         iidmTransformRepository,
-                        new CapturingEventPublisher()),
+                        eventPublisher),
                 new RdfMetadataExtractor(),
                 "cnm-rdf-models",
                 "cnm.events",
@@ -550,6 +558,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -610,8 +619,11 @@ class CnmImportRestServiceTest {
         assertThat(afterFirstTransform.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
         assertThat(afterSecondFileParsed.state()).isEqualTo(ImportState.SUCCESS);
         assertThat(afterSecondFileParsed.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
-        assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
-        assertThat(documentRepository.saved.getLast().iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.DONE);
+        assertThat(afterAllTransforms.iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
+        assertThat(documentRepository.saved.getLast().iidmTransformationStatus()).isEqualTo(IidmTransformationStatus.STARTED);
+        assertThat(eventPublisher.iidmMergeEvents())
+                .extracting(IidmNetworkMergeStatus::importId)
+                .contains(importId);
     }
 
     @Test
@@ -629,6 +641,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -673,6 +686,7 @@ class CnmImportRestServiceTest {
                 "cnm.snapshot.assembly.requested",
                 "iidm.events",
                 "iidm.profile.transform.requested",
+                "iidm.network.merge.requested",
                 "cnm-profile-payloads",
                 "cnm-profile-fragments",
                 "cnm-network-snapshot-payloads");
@@ -1008,6 +1022,14 @@ class CnmImportRestServiceTest {
                     .map(PublishedEvent::payload)
                     .filter(IidmProfileTransformRequested.class::isInstance)
                     .map(IidmProfileTransformRequested.class::cast)
+                    .toList();
+        }
+
+        private List<IidmNetworkMergeStatus> iidmMergeEvents() {
+            return published.stream()
+                    .map(PublishedEvent::payload)
+                    .filter(IidmNetworkMergeStatus.class::isInstance)
+                    .map(IidmNetworkMergeStatus.class::cast)
                     .toList();
         }
     }

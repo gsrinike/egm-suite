@@ -1,5 +1,6 @@
 package eu.egm.srv.iidm.transformer.service;
 
+import eu.egm.data.iidm.common.IidmNetworkMergeStatus;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,5 +30,16 @@ public class IidmProfileTransformListener {
                 request.fileId(),
                 request.sourceFiles() == null ? 0 : request.sourceFiles().size());
         transformService.transform(request);
+    }
+
+    @RabbitListener(
+            queues = "${iidm.transform.event.merge-requested-queue:iidm.network.merge}",
+            containerFactory = "retryingRabbitListenerContainerFactory")
+    public void merge(IidmNetworkMergeStatus request) {
+        LOGGER.info(
+                "Consumed IIDM network merge request importId={}, networks={}",
+                request.importId(),
+                request.iidmNetworkIds().size());
+        transformService.merge(request);
     }
 }

@@ -10,6 +10,9 @@ utility:
   messaging:
     listener:
       retry:
-        max-attempts: 3
+        max-attempts: ${LFSA_RABBIT_RETRY_MAX_ATTEMPTS:3}
+        initial-interval-ms: ${LFSA_RABBIT_RETRY_INITIAL_INTERVAL_MS:10000}
+        multiplier: ${LFSA_RABBIT_RETRY_MULTIPLIER:2.0}
+        max-interval-ms: ${LFSA_RABBIT_RETRY_MAX_INTERVAL_MS:60000}
     topic-exchange:
       name: ${LFSA_EVENT_EXCHANGE:lfsa.events}

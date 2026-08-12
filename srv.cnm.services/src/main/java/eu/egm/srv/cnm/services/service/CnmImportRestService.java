@@ -33,6 +33,9 @@ import eu.egm.data.cnm.common.ProfileFamily;
 import eu.egm.data.cnm.common.TimeFrame;
 import eu.egm.data.iidm.common.CgmesIidmImportOptions;
 import eu.egm.data.iidm.common.CgmesIidmSourceFile;
+import eu.egm.data.iidm.common.IidmNetworkMergeFailed;
+import eu.egm.data.iidm.common.IidmNetworkMergeState;
+import eu.egm.data.iidm.common.IidmNetworkMergeStatus;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformRequested;
@@ -54,6 +57,7 @@ import eu.egm.srv.cnm.services.domain.CnmProfileDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentChunkDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument;
+import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocument.CnmFragmentEntityCountDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfileFragmentDocumentAdapter;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocument;
 import eu.egm.srv.cnm.services.domain.CnmProfilePayloadChunkDocumentAdapter;
@@ -136,6 +140,7 @@ public class CnmImportRestService extends RestServiceSupport {
     private final String snapshotAssemblyRoutingKey;
     private final String iidmTransformExchange;
     private final String iidmTransformRoutingKey;
+    private final String iidmMergeRoutingKey;
     private final ConcurrentMap<String, Object> snapshotLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> importStatusLocks = new ConcurrentHashMap<>();
     private final String profilePayloadBucket;
@@ -153,6 +158,7 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
             @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-routing-key:iidm.network.merge.requested}") String iidmMergeRoutingKey,
             @Value("${cnm.import.profile-payload-bucket:cnm-profile-payloads}") String profilePayloadBucket,
             @Value("${cnm.import.profile-fragment-bucket:cnm-profile-fragments}") String profileFragmentBucket,
             @Value("${cnm.import.network-snapshot-payload-bucket:cnm-network-snapshot-payloads}") String networkSnapshotPayloadBucket) {
@@ -168,6 +174,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 snapshotAssemblyRoutingKey,
                 iidmTransformExchange,
                 iidmTransformRoutingKey,
+                iidmMergeRoutingKey,
                 profilePayloadBucket,
                 profileFragmentBucket,
                 networkSnapshotPayloadBucket);
@@ -186,6 +193,7 @@ public class CnmImportRestService extends RestServiceSupport {
             @Value("${cnm.import.event.snapshot-assembly-routing-key:cnm.snapshot.assembly.requested}") String snapshotAssemblyRoutingKey,
             @Value("${cnm.import.event.iidm-transform-exchange:iidm.events}") String iidmTransformExchange,
             @Value("${cnm.import.event.iidm-transform-routing-key:iidm.profile.transform.requested}") String iidmTransformRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-routing-key:iidm.network.merge.requested}") String iidmMergeRoutingKey,
             @Value("${cnm.import.profile-payload-bucket:cnm-profile-payloads}") String profilePayloadBucket,
             @Value("${cnm.import.profile-fragment-bucket:cnm-profile-fragments}") String profileFragmentBucket,
             @Value("${cnm.import.network-snapshot-payload-bucket:cnm-network-snapshot-payloads}") String networkSnapshotPayloadBucket) {
@@ -221,6 +229,7 @@ public class CnmImportRestService extends RestServiceSupport {
         this.snapshotAssemblyRoutingKey = snapshotAssemblyRoutingKey;
         this.iidmTransformExchange = iidmTransformExchange;
         this.iidmTransformRoutingKey = iidmTransformRoutingKey;
+        this.iidmMergeRoutingKey = iidmMergeRoutingKey;
     }
 
     public ImportStatus importModels(Collection<MultipartFile> uploads, CnmServiceType serviceType, TimeFrame timeFrame)
@@ -1305,7 +1314,7 @@ public class CnmImportRestService extends RestServiceSupport {
                 file.businessTime(),
                 file.modelTimeFrame(),
                 file.modelVersion(),
-                metadata.entityCounts(),
+                toFragmentEntityCounts(metadata.entityCounts()),
                 fragment.facts().size(),
                 metadata.warnings(),
                 "",
@@ -1721,9 +1730,52 @@ public class CnmImportRestService extends RestServiceSupport {
                     updated.createdAt(),
                     updated.message(),
                     nextStatus));
+            if (shouldRequestIidmMerge(updated, eventStatus, nextStatus)) {
+                publishIidmMergeRequested(updated);
+            }
             logger.info("Updated IIDM transform status for import {} to {}", importId, nextStatus);
         } catch (Exception exception) {
             logger.warn("Unable to update IIDM transform status for import {}", importId, exception);
+        }
+    }
+
+    public void updateIidmMergeProgress(IidmNetworkMergeStatus event) {
+        if (event == null) {
+            return;
+        }
+        if (event.status() == IidmNetworkMergeState.COMPLETED) {
+            updateIidmMergeProgress(event.importId(), IidmTransformationStatus.DONE, event.message());
+        } else if (event.status() == IidmNetworkMergeState.STARTED || event.status() == IidmNetworkMergeState.REQUESTED) {
+            updateIidmMergeProgress(event.importId(), IidmTransformationStatus.STARTED, event.message());
+        }
+    }
+
+    public void updateIidmMergeProgress(IidmNetworkMergeFailed event) {
+        if (event == null) {
+            return;
+        }
+        updateIidmMergeProgress(event.importId(), IidmTransformationStatus.FAILED, event.message());
+    }
+
+    private void updateIidmMergeProgress(String importId, IidmTransformationStatus status, String message) {
+        if (importId == null || importId.isBlank()) {
+            return;
+        }
+        try {
+            CnmImportDocument current = findImportDocument(importId);
+            CnmImportDocument updated = new CnmImportDocument(
+                    current.id(),
+                    current.serviceType(),
+                    current.timeFrame(),
+                    current.state(),
+                    current.files(),
+                    current.createdAt(),
+                    current.message(),
+                    status);
+            documentRepository.save(updated);
+            logger.info("Updated IIDM merge status for import {} to {} ({})", importId, status, message);
+        } catch (Exception exception) {
+            logger.warn("Unable to update IIDM merge status for import {}", importId, exception);
         }
     }
 
@@ -1748,7 +1800,9 @@ public class CnmImportRestService extends RestServiceSupport {
                 && transforms.size() >= expectedCount
                 && transforms.stream().allMatch(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE);
         if (complete) {
-            return IidmTransformationStatus.DONE;
+            return document.iidmTransformationStatus() == IidmTransformationStatus.DONE
+                    ? IidmTransformationStatus.DONE
+                    : IidmTransformationStatus.STARTED;
         }
         if (eventStatus == IidmTransformationStatus.STARTED
                 || eventStatus == IidmTransformationStatus.DONE
@@ -1758,6 +1812,101 @@ public class CnmImportRestService extends RestServiceSupport {
         return document.iidmTransformationStatus() == IidmTransformationStatus.STARTED
                 ? IidmTransformationStatus.STARTED
                 : IidmTransformationStatus.NOT_STARTED;
+    }
+
+    private boolean shouldRequestIidmMerge(
+            CnmImportDocument document,
+            IidmTransformationStatus eventStatus,
+            IidmTransformationStatus nextStatus) {
+        if (eventStatus != IidmTransformationStatus.DONE || nextStatus != IidmTransformationStatus.STARTED) {
+            return false;
+        }
+        if (document.iidmTransformationStatus() == IidmTransformationStatus.DONE
+                || document.iidmTransformationStatus() == IidmTransformationStatus.FAILED) {
+            return false;
+        }
+        List<IidmProfileTransformReadDocument> transforms = iidmTransforms(document.id());
+        return iidmProfilesComplete(document, transforms);
+    }
+
+    private boolean iidmProfilesComplete(CnmImportDocument document, List<IidmProfileTransformReadDocument> transforms) {
+        boolean importReady = document.state() == ImportState.SUCCESS
+                && document.files().stream()
+                        .filter(file -> !isBoundaryProfile(file))
+                        .allMatch(file -> file.state() == ImportFileState.PARSED);
+        int expectedCount = expectedIidmTransformCount(document);
+        return importReady
+                && expectedCount > 0
+                && transforms.size() >= expectedCount
+                && transforms.stream().allMatch(transform ->
+                        transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE);
+    }
+
+    private void publishIidmMergeRequested(CnmImportDocument document) {
+        String importId = document.id();
+        List<String> networkIds = iidmTransforms(importId).stream()
+                .filter(transform -> transform.transformState() == eu.egm.data.iidm.common.IidmTransformState.DONE)
+                .map(IidmProfileTransformReadDocument::iidmNetworkId)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .sorted()
+                .toList();
+        List<CgmesIidmSourceFile> sourceFiles = document.files().stream()
+                .filter(file -> file.objectId() != null && !file.objectId().isBlank())
+                .map(file -> new CgmesIidmSourceFile(
+                        file.fileId(),
+                        file.fileName(),
+                        file.objectId(),
+                        file.profileFamily(),
+                        file.profileType()))
+                .toList();
+        CnmImportFileDocument representative = mergeRepresentativeFile(document);
+        eventPublisher.publish(
+                iidmTransformExchange,
+                iidmMergeRoutingKey,
+                new IidmNetworkMergeStatus(
+                        importId,
+                        importId + ":MERGED_CGM",
+                        networkIds,
+                        sourceFiles,
+                        IidmNetworkMergeState.REQUESTED,
+                        representative.businessDay(),
+                        representative.businessTime(),
+                        representative.modelTimeFrame(),
+                        "MERGED_CGM",
+                        new CgmesIidmImportOptions(Map.of()),
+                        Instant.now().toString(),
+                        "Merged IIDM network requested"));
+        logger.info(
+                "Published IIDM merge request for import {} with {} network(s) and {} source file(s)",
+                importId,
+                networkIds.size(),
+                sourceFiles.size());
+    }
+
+    private CnmImportFileDocument mergeRepresentativeFile(CnmImportDocument document) {
+        return document.files().stream()
+                .filter(file -> !isBoundaryProfile(file))
+                .filter(file -> file.businessDay() != null && !file.businessDay().isBlank())
+                .findFirst()
+                .or(() -> document.files().stream()
+                        .filter(file -> file.businessDay() != null && !file.businessDay().isBlank())
+                        .findFirst())
+                .orElseGet(() -> new CnmImportFileDocument(
+                        "",
+                        "",
+                        "",
+                        ImportFileState.INIT,
+                        ProfileFamily.Unknown,
+                        "",
+                        "",
+                        document.timeFrame().name(),
+                        "MERGED_CGM",
+                        "",
+                        "",
+                        List.of(),
+                        "",
+                        Instant.now().toEpochMilli()));
     }
 
     private List<IidmProfileTransformReadDocument> iidmTransforms(String importId) {
@@ -2227,6 +2376,17 @@ public class CnmImportRestService extends RestServiceSupport {
         }
         return counts.entrySet().stream()
                 .map(entry -> new CnmEntityCountDocument(entry.getKey(), entry.getValue() == null ? 0 : entry.getValue()))
+                .toList();
+    }
+
+    private List<CnmFragmentEntityCountDocument> toFragmentEntityCounts(Map<String, Long> counts) {
+        if (counts == null || counts.isEmpty()) {
+            return List.of();
+        }
+        return counts.entrySet().stream()
+                .map(entry -> new CnmFragmentEntityCountDocument(
+                        entry.getKey(),
+                        entry.getValue() == null ? 0 : entry.getValue()))
                 .toList();
     }
 

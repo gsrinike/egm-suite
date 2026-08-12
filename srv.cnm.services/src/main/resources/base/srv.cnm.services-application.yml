@@ -48,6 +48,16 @@ cnm:
       iidm-transform-completed-queue: iidm.profile.transform.completed.cnm
       iidm-transform-failed-routing-key: iidm.profile.transform.failed
       iidm-transform-failed-queue: iidm.profile.transform.failed.cnm
+      iidm-merge-routing-key: iidm.network.merge.requested
+      iidm-merge-queue: iidm.network.merge
+      iidm-merge-dlq: iidm.network.merge.dlq
+      iidm-merge-dead-letter-routing-key: iidm.network.merge.failed.dlq
+      iidm-merge-started-routing-key: iidm.network.merge.started
+      iidm-merge-started-queue: iidm.network.merge.started.cnm
+      iidm-merge-completed-routing-key: iidm.network.merge.completed
+      iidm-merge-completed-queue: iidm.network.merge.completed.cnm
+      iidm-merge-failed-routing-key: iidm.network.merge.failed
+      iidm-merge-failed-queue: iidm.network.merge.failed.cnm
 springdoc:
   swagger-ui:
     url: /openapi/cnm-services.yaml

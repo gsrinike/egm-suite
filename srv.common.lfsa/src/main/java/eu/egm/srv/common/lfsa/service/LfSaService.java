@@ -3,6 +3,7 @@ package eu.egm.srv.common.lfsa.service;
 import com.infra.InfrastructureUtils;
 import com.infra.storage.document.DocumentRepositoryService;
 import com.infra.storage.document.DocumentSort;
+import com.infra.storage.object.ObjectStorageService;
 import com.powsybl.computation.local.LocalComputationManager;
 import com.powsybl.contingency.Contingency;
 import com.powsybl.contingency.violations.LimitViolation;
@@ -55,7 +56,7 @@ import eu.egm.srv.common.lfsa.domain.SecurityAnalysisRunDocument;
 import eu.egm.srv.common.lfsa.domain.SecurityAnalysisRunDocumentAdapter;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
-import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -84,6 +85,7 @@ public class LfSaService extends RestServiceSupport {
     private final DocumentRepositoryService<IidmNetworkReadDocument> iidmNetworkRepository;
     private final DocumentRepositoryService<SecurityAnalysisRunDocument> runRepository;
     private final DocumentRepositoryService<SecurityAnalysisParameterConfigurationDocument> parameterRepository;
+    private final ObjectStorageService objectStorageService;
     private final String exchange;
     private final String routingKey;
 
@@ -103,6 +105,7 @@ public class LfSaService extends RestServiceSupport {
         this.iidmNetworkRepository = infrastructureUtils.documentRepository(new IidmNetworkReadDocumentAdapter());
         this.runRepository = infrastructureUtils.documentRepository(new SecurityAnalysisRunDocumentAdapter());
         this.parameterRepository = infrastructureUtils.documentRepository(new SecurityAnalysisParameterConfigurationDocumentAdapter());
+        this.objectStorageService = infrastructureUtils.objectStorageService();
     }
 
     public LoadFlowResult runLoadFlow(LoadFlowRequest request) {
@@ -212,10 +215,7 @@ public class LfSaService extends RestServiceSupport {
         String importId = requireValue(request.fileImportId(), "fileImportId");
         LfSaParameterConfiguration parameterConfiguration =
                 resolveParameterConfiguration(request.parameterConfigurationId());
-        List<IidmNetworkReadDocument> networks = iidmNetworkRepository.findByField(
-                "importId",
-                importId,
-                defaultsService.load().maxIidmNetworks());
+        List<IidmNetworkReadDocument> networks = findIidmNetworkDocumentsForImport(importId);
         String runId = UUID.randomUUID().toString();
         Instant now = Instant.now();
         SecurityAnalysisRunDocument document = new SecurityAnalysisRunDocument(
@@ -282,14 +282,7 @@ public class LfSaService extends RestServiceSupport {
             if (documents.isEmpty()) {
                 throw new IllegalStateException("No IIDM network documents found for import " + event.fileImportId());
             }
-            List<Network> networks = documents.stream()
-                    .map(this::readNetwork)
-                    .filter(Objects::nonNull)
-                    .toList();
-            if (networks.isEmpty()) {
-                throw new IllegalStateException("No readable PowSyBl IIDM networks found for import " + event.fileImportId());
-            }
-            Network merged = mergeInMemory(networks, diagnostics);
+            Network merged = readNetwork(documents.getFirst());
             Map<String, Long> counts = elementCounts(merged);
             LoadFlowStrategy selectedStrategy = current.loadFlowStrategy();
             LoadFlowParametersDto selectedLoadFlowParameters = current.loadFlowParameters();
@@ -441,53 +434,39 @@ public class LfSaService extends RestServiceSupport {
     }
 
     private List<IidmNetworkReadDocument> loadNetworkDocuments(SecurityAnalysisRequested event) {
-        if (!event.iidmNetworkIds().isEmpty()) {
-            List<IidmNetworkReadDocument> documents = event.iidmNetworkIds().stream()
-                    .flatMap(networkId -> iidmNetworkRepository.findByField("id", networkId, 1).stream())
-                    .toList();
-            if (!documents.isEmpty()) {
-                return documents;
-            }
-        }
-        return iidmNetworkRepository.findByField(
-                "importId",
-                event.fileImportId(),
-                defaultsService.load().maxIidmNetworks());
+        return findIidmNetworkDocumentsForImport(event.fileImportId());
     }
 
     private Network readNetwork(IidmNetworkReadDocument document) {
-        String xiidm = document.networkXiidm().isBlank()
-                ? String.join("", document.networkXiidmChunks())
-                : document.networkXiidm();
+        String xiidm = networkXiidm(document);
         if (xiidm.isBlank()) {
             throw new IllegalStateException("IIDM network " + document.id() + " has no XIIDM payload");
         }
         return IidmNetworkXiidm.read(xiidm);
     }
 
-    private Network mergeInMemory(List<Network> networks, List<String> diagnostics) {
-        if (networks.size() == 1) {
-            diagnostics.add("One IIDM network found; merge step skipped");
-            return networks.get(0);
+    private List<IidmNetworkReadDocument> findIidmNetworkDocumentsForImport(String importId) {
+        return iidmNetworkRepository.findByField("id", mergedNetworkId(importId), 1);
+    }
+
+    private String networkXiidm(IidmNetworkReadDocument document) {
+        if (document.networkXiidm() != null && !document.networkXiidm().isBlank()) {
+            return document.networkXiidm();
         }
-        diagnostics.add("Loaded " + networks.size() + " IIDM networks for in-memory binding");
-        try {
-            Class<?> mergerClass = Class.forName("com.powsybl.iidm.network.NetworkMerger");
-            Object merger = mergerClass.getDeclaredConstructor().newInstance();
-            Method merge = mergerClass.getMethod("merge", Network.class, Network.class);
-            Network merged = networks.get(0);
-            for (int index = 1; index < networks.size(); index++) {
-                Object result = merge.invoke(merger, merged, networks.get(index));
-                if (result instanceof Network network) {
-                    merged = network;
-                }
-            }
-            diagnostics.add("PowSyBl NetworkMerger completed in memory");
-            return merged;
-        } catch (ReflectiveOperationException exception) {
-            diagnostics.add("PowSyBl NetworkMerger is not available in this runtime; first network used with diagnostics");
-            return networks.get(0);
+        if (hasObjectPayload(document.networkXiidmBucket(), document.networkXiidmObjectKey())) {
+            return new String(
+                    objectStorageService.read(document.networkXiidmBucket(), document.networkXiidmObjectKey()),
+                    StandardCharsets.UTF_8);
         }
+        return String.join("", document.networkXiidmChunks());
+    }
+
+    private boolean hasObjectPayload(String bucket, String objectKey) {
+        return bucket != null && !bucket.isBlank() && objectKey != null && !objectKey.isBlank();
+    }
+
+    private String mergedNetworkId(String importId) {
+        return importId + ":MERGED_CGM";
     }
 
     private Map<String, Long> elementCounts(Network network) {

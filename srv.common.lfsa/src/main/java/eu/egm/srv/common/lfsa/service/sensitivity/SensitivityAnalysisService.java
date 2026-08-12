@@ -49,7 +49,6 @@ import eu.egm.srv.common.lfsa.domain.sensitivity.SensitivityAnalysisConfiguratio
 import eu.egm.srv.common.lfsa.domain.sensitivity.SensitivityAnalysisRunDocument;
 import eu.egm.srv.common.lfsa.domain.sensitivity.SensitivityAnalysisRunDocumentAdapter;
 import io.micrometer.observation.ObservationRegistry;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -59,7 +58,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -111,7 +109,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
 
     public CommonPage<SensitivityIidmNetworkSummary> completedIidmNetworks(String importId, int page, int size) {
         requireIidmReadyImport(importId);
-        List<SensitivityIidmNetworkSummary> rows = iidmNetworkRepository.findByField("importId", importId, 1000)
+        List<SensitivityIidmNetworkSummary> rows = findIidmNetworkDocumentsForImport(importId)
                 .stream()
                 .sorted(Comparator.comparing(IidmNetworkReadDocument::id))
                 .map(this::toNetworkSummary)
@@ -182,11 +180,7 @@ public class SensitivityAnalysisService extends RestServiceSupport {
         String importId = requireValue(request.fileImportId(), "fileImportId");
         requireIidmReadyImport(importId);
         SensitivityAnalysisConfiguration configuration = resolveConfiguration(request.configurationId());
-        List<IidmNetworkReadDocument> networks = request.iidmNetworkIds().isEmpty()
-                ? iidmNetworkRepository.findByField("importId", importId, 1000)
-                : request.iidmNetworkIds().stream()
-                        .flatMap(id -> iidmNetworkRepository.findByField("id", id, 1).stream())
-                        .toList();
+        List<IidmNetworkReadDocument> networks = findIidmNetworkDocumentsForImport(importId);
         Instant now = Instant.now();
         String runId = UUID.randomUUID().toString();
         Map<String, String> inputReferences = inputReferences(request);
@@ -220,16 +214,11 @@ public class SensitivityAnalysisService extends RestServiceSupport {
                 .orElseThrow(() -> new IllegalArgumentException("Sensitivity run not found: " + event.runId()));
         List<String> diagnostics = new ArrayList<>(current.diagnostics());
         try {
-            List<IidmNetworkReadDocument> documents = event.iidmNetworkIds().isEmpty()
-                    ? iidmNetworkRepository.findByField("importId", event.fileImportId(), 1000)
-                    : event.iidmNetworkIds().stream()
-                            .flatMap(id -> iidmNetworkRepository.findByField("id", id, 1).stream())
-                            .toList();
+            List<IidmNetworkReadDocument> documents = findIidmNetworkDocumentsForImport(event.fileImportId());
             if (documents.isEmpty()) {
-                throw new IllegalStateException("No IIDM networks found for sensitivity run " + event.runId());
+                throw new IllegalStateException("No merged IIDM network found for sensitivity run " + event.runId());
             }
-            List<Network> networks = documents.stream().map(this::readNetwork).filter(Objects::nonNull).toList();
-            Network network = mergeInMemory(networks, diagnostics);
+            Network network = readNetwork(documents.getFirst());
             Map<String, Long> counts = elementCounts(network);
             SensitivityAnalysisParametersDto parameters = current.parameters();
             List<SensitivityFactor> factors = factors(network, parameters, diagnostics);
@@ -334,10 +323,11 @@ public class SensitivityAnalysisService extends RestServiceSupport {
     }
 
     private Network readNetwork(IidmNetworkReadDocument document) {
-        String xiidm = document.networkXiidm().isBlank()
-                ? String.join("", document.networkXiidmChunks())
-                : document.networkXiidm();
-        return xiidm.isBlank() ? null : IidmNetworkXiidm.read(xiidm);
+        String xiidm = networkXiidm(document);
+        if (xiidm.isBlank()) {
+            throw new IllegalStateException("IIDM network " + document.id() + " has no XIIDM payload");
+        }
+        return IidmNetworkXiidm.read(xiidm);
     }
 
     private SensitivityIidmNetworkSummary toNetworkSummary(IidmNetworkReadDocument document) {
@@ -370,28 +360,28 @@ public class SensitivityAnalysisService extends RestServiceSupport {
                 && document.state() == ImportState.SUCCESS;
     }
 
-    private Network mergeInMemory(List<Network> networks, List<String> diagnostics) {
-        if (networks.size() == 1) {
-            diagnostics.add("One IIDM network found; merge step skipped");
-            return networks.getFirst();
+    private List<IidmNetworkReadDocument> findIidmNetworkDocumentsForImport(String importId) {
+        return iidmNetworkRepository.findByField("id", mergedNetworkId(importId), 1);
+    }
+
+    private String networkXiidm(IidmNetworkReadDocument document) {
+        if (document.networkXiidm() != null && !document.networkXiidm().isBlank()) {
+            return document.networkXiidm();
         }
-        try {
-            Class<?> mergerClass = Class.forName("com.powsybl.iidm.network.NetworkMerger");
-            Object merger = mergerClass.getDeclaredConstructor().newInstance();
-            Method merge = mergerClass.getMethod("merge", Network.class, Network.class);
-            Network merged = networks.getFirst();
-            for (int index = 1; index < networks.size(); index++) {
-                Object result = merge.invoke(merger, merged, networks.get(index));
-                if (result instanceof Network network) {
-                    merged = network;
-                }
-            }
-            diagnostics.add("PowSyBl NetworkMerger completed in memory");
-            return merged;
-        } catch (ReflectiveOperationException exception) {
-            diagnostics.add("PowSyBl NetworkMerger is not available; first network used");
-            return networks.getFirst();
+        if (hasObjectPayload(document.networkXiidmBucket(), document.networkXiidmObjectKey())) {
+            return new String(
+                    objectStorageService.read(document.networkXiidmBucket(), document.networkXiidmObjectKey()),
+                    StandardCharsets.UTF_8);
         }
+        return String.join("", document.networkXiidmChunks());
+    }
+
+    private boolean hasObjectPayload(String bucket, String objectKey) {
+        return bucket != null && !bucket.isBlank() && objectKey != null && !objectKey.isBlank();
+    }
+
+    private String mergedNetworkId(String importId) {
+        return importId + ":MERGED_CGM";
     }
 
     private String workingVariantId(Network network) {

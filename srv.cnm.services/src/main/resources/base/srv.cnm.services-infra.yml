@@ -13,7 +13,10 @@ utility:
       max-concurrent-consumers: ${CNM_RABBIT_MAX_CONCURRENT_CONSUMERS:16}
       prefetch-count: ${CNM_RABBIT_PREFETCH_COUNT:1}
       retry:
-        max-attempts: 3
+        max-attempts: ${CNM_RABBIT_RETRY_MAX_ATTEMPTS:3}
+        initial-interval-ms: ${CNM_RABBIT_RETRY_INITIAL_INTERVAL_MS:10000}
+        multiplier: ${CNM_RABBIT_RETRY_MULTIPLIER:2.0}
+        max-interval-ms: ${CNM_RABBIT_RETRY_MAX_INTERVAL_MS:60000}
     topic-exchange:
       name: cnm.events
       additional-names: iidm.events

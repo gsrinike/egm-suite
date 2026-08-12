@@ -1,5 +1,7 @@
 package eu.egm.srv.cnm.services.service;
 
+import eu.egm.data.iidm.common.IidmNetworkMergeFailed;
+import eu.egm.data.iidm.common.IidmNetworkMergeStatus;
 import eu.egm.data.iidm.common.IidmProfileTransformCompleted;
 import eu.egm.data.iidm.common.IidmProfileTransformFailed;
 import eu.egm.data.iidm.common.IidmProfileTransformStarted;
@@ -55,5 +57,38 @@ public class IidmTransformProgressListener {
                 event.fileId(),
                 event.transformId());
         importService.updateIidmTransformProgress(event);
+    }
+
+    @RabbitListener(
+            queues = "${cnm.import.event.iidm-merge-started-queue:iidm.network.merge.started.cnm}",
+            containerFactory = "retryingRabbitListenerContainerFactory")
+    public void mergeStarted(IidmNetworkMergeStatus event) {
+        LOGGER.info(
+                "Consumed IIDM merge started callback importId={}, networkId={}",
+                event.importId(),
+                event.mergedNetworkId());
+        importService.updateIidmMergeProgress(event);
+    }
+
+    @RabbitListener(
+            queues = "${cnm.import.event.iidm-merge-completed-queue:iidm.network.merge.completed.cnm}",
+            containerFactory = "retryingRabbitListenerContainerFactory")
+    public void mergeCompleted(IidmNetworkMergeStatus event) {
+        LOGGER.info(
+                "Consumed IIDM merge completed callback importId={}, networkId={}",
+                event.importId(),
+                event.mergedNetworkId());
+        importService.updateIidmMergeProgress(event);
+    }
+
+    @RabbitListener(
+            queues = "${cnm.import.event.iidm-merge-failed-queue:iidm.network.merge.failed.cnm}",
+            containerFactory = "retryingRabbitListenerContainerFactory")
+    public void mergeFailed(IidmNetworkMergeFailed event) {
+        LOGGER.info(
+                "Consumed IIDM merge failed callback importId={}, networkId={}",
+                event.importId(),
+                event.mergedNetworkId());
+        importService.updateIidmMergeProgress(event);
     }
 }

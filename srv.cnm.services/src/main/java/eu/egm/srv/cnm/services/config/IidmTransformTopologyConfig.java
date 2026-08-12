@@ -34,7 +34,17 @@ public class IidmTransformTopologyConfig {
             @Value("${cnm.import.event.iidm-transform-completed-routing-key:iidm.profile.transform.completed}") String completedRoutingKey,
             @Value("${cnm.import.event.iidm-transform-completed-queue:iidm.profile.transform.completed.cnm}") String completedQueueName,
             @Value("${cnm.import.event.iidm-transform-failed-routing-key:iidm.profile.transform.failed}") String failedRoutingKey,
-            @Value("${cnm.import.event.iidm-transform-failed-queue:iidm.profile.transform.failed.cnm}") String failedQueueName) {
+            @Value("${cnm.import.event.iidm-transform-failed-queue:iidm.profile.transform.failed.cnm}") String failedQueueName,
+            @Value("${cnm.import.event.iidm-merge-routing-key:iidm.network.merge.requested}") String mergeRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-queue:iidm.network.merge}") String mergeQueueName,
+            @Value("${cnm.import.event.iidm-merge-dlq:iidm.network.merge.dlq}") String mergeDeadLetterQueueName,
+            @Value("${cnm.import.event.iidm-merge-dead-letter-routing-key:iidm.network.merge.failed.dlq}") String mergeDeadLetterRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-started-routing-key:iidm.network.merge.started}") String mergeStartedRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-started-queue:iidm.network.merge.started.cnm}") String mergeStartedQueueName,
+            @Value("${cnm.import.event.iidm-merge-completed-routing-key:iidm.network.merge.completed}") String mergeCompletedRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-completed-queue:iidm.network.merge.completed.cnm}") String mergeCompletedQueueName,
+            @Value("${cnm.import.event.iidm-merge-failed-routing-key:iidm.network.merge.failed}") String mergeFailedRoutingKey,
+            @Value("${cnm.import.event.iidm-merge-failed-queue:iidm.network.merge.failed.cnm}") String mergeFailedQueueName) {
         TopicExchange exchange = new TopicExchange(exchangeName, true, false);
         TopicExchange deadLetterExchange = new TopicExchange(deadLetterExchangeName, true, false);
         Queue queue = QueueBuilder.durable(queueName)
@@ -42,26 +52,50 @@ public class IidmTransformTopologyConfig {
                 .deadLetterRoutingKey(deadLetterRoutingKey)
                 .build();
         Queue deadLetterQueue = QueueBuilder.durable(deadLetterQueueName).build();
+        Queue mergeQueue = QueueBuilder.durable(mergeQueueName)
+                .deadLetterExchange(deadLetterExchangeName)
+                .deadLetterRoutingKey(mergeDeadLetterRoutingKey)
+                .build();
+        Queue mergeDeadLetterQueue = QueueBuilder.durable(mergeDeadLetterQueueName).build();
         Queue startedQueue = QueueBuilder.durable(startedQueueName).build();
         Queue completedQueue = QueueBuilder.durable(completedQueueName).build();
         Queue failedQueue = QueueBuilder.durable(failedQueueName).build();
+        Queue mergeStartedQueue = QueueBuilder.durable(mergeStartedQueueName).build();
+        Queue mergeCompletedQueue = QueueBuilder.durable(mergeCompletedQueueName).build();
+        Queue mergeFailedQueue = QueueBuilder.durable(mergeFailedQueueName).build();
         Binding binding = BindingBuilder.bind(queue).to(exchange).with(routingKey);
         Binding deadLetterBinding = BindingBuilder.bind(deadLetterQueue).to(deadLetterExchange).with(deadLetterRoutingKey);
+        Binding mergeBinding = BindingBuilder.bind(mergeQueue).to(exchange).with(mergeRoutingKey);
+        Binding mergeDeadLetterBinding =
+                BindingBuilder.bind(mergeDeadLetterQueue).to(deadLetterExchange).with(mergeDeadLetterRoutingKey);
         Binding startedBinding = BindingBuilder.bind(startedQueue).to(exchange).with(startedRoutingKey);
         Binding completedBinding = BindingBuilder.bind(completedQueue).to(exchange).with(completedRoutingKey);
         Binding failedBinding = BindingBuilder.bind(failedQueue).to(exchange).with(failedRoutingKey);
+        Binding mergeStartedBinding = BindingBuilder.bind(mergeStartedQueue).to(exchange).with(mergeStartedRoutingKey);
+        Binding mergeCompletedBinding = BindingBuilder.bind(mergeCompletedQueue).to(exchange).with(mergeCompletedRoutingKey);
+        Binding mergeFailedBinding = BindingBuilder.bind(mergeFailedQueue).to(exchange).with(mergeFailedRoutingKey);
         return new Declarables(
                 exchange,
                 deadLetterExchange,
                 queue,
                 deadLetterQueue,
+                mergeQueue,
+                mergeDeadLetterQueue,
                 startedQueue,
                 completedQueue,
                 failedQueue,
+                mergeStartedQueue,
+                mergeCompletedQueue,
+                mergeFailedQueue,
                 binding,
                 deadLetterBinding,
+                mergeBinding,
+                mergeDeadLetterBinding,
                 startedBinding,
                 completedBinding,
-                failedBinding);
+                failedBinding,
+                mergeStartedBinding,
+                mergeCompletedBinding,
+                mergeFailedBinding);
     }
 }
