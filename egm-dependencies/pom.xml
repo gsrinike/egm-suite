@@ -29,6 +29,9 @@
         <version.minio>8.5.12</version.minio>
         <version.springdoc-openapi>2.6.0</version.springdoc-openapi>
         <version.powsybl>2026.1.0</version.powsybl>
+        <version.powsybl-cgmes-gl>7.3.0</version.powsybl-cgmes-gl>
+        <version.powsybl-iidm-geodata>7.3.0</version.powsybl-iidm-geodata>
+        <version.powsybl-network-area-diagram>5.5.0</version.powsybl-network-area-diagram>
         <version.rdf4j>5.3.2</version.rdf4j>
 
         <maven.compiler.release>${version.java}</maven.compiler.release>
@@ -52,6 +55,58 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>com.infra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>com.mapping</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>com.utils</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>com.vault</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>data.cnm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>data.common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>data.iidm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>gui.cnm.manager</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>gui.common</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>eu.egm</groupId>
+                <artifactId>map.cnm.iidm</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${version.springdoc-openapi}</version>
@@ -70,6 +125,21 @@
                 <groupId>com.powsybl</groupId>
                 <artifactId>powsybl-starter</artifactId>
                 <version>${version.powsybl}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.powsybl</groupId>
+                <artifactId>powsybl-iidm-geodata</artifactId>
+                <version>${version.powsybl-iidm-geodata}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.powsybl</groupId>
+                <artifactId>powsybl-cgmes-gl</artifactId>
+                <version>${version.powsybl-cgmes-gl}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.powsybl</groupId>
+                <artifactId>powsybl-network-area-diagram</artifactId>
+                <version>${version.powsybl-network-area-diagram}</version>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.rdf4j</groupId>

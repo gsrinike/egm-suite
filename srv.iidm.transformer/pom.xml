@@ -20,54 +20,44 @@
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>data.cnm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>data.iidm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>map.cnm.iidm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>com.infra</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>com.utils</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>com.mapping</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>com.vault</artifactId>
-            <version>${project.version}</version>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.powsybl</groupId>
             <artifactId>powsybl-iidm-geodata</artifactId>
-            <version>7.3.0</version>
         </dependency>
         <dependency>
             <groupId>com.powsybl</groupId>
             <artifactId>powsybl-cgmes-gl</artifactId>
-            <version>7.3.0</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>com.powsybl</groupId>
             <artifactId>powsybl-network-area-diagram</artifactId>
-            <version>5.5.0</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -21,7 +21,6 @@
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>gui.common</artifactId>
-            <version>${project.version}</version>
             <type>pom</type>
         </dependency>
     </dependencies>

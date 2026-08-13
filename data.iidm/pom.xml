@@ -16,7 +16,6 @@
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>data.cnm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.powsybl</groupId>

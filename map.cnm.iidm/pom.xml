@@ -16,17 +16,14 @@
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>data.cnm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>data.iidm</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>com.mapping</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

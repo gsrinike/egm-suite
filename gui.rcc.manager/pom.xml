@@ -21,13 +21,11 @@
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>gui.common</artifactId>
-            <version>${project.version}</version>
             <type>pom</type>
         </dependency>
         <dependency>
             <groupId>eu.egm</groupId>
             <artifactId>gui.cnm.manager</artifactId>
-            <version>${project.version}</version>
             <type>pom</type>
         </dependency>
     </dependencies>
